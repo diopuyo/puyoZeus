@@ -1,0 +1,109 @@
+{
+  "max_function_lines": 50,
+  "default_off": true,
+  "production_unchanged": true,
+  "same_rows": {
+    "q_7gc4TgFig": 27000,
+    "fcXG83vInDY": 27000,
+    "mia8KCjr52g": 27000,
+    "zenchi": 25398,
+    "review": 5948
+  },
+  "off_controls": {
+    "q_7gc4TgFig": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "fcXG83vInDY": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "mia8KCjr52g": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "zenchi": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "review": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    }
+  },
+  "inputs": {
+    "logs/e31/records/q_7gc4TgFig.jsonl.gz": "3e47e7a3ca7eb9e2b4c9f19e961eea4f47b94fce6cb1826cd7cadf62dea6a79b",
+    "logs/e31/records/fcXG83vInDY.jsonl.gz": "d221874ee5fbc7e5a4240ee89577840c61b1a3f08ae0a2dcb2f2318eca4e2b48",
+    "logs/e31/records/mia8KCjr52g.jsonl.gz": "b3cea0e4a295291d1e99e1e2994d91f5de52b09d0881e6c1005f79566e2f8d0d",
+    "logs/e31/records/zenchi.jsonl.gz": "a3241a4806c19557ca0719b2583a78247ca86aefd20149c21149a67550602b7a",
+    "logs/e31/records/review.jsonl.gz": "f721524ad94f03f0a28f272f9e2085dfdf712b269e99cfa97c92094eb850e410"
+  },
+  "immutable_assets": {
+    "logs/e16/records/fcXG83vInDY.jsonl.gz": "e8fc2c873743a40e9f04706ce370c651992e304b3ea13f5611d1e1ce7bcf639c",
+    "logs/e16/records/mia8KCjr52g.jsonl.gz": "dd33fb7c43b5d4ff8032bb0c7d46767cc408697b41adad572cd8624dd55a02f0",
+    "logs/e16/records/q_7gc4TgFig.jsonl.gz": "8597e2712bb01e8ff291055154a48bfab912096e9b7d26b95c8dc110d77b62c7",
+    "logs/e16/records/review.jsonl.gz": "f91c2d8e893175f217927263acac60212d17ab62c158d7bfd71502f2548607f6",
+    "logs/e16/records/zenchi.jsonl.gz": "f3cb9e45ec77ee2a400aaf19542f22b693e68a59b298dece15bed97822c0d9f7",
+    "src/production_config.py": "4152435394271234e9b86ee206cfbe395d7d03ee76b536865ea9ba566e4070b4",
+    "models/exchange_event_v3/manifest.json": "0263c90aa716087a6458d3ba560a35917f054967bd680f67890cd13bf093a4fa",
+    "models/exchange_event_v3/S1_prime.joblib": "ac43c1534ce388f5092df4bfda03ee862a9c694b450879b238b8df544628a9c6",
+    "models/exchange_event_v3/S1_prime_light.joblib": "6d49daecb1281254c65547f89c612690bf5f6bf004970916200ee17ca45d7c8c",
+    "models/exchange_event_v3/S3_prime.joblib": "3ca51ef214da2a061c173604fe98decbe38975aedfff448e35aabab0b0a2de40",
+    "models/exchange_event_v3/S3_prime_light.joblib": "5072263bf12cf577d328f9d6aeb19dbf53cd2418510488dd18b5da0f65e63126"
+  },
+  "withdrawals": [
+    {
+      "source": "q_7gc4TgFig",
+      "game": 6,
+      "chain": 3,
+      "stamp": 434.43333333333334,
+      "e27": [
+        0.45272451978466305
+      ],
+      "e32": [
+        0.45272451978466305
+      ]
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 2,
+      "chain": 1,
+      "stamp": 269.96666666666664,
+      "e27": [
+        0.5287498075925449
+      ],
+      "e32": [
+        0.5287498075925449
+      ]
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 5,
+      "chain": 7,
+      "stamp": 536.0333333333333,
+      "e27": [
+        0.98
+      ],
+      "e32": [
+        0.98
+      ]
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 8,
+      "chain": 4,
+      "stamp": 717.8333333333334,
+      "e27": [
+        0.13482289775197576
+      ],
+      "e32": [
+        0.13482289775197576
+      ]
+    }
+  ]
+}

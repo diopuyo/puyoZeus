@@ -1,0 +1,41 @@
+{
+  "production_config_sha256": "4152435394271234e9b86ee206cfbe395d7d03ee76b536865ea9ba566e4070b4",
+  "production_unchanged": true,
+  "original_inputs_and_models_unchanged": true,
+  "defaults_off": true,
+  "maximum_new_function_lines": 34,
+  "sha256": {
+    "src/exchange_midchain_completion.py": "24b3b8ce90776622c50167bca502ce1b44e43d9cbb43fbeec8be05c1d56193a6",
+    "src/midchain_board_reader.py": "ac3ff4b881e6382c447953c2e54547aee5f1aee67850ca8d1b498759ea280177",
+    "scripts/run_e26_ablation.py": "4670b25050d10ab93cea1ae5905f8ae201066e3d631585c3b05f337d55c4bbcd",
+    "scripts/run_e26_completion.py": "2d6d9e35f90e699bd62c724e41040582dba96c3940adc6b7b9dc7fffd7f5dba2",
+    "scripts/enrich_e26_midchain.py": "4bc8c09c9f1b7a37d9c83ab9132c6de11ae1173794b4da0b0a8c2e3accf9fb8c",
+    "scripts/inspect_e26_inputs.py": "db80b2db2335f2f7ed1306ae1b63a7f07b11ebafdfb6ef681baa5533eaa2ade8",
+    "scripts/verify_e26_records.py": "54e658bc1ae33bc2cc89c453273f5c06805538e750e0117f1ca96ecf1b5e28c0",
+    "scripts/verify_e26.py": "68c4b5476ac0014be69644bd4dcc0d164987f61a353e4d997235e28a3eecfb79",
+    "scripts/render_e26_review.py": "ed2fbaa994b8407016b25cda562f08f9211aa9c3cba02418ea28839e4af3f6c5",
+    "scripts/progress_e26.py": "108f06dc0d6f189ea7ec71d05fdf8de0da298f7e69f00b822525bd23fcfb0200",
+    "tests/test_e26_ablation.py": "0dd7c4872422e8fae713c59b937447bdbf5d39751bdb4bde5f77d40cda15ffad",
+    "tests/test_e26_midchain.py": "c7cbe1e71de6d6c84544f8bb6688e033bba72d1bea3585980793efba396e7cf1",
+    "scripts/run_e26_controls.py": "e63e5440c5788aa9011eebb2cac8166eb1d5aad2e75c43dcbd259d4704b73bf0",
+    "scripts/report_e26.py": "aa27495f5ea5f84353fa13a34af27d7855dbafb5000de3297b531a22e4d31e5d",
+    "scripts/measure_e26_scene.py": "aaf7e2805df18bff584dff9383d9be98607307a179895f299ab6271e7464a1c1",
+    "scripts/diagnose_e26_settle.py": "b7621015397be5e7d210390ed2d7d2eaf47452e214edc50f02b88ba15549ff48",
+    "src/exchange_event_overlay.py": "4329619cd3cf6ee3a6db07fcde04a16136827a19d1596cbb28767c44229ba594",
+    "src/exchange_event_landing.py": "1d091d495481166f50c60f076e07535e6db3a41cb6fc36d1ac9b8a7b14841098",
+    "src/exchange_completion_recovery.py": "64fd8719878981ce737f2f83b44ba2ec970eb80b4256092e5c9734577f95d1b3",
+    "src/exchange_landing_safety.py": "b7482d60fd67a03827b187b5b08a3bb47ea71190ffa9f64e1ce0379e4f102552",
+    "src/exchange_event_record.py": "983ceaef7f2aa53344d45e2bd8b8ebaaf6b10e548a5202e716b50a04eb5b95d2",
+    "src/recognition_pipeline.py": "7b97bcf422afb160ee6e2efff17e8babaffb989fe4d444953bcd7969c9ace19c",
+    "scripts/replay_exchange_event_20260926.py": "625cf27bf594a1e889655da164e158ef7e0222229b058e1f2475731cb57fd8ce",
+    "scripts/visualize_advantage_overlay.py": "f41afbdc537ef4d97d61500d9791e6e2e789c12fc42b48216ff55eb098a581b4",
+    "scripts/review_data_panel.py": "7afb84c2ce7a512836c55c7c090117d6444030093f233fcf4904a8182ddf47fa"
+  },
+  "candidate": false,
+  "gates": {
+    "q": true,
+    "zenchi": true,
+    "deaths": false,
+    "scene": false
+  }
+}

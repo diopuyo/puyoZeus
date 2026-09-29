@@ -1,0 +1,83 @@
+[
+  {
+    "cutoff": 2849.05,
+    "display_rows": 8056,
+    "display_matched": 8056,
+    "display_columns": [
+      "video_id",
+      "t_sec",
+      "game_idx",
+      "state1",
+      "state2",
+      "display_adv",
+      "display_p1",
+      "adv_raw_last",
+      "source",
+      "resolved_active",
+      "settled_ran",
+      "score1",
+      "score2"
+    ],
+    "event_states": 8956,
+    "event_states_matched": 8956,
+    "event_records": 21,
+    "event_file_exact": true,
+    "first_display_mismatch": [],
+    "first_event_mismatch": [],
+    "input_sha256": "02b3b377692efddcba280bfd74abff1ce94c9b0ce5ae356719fc75f85b1a87a3"
+  },
+  {
+    "cutoff": 3100.8166666666666,
+    "display_rows": 15609,
+    "display_matched": 15609,
+    "display_columns": [
+      "video_id",
+      "t_sec",
+      "game_idx",
+      "state1",
+      "state2",
+      "display_adv",
+      "display_p1",
+      "adv_raw_last",
+      "source",
+      "resolved_active",
+      "settled_ran",
+      "score1",
+      "score2"
+    ],
+    "event_states": 16509,
+    "event_states_matched": 16509,
+    "event_records": 36,
+    "event_file_exact": true,
+    "first_display_mismatch": [],
+    "first_event_mismatch": [],
+    "input_sha256": "8064d8d93e3104ed84c5f7cc1c9ce583ba94b4921e12558a0d4a8e29c9c3dfc5"
+  },
+  {
+    "cutoff": 3110.05,
+    "display_rows": 15886,
+    "display_matched": 15886,
+    "display_columns": [
+      "video_id",
+      "t_sec",
+      "game_idx",
+      "state1",
+      "state2",
+      "display_adv",
+      "display_p1",
+      "adv_raw_last",
+      "source",
+      "resolved_active",
+      "settled_ran",
+      "score1",
+      "score2"
+    ],
+    "event_states": 16786,
+    "event_states_matched": 16786,
+    "event_records": 36,
+    "event_file_exact": true,
+    "first_display_mismatch": [],
+    "first_event_mismatch": [],
+    "input_sha256": "9680a5441b8daaf52d6ec68d7695002082fc04f65748d684eaa14c9c6b43d7a8"
+  }
+]

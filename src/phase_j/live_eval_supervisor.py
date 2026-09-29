@@ -12,7 +12,7 @@ import time
 import traceback
 from typing import Any
 
-from .live_eval_worker import worker
+from .live_eval_worker import AUDIT_ENGINES, worker
 from .live_spool import DiskRows
 
 FAILURE_LIMIT = 3
@@ -24,6 +24,16 @@ NOTICE_PREFIX_SIZE = 4
 
 class EvaluationError(RuntimeError):
     """親のフレーム境界で処理する、記録済みの子プロセス例外。"""
+
+
+class AuditView:
+    """終了時の描画側保存へ、子が生成した監査原票だけを返す。"""
+
+    def __init__(self, value: dict) -> None:
+        self.value = value
+
+    def summary(self) -> dict:
+        return self.value
 
 
 class TrackerView:
@@ -41,8 +51,9 @@ class TrackerView:
 
 class SupervisedOverlay:
     def __init__(self, models: Any, build_static: Any, signals: Any, m0: Any = None,
-                 per_side_settled: bool = False, *, directory: Path) -> None:
-        self.config = (models, signals, m0, per_side_settled)
+                 per_side_settled: bool = False, *, directory: Path,
+                 **evaluation_options: Any) -> None:
+        self.config = (models, signals, m0, per_side_settled, evaluation_options)
         self.build_static, self.directory = build_static, directory
         directory.mkdir(parents=True, exist_ok=True)
         self.tracker = TrackerView(self)
@@ -57,6 +68,8 @@ class SupervisedOverlay:
         self.fault: str | None = None
         self.auto_acknowledge = True
         self.on_error: Any = None
+        for name in AUDIT_ENGINES:
+            setattr(self, name, None)
         self.start()
 
     def start(self) -> None:
@@ -172,6 +185,8 @@ class SupervisedOverlay:
                 self.pending.clear()
         self.connection.send(dict(op='records'))
         current = self.receive()
+        for name, value in current['audits'].items():
+            setattr(self, name, AuditView(value) if value is not None else None)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open('w', encoding='utf-8') as stream:
             for rows in (self.archive, current['records']):

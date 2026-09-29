@@ -1,0 +1,35 @@
+{
+  "source": "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+  "frames": [
+    {
+      "requested_sec": 2750.5,
+      "actual_sec": 2750.5,
+      "frame": 165030,
+      "path": "logs/e25/zenchi_2750.500.jpg"
+    },
+    {
+      "requested_sec": 2751.35,
+      "actual_sec": 2751.35,
+      "frame": 165081,
+      "path": "logs/e25/zenchi_2751.350.jpg"
+    },
+    {
+      "requested_sec": 2751.383333333333,
+      "actual_sec": 2751.3830000000003,
+      "frame": 165083,
+      "path": "logs/e25/zenchi_2751.383.jpg"
+    },
+    {
+      "requested_sec": 2752.6833333333334,
+      "actual_sec": 2752.683,
+      "frame": 165161,
+      "path": "logs/e25/zenchi_2752.683.jpg"
+    },
+    {
+      "requested_sec": 2754.116666666667,
+      "actual_sec": 2754.117,
+      "frame": 165247,
+      "path": "logs/e25/zenchi_2754.117.jpg"
+    }
+  ]
+}

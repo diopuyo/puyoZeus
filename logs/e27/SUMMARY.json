@@ -1,0 +1,303 @@
+{
+  "metrics": {
+    "variant": "on",
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5107778391393154,
+      "auc": 0.7624758285957381
+    },
+    "zenchi": {
+      "hits": 7081,
+      "frames": 8333,
+      "agreement": 0.8497539901596064
+    },
+    "deaths": {
+      "false": 1,
+      "total": 37,
+      "unlabelled": 0
+    },
+    "scenes": {
+      "prefire_frames": 62,
+      "prefire_mean": 0.2702919012720453,
+      "margin_sign_flips": 3,
+      "terminal_frames": 45,
+      "terminal_min": 1.0
+    },
+    "gates": {
+      "q": true,
+      "zenchi": true,
+      "deaths": true,
+      "scene": false
+    },
+    "candidate": false,
+    "scene": {
+      "first_sec": 2771.25,
+      "deadline_sec": 2766.0,
+      "scenes": 1
+    },
+    "hidden_three_videos": {
+      "enumerated": 26,
+      "combinations": 490,
+      "accepted": 2,
+      "next_mismatch": 1,
+      "used": 0,
+      "uses": 0
+    }
+  },
+  "deaths": {
+    "summary": {
+      "cases": 6,
+      "new": 5,
+      "earlier": 1,
+      "actually_survived": 1,
+      "unresolved": 0
+    },
+    "cases": [
+      {
+        "source": "q_7gc4TgFig",
+        "game_idx": 9,
+        "exchange_id": 29,
+        "side": "1P",
+        "change": "new",
+        "first_sec": 656.0666666666667,
+        "baseline_first_sec": null,
+        "winner": "2P",
+        "observed_death_sec": 663.1666666666666,
+        "observed_opponent_death_sec": null,
+        "actually_died": true,
+        "error": false,
+        "evidence": "terminal_signal"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game_idx": 14,
+        "exchange_id": 40,
+        "side": "1P",
+        "change": "earlier",
+        "first_sec": 883.9666666666667,
+        "baseline_first_sec": 884.2666666666667,
+        "winner": "1P",
+        "observed_death_sec": null,
+        "observed_opponent_death_sec": 899.6333333333333,
+        "actually_died": false,
+        "error": true,
+        "evidence": "terminal_signal"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game_idx": 3,
+        "exchange_id": 11,
+        "side": "2P",
+        "change": "new",
+        "first_sec": 366.0,
+        "baseline_first_sec": null,
+        "winner": "1P",
+        "observed_death_sec": 370.93333333333334,
+        "observed_opponent_death_sec": null,
+        "actually_died": true,
+        "error": false,
+        "evidence": "terminal_signal"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game_idx": 4,
+        "exchange_id": 12,
+        "side": "2P",
+        "change": "new",
+        "first_sec": 435.6,
+        "baseline_first_sec": null,
+        "winner": "1P",
+        "observed_death_sec": 440.6,
+        "observed_opponent_death_sec": null,
+        "actually_died": true,
+        "error": false,
+        "evidence": "terminal_signal"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game_idx": 5,
+        "exchange_id": 15,
+        "side": "2P",
+        "change": "new",
+        "first_sec": 536.0333333333333,
+        "baseline_first_sec": null,
+        "winner": "1P",
+        "observed_death_sec": 537.8666666666667,
+        "observed_opponent_death_sec": null,
+        "actually_died": true,
+        "error": false,
+        "evidence": "terminal_signal"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game_idx": 6,
+        "exchange_id": 18,
+        "side": "1P",
+        "change": "new",
+        "first_sec": 626.7333333333333,
+        "baseline_first_sec": null,
+        "winner": "2P",
+        "observed_death_sec": 631.0,
+        "observed_opponent_death_sec": null,
+        "actually_died": true,
+        "error": false,
+        "evidence": "terminal_signal"
+      }
+    ]
+  },
+  "hidden": {
+    "three_videos": {
+      "enumerated": 26,
+      "combinations": 490,
+      "accepted": 2,
+      "next_mismatch": 1,
+      "used": 0,
+      "uses": 0
+    },
+    "sources": {
+      "q_7gc4TgFig": {
+        "enumerated": 18,
+        "combinations": 430,
+        "accepted": 0,
+        "next_mismatch": 1,
+        "used": 0,
+        "uses": 0
+      },
+      "fcXG83vInDY": {
+        "enumerated": 8,
+        "combinations": 60,
+        "accepted": 2,
+        "next_mismatch": 0,
+        "used": 0,
+        "uses": 0
+      },
+      "mia8KCjr52g": {
+        "enumerated": 0,
+        "combinations": 0,
+        "accepted": 0,
+        "next_mismatch": 0,
+        "used": 0,
+        "uses": 0
+      },
+      "zenchi": {
+        "enumerated": 22,
+        "combinations": 470,
+        "accepted": 4,
+        "next_mismatch": 2,
+        "used": 0,
+        "uses": 0
+      },
+      "review": {
+        "enumerated": 13,
+        "combinations": 365,
+        "accepted": 2,
+        "next_mismatch": 1,
+        "used": 0,
+        "uses": 0
+      }
+    },
+    "death_input_usage": {
+      "three_videos": {
+        "exchanges": 2,
+        "evaluations": 5
+      },
+      "sources": {
+        "q_7gc4TgFig": {
+          "exchanges": 0,
+          "evaluations": 0,
+          "rows": []
+        },
+        "fcXG83vInDY": {
+          "exchanges": 2,
+          "evaluations": 5,
+          "rows": [
+            {
+              "game": 3,
+              "exchange": 9,
+              "side": 2,
+              "first_sec": 342.93333333333334,
+              "maximum_score": 1600,
+              "death_incoming": 0
+            },
+            {
+              "game": 5,
+              "exchange": 15,
+              "side": 2,
+              "first_sec": 524.9666666666667,
+              "maximum_score": 2360,
+              "death_incoming": 0
+            }
+          ]
+        },
+        "mia8KCjr52g": {
+          "exchanges": 0,
+          "evaluations": 0,
+          "rows": []
+        },
+        "zenchi": {
+          "exchanges": 4,
+          "evaluations": 59,
+          "rows": [
+            {
+              "game": 2,
+              "exchange": 8,
+              "side": 1,
+              "first_sec": 2682.7166666666667,
+              "maximum_score": 1000,
+              "death_incoming": 0
+            },
+            {
+              "game": 3,
+              "exchange": 11,
+              "side": 1,
+              "first_sec": 2732.15,
+              "maximum_score": 1000,
+              "death_incoming": 0
+            },
+            {
+              "game": 11,
+              "exchange": 36,
+              "side": 2,
+              "first_sec": 3089.016666666667,
+              "maximum_score": 103580,
+              "death_incoming": 0
+            },
+            {
+              "game": 13,
+              "exchange": 43,
+              "side": 1,
+              "first_sec": 3204.016666666667,
+              "maximum_score": 10680,
+              "death_incoming": 0
+            }
+          ]
+        },
+        "review": {
+          "exchanges": 2,
+          "evaluations": 7,
+          "rows": [
+            {
+              "game": 2,
+              "exchange": 8,
+              "side": 1,
+              "first_sec": 2682.7166666666667,
+              "maximum_score": 1000,
+              "death_incoming": 0
+            },
+            {
+              "game": 3,
+              "exchange": 11,
+              "side": 1,
+              "first_sec": 2732.15,
+              "maximum_score": 1000,
+              "death_incoming": 0
+            }
+          ]
+        }
+      }
+    }
+  },
+  "video_generated": false,
+  "video_eligible": false
+}

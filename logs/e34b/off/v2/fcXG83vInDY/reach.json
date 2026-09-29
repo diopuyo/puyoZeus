@@ -1,0 +1,825 @@
+{
+  "rows": [
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 1,
+      "game_idx": 0,
+      "trigger_sec": 171.26666666666668,
+      "first_s3": null,
+      "closed_sec": 173.13333333333333,
+      "close_reason": "match_boundary",
+      "complete": false,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": null,
+      "chains": 1,
+      "missing_end": 1,
+      "missing_score_ready": 1,
+      "source_frames": {
+        "S3_landing": 55
+      },
+      "block_frames": {
+        "missing_end": 55
+      },
+      "last_gate": "missing_end",
+      "first_display_s3": null,
+      "small_score_updates": 0,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 2,
+      "game_idx": 1,
+      "trigger_sec": 174.73333333333332,
+      "first_s3": 177.03333333333333,
+      "closed_sec": 177.1,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 1.9666666666666686,
+      "chains": 2,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 68,
+        "S3": 2,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 58,
+        "missing_score_ready": 9,
+        "end_quiet": 1,
+        "eligible": 1,
+        "already_evaluated": 2
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": 177.03333333333333,
+      "small_score_updates": 13,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 3,
+      "game_idx": 1,
+      "trigger_sec": 196.03333333333333,
+      "first_s3": 204.3,
+      "closed_sec": 204.4,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 7.933333333333337,
+      "chains": 3,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 251,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 238,
+        "missing_score_ready": 9,
+        "end_quiet": 1,
+        "eligible": 3,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 42,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 4,
+      "game_idx": 1,
+      "trigger_sec": 208.7,
+      "first_s3": 229.53333333333333,
+      "closed_sec": 229.66666666666666,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 20.5,
+      "chains": 3,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 604,
+        "unavoidable_death": 25,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 615,
+        "end_quiet": 10,
+        "eligible": 3,
+        "already_evaluated": 2
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 147,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 5,
+      "game_idx": 1,
+      "trigger_sec": 238.4,
+      "first_s3": null,
+      "closed_sec": 241.9,
+      "close_reason": "match_boundary",
+      "complete": false,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": null,
+      "chains": 2,
+      "missing_end": 2,
+      "missing_score_ready": 2,
+      "source_frames": {
+        "unavoidable_death": 21,
+        "S3_landing": 25,
+        "confirmed_death": 59
+      },
+      "block_frames": {
+        "missing_end": 46
+      },
+      "last_gate": "missing_end",
+      "first_display_s3": null,
+      "small_score_updates": 0,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 6,
+      "game_idx": 2,
+      "trigger_sec": 267.93333333333334,
+      "first_s3": 304.23333333333335,
+      "closed_sec": 304.26666666666665,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 35.96666666666664,
+      "chains": 5,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_provisional": 25,
+        "S3_landing": 1065,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 1079,
+        "end_quiet": 10,
+        "eligible": 1,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 259,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 7,
+      "game_idx": 2,
+      "trigger_sec": 304.8,
+      "first_s3": null,
+      "closed_sec": 313.93333333333334,
+      "close_reason": "match_boundary",
+      "complete": false,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": null,
+      "chains": 1,
+      "missing_end": 1,
+      "missing_score_ready": 1,
+      "source_frames": {
+        "S3_landing": 142,
+        "unavoidable_death": 62,
+        "confirmed_death": 70
+      },
+      "block_frames": {
+        "missing_end": 204
+      },
+      "last_gate": "missing_end",
+      "first_display_s3": null,
+      "small_score_updates": 0,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 8,
+      "game_idx": 3,
+      "trigger_sec": 338.3666666666667,
+      "first_s3": 340.1666666666667,
+      "closed_sec": 340.2,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 1.4666666666666401,
+      "chains": 1,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 55,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 44,
+        "end_quiet": 10,
+        "eligible": 1,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 4,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 9,
+      "game_idx": 3,
+      "trigger_sec": 341.56666666666666,
+      "first_s3": 346.26666666666665,
+      "closed_sec": 346.3,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 4.366666666666674,
+      "chains": 2,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 142,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 131,
+        "end_quiet": 10,
+        "eligible": 1,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 24,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 10,
+      "game_idx": 3,
+      "trigger_sec": 350.2,
+      "first_s3": 366.8,
+      "closed_sec": 366.8666666666667,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 16.26666666666665,
+      "chains": 2,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 500,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 479,
+        "end_quiet": 19,
+        "eligible": 2,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 95,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 11,
+      "game_idx": 4,
+      "trigger_sec": 403.3666666666667,
+      "first_s3": 435.7,
+      "closed_sec": 435.73333333333335,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 32.0,
+      "chains": 5,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 908,
+        "S3_provisional": 62,
+        "S3": 1,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 959,
+        "missing_score_ready": 1,
+        "end_quiet": 10,
+        "eligible": 1,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": 435.7,
+      "small_score_updates": 235,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 12,
+      "game_idx": 5,
+      "trigger_sec": 462.46666666666664,
+      "first_s3": 477.8,
+      "closed_sec": 477.8333333333333,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 15.0,
+      "chains": 2,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 406,
+        "unavoidable_death": 55,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 449,
+        "end_quiet": 11,
+        "eligible": 1,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 110,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 13,
+      "game_idx": 5,
+      "trigger_sec": 478.4,
+      "first_s3": 500.1333333333333,
+      "closed_sec": 507.56666666666666,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 28.666666666666686,
+      "chains": 3,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 875,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 849,
+        "end_quiet": 20,
+        "eligible": 6,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 160,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 14,
+      "game_idx": 5,
+      "trigger_sec": 523.5666666666667,
+      "first_s3": null,
+      "closed_sec": 542.3,
+      "close_reason": "match_boundary",
+      "complete": false,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": null,
+      "chains": 2,
+      "missing_end": 1,
+      "missing_score_ready": 1,
+      "source_frames": {
+        "S3_landing": 375,
+        "unavoidable_death": 54,
+        "confirmed_death": 133
+      },
+      "block_frames": {
+        "missing_end": 419,
+        "end_quiet": 10
+      },
+      "last_gate": "missing_end",
+      "first_display_s3": null,
+      "small_score_updates": 32,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 15,
+      "game_idx": 6,
+      "trigger_sec": 565.1333333333333,
+      "first_s3": 572.2333333333333,
+      "closed_sec": 572.5333333333333,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 6.7666666666666515,
+      "chains": 3,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 215,
+        "S3": 7,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 203,
+        "end_quiet": 10,
+        "eligible": 9,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": 572.3,
+      "small_score_updates": 28,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 16,
+      "game_idx": 6,
+      "trigger_sec": 577.2333333333333,
+      "first_s3": 578.7666666666667,
+      "closed_sec": 579.1,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 1.1999999999999318,
+      "chains": 2,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 56,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 36,
+        "end_quiet": 10,
+        "eligible": 4,
+        "already_evaluated": 7
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 8,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 17,
+      "game_idx": 6,
+      "trigger_sec": 581.3,
+      "first_s3": 627.0333333333333,
+      "closed_sec": 627.2333333333333,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 45.40000000000009,
+      "chains": 5,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 993,
+        "unavoidable_death": 40,
+        "S3_provisional": 339,
+        "S3": 6,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 1362,
+        "end_quiet": 10,
+        "eligible": 2,
+        "already_evaluated": 5
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": 627.0333333333333,
+      "small_score_updates": 384,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 18,
+      "game_idx": 7,
+      "trigger_sec": 659.9666666666667,
+      "first_s3": 664.8,
+      "closed_sec": 675.4333333333333,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 15.066666666666606,
+      "chains": 4,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 460,
+        "S3": 4,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 438,
+        "end_quiet": 20,
+        "eligible": 6,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": 664.8,
+      "small_score_updates": 76,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 19,
+      "game_idx": 8,
+      "trigger_sec": 701.7333333333333,
+      "first_s3": 711.1333333333333,
+      "closed_sec": 711.2,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 9.066666666666606,
+      "chains": 2,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 284,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 272,
+        "missing_score_ready": 9,
+        "end_quiet": 1,
+        "eligible": 2,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 33,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 20,
+      "game_idx": 8,
+      "trigger_sec": 712.8333333333334,
+      "first_s3": 729.3666666666667,
+      "closed_sec": 729.4,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 16.199999999999932,
+      "chains": 3,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 409,
+        "unavoidable_death": 3,
+        "S3_provisional": 85,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 486,
+        "end_quiet": 10,
+        "eligible": 1,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 105,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 21,
+      "game_idx": 9,
+      "trigger_sec": 756.1666666666666,
+      "first_s3": 758.0,
+      "closed_sec": 758.1666666666666,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 1.5,
+      "chains": 1,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 60,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 45,
+        "end_quiet": 10,
+        "eligible": 4,
+        "already_evaluated": 2
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 6,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 22,
+      "game_idx": 9,
+      "trigger_sec": 761.0,
+      "first_s3": 766.6,
+      "closed_sec": 766.6333333333333,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 5.2666666666666515,
+      "chains": 2,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_provisional": 71,
+        "S3_landing": 32,
+        "unavoidable_death": 66,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 158,
+        "end_quiet": 10,
+        "eligible": 1,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 11,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 23,
+      "game_idx": 10,
+      "trigger_sec": 798.4333333333333,
+      "first_s3": null,
+      "closed_sec": 829.9,
+      "close_reason": "match_boundary",
+      "complete": false,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": null,
+      "chains": 3,
+      "missing_end": 1,
+      "missing_score_ready": 1,
+      "source_frames": {
+        "S3_landing": 798,
+        "unavoidable_death": 60,
+        "confirmed_death": 86
+      },
+      "block_frames": {
+        "missing_end": 851,
+        "end_quiet": 7
+      },
+      "last_gate": "missing_end",
+      "first_display_s3": null,
+      "small_score_updates": 83,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 24,
+      "game_idx": 11,
+      "trigger_sec": 856.7,
+      "first_s3": 877.9666666666667,
+      "closed_sec": 878.0,
+      "close_reason": "confirmed_after_score",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": 20.93333333333328,
+      "chains": 3,
+      "missing_end": 0,
+      "missing_score_ready": 0,
+      "source_frames": {
+        "S3_landing": 583,
+        "unavoidable_death": 56,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 619,
+        "end_quiet": 19,
+        "eligible": 1,
+        "already_evaluated": 1
+      },
+      "last_gate": "already_evaluated",
+      "first_display_s3": null,
+      "small_score_updates": 68,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 25,
+      "game_idx": 12,
+      "trigger_sec": 894.0333333333333,
+      "first_s3": null,
+      "closed_sec": 897.0666666666667,
+      "close_reason": "activity_timeout",
+      "complete": true,
+      "s1_seconds": 0.0,
+      "firing_to_last_end": null,
+      "chains": 1,
+      "missing_end": 1,
+      "missing_score_ready": 1,
+      "source_frames": {
+        "S3_provisional": 90,
+        "G_fe": 1
+      },
+      "block_frames": {
+        "missing_end": 91
+      },
+      "last_gate": "missing_end",
+      "first_display_s3": null,
+      "small_score_updates": 34,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    }
+  ],
+  "summary": {
+    "source": "fcXG83vInDY",
+    "frames": {
+      "waiting_confirmed": 1177,
+      "G_fe": 14236,
+      "S3_landing": 9361,
+      "S3": 20,
+      "unavoidable_death": 442,
+      "confirmed_death": 1092,
+      "S3_provisional": 672
+    },
+    "exchanges": 25,
+    "completed": 20,
+    "reached": 19,
+    "reach_fraction": 0.95,
+    "display_reached": 5,
+    "display_reach_fraction": 0.25,
+    "s1_median_seconds": 0.0,
+    "all_s1_median_seconds": 0.0,
+    "firing_to_last_end_median": 15.0,
+    "end_observed_count": 19,
+    "close_reasons": {
+      "match_boundary": 5,
+      "confirmed_after_score": 19,
+      "activity_timeout": 1
+    },
+    "unreached_last_gate": {
+      "missing_end": 1
+    },
+    "small_score": {
+      "small_score_updates": 1957,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    "reach_pass": true,
+    "display_reach_pass": false,
+    "dwell_pass": true
+  }
+}

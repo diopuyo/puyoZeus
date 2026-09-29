@@ -1,0 +1,13 @@
+{
+  "options": {
+    "death_guard": true
+  },
+  "model": "v3",
+  "state": "completed",
+  "frames": 6848,
+  "display_frames": 5948,
+  "elapsed_seconds": 32.96224600903224,
+  "record_bytes": 393758,
+  "live_count": true,
+  "model_dir": "models/exchange_event_v3"
+}

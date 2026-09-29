@@ -1,0 +1,153 @@
+{
+  "three_videos": {
+    "fires": 221,
+    "accepted": 79,
+    "retained": 75,
+    "withdrawn": 4,
+    "rejected": {
+      "origin_difference": 13,
+      "no_landed_window": 72,
+      "first_score": 22,
+      "missing_first_formula": 35
+    },
+    "rejected_checks": {
+      "window": 72,
+      "a": 13,
+      "b": 0,
+      "c": 57
+    },
+    "score_absolute_error": {
+      "n": 73,
+      "p50": 0.0,
+      "p95": 1162.3984220907228
+    },
+    "exact": 45,
+    "unresolved": 6
+  },
+  "sources": {
+    "q_7gc4TgFig": {
+      "fires": 83,
+      "accepted": 39,
+      "retained": 38,
+      "withdrawn": 1,
+      "rejected": {
+        "origin_difference": 7,
+        "no_landed_window": 6,
+        "first_score": 15,
+        "missing_first_formula": 16
+      },
+      "rejected_checks": {
+        "window": 6,
+        "a": 7,
+        "b": 0,
+        "c": 31
+      },
+      "score_absolute_error": {
+        "n": 36,
+        "p50": 0.0,
+        "p95": 600.3125
+      },
+      "exact": 23,
+      "unresolved": 3
+    },
+    "fcXG83vInDY": {
+      "fires": 61,
+      "accepted": 40,
+      "retained": 37,
+      "withdrawn": 3,
+      "rejected": {
+        "no_landed_window": 4,
+        "missing_first_formula": 6,
+        "first_score": 7,
+        "origin_difference": 4
+      },
+      "rejected_checks": {
+        "window": 4,
+        "a": 4,
+        "b": 0,
+        "c": 13
+      },
+      "score_absolute_error": {
+        "n": 37,
+        "p50": 0.0,
+        "p95": 3431.1999999999825
+      },
+      "exact": 22,
+      "unresolved": 3
+    },
+    "mia8KCjr52g": {
+      "fires": 77,
+      "accepted": 0,
+      "retained": 0,
+      "withdrawn": 0,
+      "rejected": {
+        "no_landed_window": 62,
+        "origin_difference": 2,
+        "missing_first_formula": 13
+      },
+      "rejected_checks": {
+        "window": 62,
+        "a": 2,
+        "b": 0,
+        "c": 13
+      },
+      "score_absolute_error": {
+        "n": 0,
+        "p50": null,
+        "p95": null
+      },
+      "exact": 0,
+      "unresolved": 0
+    },
+    "zenchi": {
+      "fires": 96,
+      "accepted": 42,
+      "retained": 42,
+      "withdrawn": 0,
+      "rejected": {
+        "missing_first_formula": 27,
+        "first_score": 16,
+        "origin_difference": 7,
+        "no_landed_window": 2,
+        "palette": 2
+      },
+      "rejected_checks": {
+        "window": 2,
+        "a": 7,
+        "b": 2,
+        "c": 43
+      },
+      "score_absolute_error": {
+        "n": 40,
+        "p50": 0.0,
+        "p95": 10330.147189349113
+      },
+      "exact": 23,
+      "unresolved": 2
+    },
+    "review": {
+      "fires": 27,
+      "accepted": 15,
+      "retained": 15,
+      "withdrawn": 0,
+      "rejected": {
+        "missing_first_formula": 5,
+        "first_score": 4,
+        "origin_difference": 3
+      },
+      "rejected_checks": {
+        "window": 0,
+        "a": 3,
+        "b": 0,
+        "c": 9
+      },
+      "score_absolute_error": {
+        "n": 15,
+        "p50": 0.0,
+        "p95": 2562.7886464496955
+      },
+      "exact": 9,
+      "unresolved": 0
+    }
+  }
+}

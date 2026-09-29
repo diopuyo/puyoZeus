@@ -11,8 +11,8 @@ from src.exchange_event_tracker import ExchangeEventTracker
 class DeferredTracker(ExchangeEventTracker):
     """段更新・終了時刻は毎通知で確定し、モデル入力だけ最新一件を保持する。"""
 
-    def __init__(self, models: Any) -> None:
-        super().__init__(models)
+    def __init__(self, models: Any, live_count: bool = False) -> None:
+        super().__init__(models, live_count=live_count)
         self.pending: tuple | None = None
         self._deferred_records: dict[int, tuple] = {}
 
@@ -60,7 +60,9 @@ class SplitExchangeOverlay(ExchangeEventOverlay):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.tracker = DeferredTracker(self.tracker.models)
+        original = self.tracker
+        self.tracker = DeferredTracker(original.models)
+        self.tracker.__dict__.update(original.__dict__)
         self.latest: tuple | None = None
         self.static_input: tuple | None = None
         self.feature_dirty = False
@@ -75,23 +77,47 @@ class SplitExchangeOverlay(ExchangeEventOverlay):
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
             self.static_input = None
+        self.latest = (result, snapshot, t_sec)
+        self.feature_dirty = True
+        self.notifications += 1
+        if self._origin_guard is not None:
+            self._origin_guard.observe((result.p1, result.p2), t_sec)
+        self._observe_prefire((result.p1, result.p2), t_sec, game_idx)
+        self._observe_guards(result, t_sec, game_idx, displayed_scores, formula_visible)
+        self._death_held = self._e16 is not None and self._e16.before(self, result, t_sec)
+        if self._death_held:
+            self.tracker.pending = None
+            self.static_input = None
+            self._hold_confirmed_death(t_sec)
+            return
+        self._advance(result, snapshot, finalization, t_sec, formula_totals,
+                      displayed_scores, formula_visible)
+
+    def _advance(self, result: Any, snapshot: Any, finalization: Any, t_sec: float,
+                 formula_totals: tuple, displayed_scores: tuple | None,
+                 formula_visible: tuple) -> None:
+        """全通知の物理更新に、本番の発火・途中予測の観測も含める。"""
         self.tracker.begin_frame()
         sides = (result.p1, result.p2)
         self._observe_placements(sides, displayed_scores, t_sec)
         triggers = tuple(s.chain_event.trigger_sec if s.chain_event else None for s in sides)
         fresh = self._changed_chains(sides, triggers, t_sec)
-        if fresh:
-            self._fire(result, snapshot, t_sec, triggers, fresh)
-            if self.tracker.current is not None:
-                self.static_input = None
+        self._deliver_fires(result, snapshot, t_sec, triggers, fresh)
+        if fresh and self.tracker.current is not None:
+            self.static_input = None
         for idx, visible in enumerate(formula_visible):
             if visible:
                 self._last_formula[idx] = t_sec
                 self.tracker.activity(('1P', '2P')[idx], t_sec)
         self._observe_signals(result, snapshot, finalization, t_sec, formula_visible)
         self._observe_scores(sides, t_sec, formula_totals, displayed_scores)
+        self._observe_predictions(result, t_sec)
         self._remember(sides, snapshot, t_sec)
-        self.feature_dirty = True
+        if self._e16 is not None:
+            self._e16.observe(sides, t_sec)
+        # 本番のcount変更はS3の確定時刻を失効させるため、区間を閉じる前に反映する。
+        if getattr(self.tracker.models, 'count_features', False) and self.tracker.live_count:
+            self._refresh_live_count(t_sec)
         self.tracker.confirm_frame_inputs(t_sec)
         self.tracker.finish_frame(t_sec)
         self._observe_landing(result, snapshot, t_sec)
@@ -99,13 +125,15 @@ class SplitExchangeOverlay(ExchangeEventOverlay):
         settled = any(stable) if self._per_side_settled else all(stable)
         if settled and all(self._history):
             self._mark_static(snapshot, t_sec)
-        self.latest = (result, snapshot, t_sec)
         self._previous = tuple(s.state for s in sides)
-        self.notifications += 1
 
     def _observe_landing(self, result: Any, snapshot: Any, t_sec: float) -> None:
         projection = self._landing_projection
         projection._observe_frame(self, result, snapshot)
+        if projection.safety is not None:
+            projection.safety.observe(self, result, snapshot, t_sec)
+        if projection.hands_observation is not None:
+            projection.hands_observation.observe_chains(self.tracker, projection.counts, t_sec)
         self._landed = projection._refresh_death(self, t_sec)
         # 新発火・段数・着地・境界による保持解除は間引かない。
         if projection.death is not None and all(self._history):
@@ -124,13 +152,25 @@ class SplitExchangeOverlay(ExchangeEventOverlay):
         if self.latest is None or not self.feature_dirty:
             return
         result, snapshot, t_sec = self.latest
+        if self._death_held:
+            self._e16.apply(self, result, snapshot, t_sec)
+            self._hold_confirmed_death(t_sec)
+            self.feature_dirty = False
+            self.calculations += 1
+            return
         super()._refresh_features(snapshot, t_sec)
         self.tracker.finish_frame(t_sec)
         self.tracker.calculate()
+        if self._midchain is not None:
+            self._mark_midchain_prediction(t_sec)
         if not self._landed:
             self._landing_projection.update(self, result, snapshot, t_sec)
+        if self._prefire is not None:
+            self._mark_prefire_prediction(t_sec)
         if self.static_input is not None and self.tracker.current is None:
             self._calculate_static()
+        if self._e16 is not None:
+            self._e16.apply(self, result, snapshot, t_sec)
         self.feature_dirty = False
         self.calculations += 1
 

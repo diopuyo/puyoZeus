@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import copy
+from itertools import zip_longest
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -42,20 +44,64 @@ SignalFactory = Callable[[int, Any, Any, float], EndSignals]
 
 
 class ExchangeEventOverlay:
-    """確定盤面以外を特徴化せず、毎認識フレームの通知を束ねる。"""
+    """現在層は確定盤面だけを使い、途中盤面は明示ONの予測層へ限定する。"""
 
     def __init__(self, models: ExchangeModels, build_static: StaticBuilder,
                  signal_factory: SignalFactory, m0_predictor: M0Predictor | None = None,
-                 per_side_settled: bool = False) -> None:
-        self.tracker = ExchangeEventTracker(models)
+                 per_side_settled: bool = False, live_count: bool = False,
+                 e16: bool = False, count_sync: bool = False,
+                 death_guard: bool = False, evaluation_layers: bool = False,
+                 completion_check: bool = False, landing_counter_response: bool = False,
+                 confirmed_death_hold: bool = False, landing_counter_prob: bool = False,
+                 counter_probability_model: Any = None, landing_hands_spec: bool = False,
+                 death_candidate_guard: bool = False, death_formula_guard: bool = False,
+                 multi_landing_death: bool = False, landing_state_safety: bool = False,
+                 pending_ledger: bool = False, color_score_safety: bool = False,
+                 completion_recovery: bool = False, midchain_completion: bool = False,
+                 death_pending_ledger: bool = False, hidden_row_death: bool = False,
+                 midchain_single_observation: bool = False,
+                 prefire_candidates: bool = False, prefire_snapshot: bool = False,
+                 hidden_row_belief: bool = False, prefire_stage_timeout: bool = False,
+                 prefire_stage_timeout_only: bool = False,
+                 prefire_origin_guard: bool = False, prefire_match_gate: Any = None) -> None:
+        enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
+        self._confirmed_death_hold = confirmed_death_hold
+        self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
+        from src.exchange_event_layers import ExchangeEvaluationLayers
+        self._e16 = ExchangeEvaluationLayers(e16 or count_sync, e16 or death_guard or confirmed_death_hold,
+            e16 or evaluation_layers or completion_check, completion_check) if enabled else None
+        if enabled and self._e16.layer_enabled:
+            self.tracker.layer_rows = []
         self._build_static, self._signal_factory = build_static, signal_factory
-        self._m0 = m0_predictor
-        self._per_side_settled = per_side_settled
+        self._m0, self._per_side_settled = m0_predictor, per_side_settled
+        self._initialize_history()
+        from src.exchange_event_landing import ExchangeLandingProjection
+        if landing_counter_prob and counter_probability_model is None:
+            from src.landing_counter_probability import LogisticResponseProbability
+            counter_probability_model = LogisticResponseProbability.load()
+        self._landing_projection = ExchangeLandingProjection(counter_response=landing_counter_response,
+            counter_probability_model=counter_probability_model if landing_counter_prob else None,
+            hands_spec=landing_hands_spec, multi_landing_death=multi_landing_death,
+            landing_state_safety=landing_state_safety, pending_ledger=pending_ledger,
+            color_score_safety=color_score_safety, completion_recovery=completion_recovery,
+            death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death)
+        self._initialize_prediction_guards(death_candidate_guard, death_formula_guard,
+            midchain_completion, hidden_row_death, midchain_single_observation)
+        self._initialize_prefire(prefire_candidates, prefire_snapshot, hidden_row_belief,
+                                 prefire_stage_timeout, prefire_stage_timeout_only)
+        self._origin_guard = None
+        if prefire_origin_guard:
+            from src.exchange_prefire_origin import PrefireOriginGuard
+            if not prefire_snapshot or prefire_match_gate is None:
+                raise ValueError('E34には--prefire-snapshotと既存試合範囲が必要')
+            self._origin_guard = PrefireOriginGuard(prefire_match_gate)
+
+    def _initialize_history(self) -> None:
+        """認識観測の履歴を、予測層の初期化と独立に用意する。"""
         self._history: list[list[ConfirmedSide]] = [[], []]
         self._snapshots: list[tuple[float, Any]] = []
         self._signals: dict[int, EndSignals] = {}
-        self._counts = (0, 0)
-        self._previous = (None, None)
+        self._counts, self._previous = (0, 0), (None, None)
         self._game: int | None = None
         self._start: float | None = None
         self._falling = [False, False]
@@ -63,9 +109,59 @@ class ExchangeEventOverlay:
         self._scores: list[list[tuple[float, float]]] = [[], []]
         self._last_formula: list[float | None] = [None, None]
         self._last_displayed: list[float | None] = [None, None]
+
+    def _initialize_prefire(self, prefire_candidates: bool, prefire_snapshot: bool = False,
+                            hidden_row_belief: bool = False, prefire_stage_timeout: bool = False,
+                            prefire_stage_timeout_only: bool = False) -> None:
+        """新候補の入力と死亡専用台帳を、明示ONのときだけ追加する。"""
+        self._live_count_key: tuple | None = None
         self._feature_cache: dict[tuple, np.ndarray] = {}
-        from src.exchange_event_landing import ExchangeLandingProjection
-        self._landing_projection = ExchangeLandingProjection()
+        if prefire_stage_timeout and prefire_stage_timeout_only:
+            raise ValueError('段タイムアウトの二つのフラグは同時指定できない')
+        if (prefire_stage_timeout or prefire_stage_timeout_only) and not hidden_row_belief:
+            raise ValueError('段タイムアウトには--hidden-row-beliefが必要')
+        if hidden_row_belief and not prefire_snapshot:
+            raise ValueError('--hidden-row-beliefには--prefire-snapshotが必要')
+        from src.exchange_prefire_candidates import PrefireCandidates
+        self._prefire = PrefireCandidates(self._landing_projection.simulator) if prefire_candidates else None
+        if prefire_snapshot:
+            if prefire_candidates:
+                raise ValueError('発火前観測と配置列挙は同時指定できない')
+            from src.exchange_prefire_snapshot import PrefireSnapshot
+            self._prefire = PrefireSnapshot(self._landing_projection.simulator)
+            if hidden_row_belief:
+                from src.exchange_hidden_row_belief import HiddenRowPrefire
+                self._prefire = HiddenRowPrefire(self._landing_projection.simulator)
+                if prefire_stage_timeout or prefire_stage_timeout_only:
+                    from src.exchange_prefire_stage_timeout import StageTimeoutPrefire
+                    self._prefire = StageTimeoutPrefire(self._landing_projection.simulator,
+                                                       timeout_only=prefire_stage_timeout_only)
+                self.tracker.hidden_row_belief = self._prefire
+        self._landing_projection.prefire = self._prefire
+        if prefire_candidates:
+            from src.exchange_landing_safety import LandingStateSafety
+            self._landing_projection.death_only_inputs = True
+            if self._landing_projection.safety is None:
+                self._landing_projection.safety = LandingStateSafety(False, False, False)
+
+    def _initialize_prediction_guards(self, death_candidate_guard: bool,
+                                      death_formula_guard: bool, midchain_completion: bool,
+                                      hidden_row_death: bool = False,
+                                      midchain_single_observation: bool = False) -> None:
+        """既定OFFの追加検証器をまとめて初期化する。"""
+        from src.exchange_event_death_candidate import DeathCandidateGate
+        self._candidate_gate = DeathCandidateGate(self._landing_projection.simulator) if death_candidate_guard else None
+        from src.exchange_event_death_formula import DeathFormulaGuard
+        self._formula_guard = DeathFormulaGuard() if death_formula_guard else None
+        from src.exchange_midchain_completion import MidchainCompletion
+        self._midchain = MidchainCompletion(self._landing_projection.simulator,
+            single_observation=midchain_single_observation) if midchain_completion else None
+        if self._midchain is not None:
+            self._landing_projection.midchain = self._midchain
+        from src.exchange_hidden_row_death import HiddenRowDeathCompletion
+        self._hidden_death = HiddenRowDeathCompletion(self._landing_projection.simulator,
+            single_observation=midchain_single_observation) if hidden_row_death else None
+        self._landing_projection.hidden_death = self._hidden_death
 
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,
@@ -76,31 +172,96 @@ class ExchangeEventOverlay:
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
+        if self._origin_guard is not None:
+            self._origin_guard.observe(sides, t_sec)
+        self._observe_prefire(sides, t_sec, game_idx)
+        self._observe_guards(result, t_sec, game_idx, displayed_scores, formula_visible)
+        if self._e16 is not None and self._e16.before(self, result, t_sec):
+            self._e16.apply(self, result, snapshot, t_sec)
+            self._hold_confirmed_death(t_sec)
+            return
         self.tracker.begin_frame()
         self._observe_placements(sides, displayed_scores, t_sec)
         triggers = tuple(s.chain_event.trigger_sec if s.chain_event else None for s in sides)
         fresh = self._changed_chains(sides, triggers, t_sec)
-        if fresh:
-            self._fire(result, snapshot, t_sec, triggers, fresh)
+        self._deliver_fires(result, snapshot, t_sec, triggers, fresh)
         for idx, (label, visible) in enumerate(zip(SIDE_LABELS, formula_visible)):
             if visible:
                 self._last_formula[idx] = t_sec
                 self.tracker.activity(label, t_sec)
         self._observe_signals(result, snapshot, finalization, t_sec, formula_visible)
         self._observe_scores(sides, t_sec, formula_totals, displayed_scores)
+        self._observe_predictions(result, t_sec)
         self._remember(sides, snapshot, t_sec)
+        if self._e16 is not None:
+            self._e16.observe(sides, t_sec)
         self._refresh_features(snapshot, t_sec)
         self.tracker.confirm_frame_inputs(t_sec)
         self.tracker.finish_frame(t_sec)
+        if self._midchain is not None:
+            self._mark_midchain_prediction(t_sec)
         self._landing_projection.update(self, result, snapshot, t_sec)
+        if self._prefire is not None:
+            self._mark_prefire_prediction(t_sec)
         stable = [s.state == BoardState.STABLE for s in sides]
         settled = any(stable) if self._per_side_settled else all(stable)
         if settled and all(self._history):
             self._static(snapshot, t_sec)
         self._previous = tuple(s.state for s in sides)
+        if self._e16 is not None:
+            self._e16.apply(self, result, snapshot, t_sec)
+
+    def _observe_prefire(self, sides: tuple, stamp: float, game: int) -> None:
+        """予測入力を復元してから、明示ONの因果履歴を更新する。"""
+        if self._prefire is not None:
+            self._prefire.observe_colors(sides)
+            if hasattr(self._prefire, 'observe_history'):
+                self._prefire.observe_history(sides, stamp, game)
+
+    def _observe_predictions(self, result: Any, stamp: float) -> None:
+        """既存途中予測を更新してから、発火候補の平均を予測層へ反映する。"""
+        for engine in (self._midchain, self._hidden_death, self._prefire):
+            if engine is not None:
+                engine.observe(self, result, stamp)
+
+    def _mark_midchain_prediction(self, stamp: float) -> None:
+        """途中完走盤面を使うS3出力だけに、予測層由来を記録する。"""
+        record = self.tracker.current
+        if record is None:
+            return
+        provenance = self._midchain.provenance(self._game, record.chains)
+        if not provenance:
+            return
+        for value in reversed(record.values):
+            if value['t_sec'] != stamp:
+                break
+            if value['source'].startswith('S3'):
+                value['midchain_prediction'] = provenance
+
+    def _mark_prefire_prediction(self, stamp: float) -> None:
+        """S3・仮想着弾・死亡に候補由来を付け、現在層へ混入させない。"""
+        record = self.tracker.current or self._landing_projection.death_record
+        if record is None:
+            return
+        provenance = self._prefire.provenance(record.chains)
+        for value in reversed(record.values):
+            if value['t_sec'] != stamp:
+                break
+            if provenance and (value['source'].startswith('S3') or value['source'] == 'unavoidable_death'):
+                value['prefire_prediction'] = provenance
 
     def _reset(self, game_idx: int, t_sec: float) -> None:
         """試合内の参照履歴と信号基準をまとめて初期化する。"""
+        if self._origin_guard is not None:
+            self._origin_guard.reset()
+        if self._landing_projection.safety is not None:
+            self._landing_projection.safety.reset()
+        if self._midchain is not None:
+            self._midchain.reset()
+        if self._hidden_death is not None:
+            self._hidden_death.reset()
+        if self._prefire is not None:
+            self._prefire.reset()
         self.tracker.boundary(game_idx, t_sec)
         self._game, self._start = game_idx, None
         self._history, self._snapshots, self._signals = [[], []], [], {}
@@ -111,6 +272,87 @@ class ExchangeEventOverlay:
         self._last_formula = [None, None]
         self._last_displayed = [None, None]
         self._feature_cache.clear()
+        self._live_count_key = None
+        if self._candidate_gate is not None:
+            self._candidate_gate.reset()
+        if self._formula_guard is not None:
+            self._formula_guard.reset()
+        if self._landing_projection.hands_observation is not None:
+            self._landing_projection.hands_observation.reset()
+        if self._e16 is not None:
+            self._e16.reset()
+
+    def _observe_guards(self, result: Any, stamp: float, game: int,
+                        scores: tuple | None, visible: tuple) -> None:
+        """物理観測を発火処理より先に渡し、死亡確定時には保留を破棄する。"""
+        sides = (result.p1, result.p2)
+        if self._candidate_gate is not None:
+            self._candidate_gate.observe(sides, getattr(result, 'confirmed_dead_sides', ()), stamp, game)
+        if self._formula_guard is not None:
+            self._formula_guard.observe(result, stamp, game, scores, visible)
+        if self._landing_projection.hands_observation is not None:
+            self._landing_projection.hands_observation.observe(sides, stamp)
+
+    def _deliver_fires(self, result: Any, snapshot: Any, stamp: float,
+                       triggers: tuple, fresh: list[tuple[int, float]]) -> None:
+        """保留中だけ通知を検査し、解除時には元の通知順で既存発火処理へ戻す。"""
+        if self._formula_guard is not None:
+            self._deliver_formula_fires(result, snapshot, stamp, triggers, fresh)
+            return
+        gate = self._candidate_gate
+        if gate is None or not (any(gate.candidates) or any(gate.pending)):
+            if fresh:
+                self._fire(result, snapshot, stamp, triggers, fresh)
+            return
+        indices = {idx for idx, _ in fresh}
+        sides = (result.p1, result.p2)
+        for idx, side in enumerate(sides):
+            key = self._chain_keys[idx]
+            if key is not None and side.chain_event is not None and key[0] == side.chain_event.trigger_sec:
+                gate.accepted[idx].add(key[0])  # 既に受理済みの連鎖の段更新は新発火ではない。
+        ready = [gate.notifications(i, s.chain_event if i in indices else None, stamp)
+                 for i, s in enumerate(sides)]
+        self._fire_notifications(result, snapshot, stamp, ready)
+
+    def _deliver_formula_fires(self, result: Any, snapshot: Any, stamp: float,
+                               triggers: tuple, fresh: list[tuple[int, float]]) -> None:
+        """E22の対象外はtriggersも含め元の呼出しをそのまま維持する。"""
+        indices, sides = {i for i, _ in fresh}, (result.p1, result.p2)
+        expected = [[s.chain_event] if i in indices else [] for i, s in enumerate(sides)]
+        ready = [self._formula_guard.notifications(i, s.chain_event if i in indices else None,
+                 self._history[i], self._chain_keys[i]) for i, s in enumerate(sides)]
+        unchanged = all(len(a) == len(b) and all(x is y for x, y in zip(a, b))
+                        for a, b in zip(ready, expected))
+        if unchanged:
+            if fresh:
+                self._fire(result, snapshot, stamp, triggers, fresh)
+        else:
+            self._fire_notifications(result, snapshot, stamp, ready)
+
+    def _fire_notifications(self, result: Any, snapshot: Any, stamp: float, ready: list) -> None:
+        """元の入力を変更せず、保留から復帰した通知を順序どおり処理する。"""
+        for pair in zip_longest(*ready):
+            saved = copy(result)
+            saved.p1, saved.p2 = copy(result.p1), copy(result.p2)
+            saved.p1.chain_event, saved.p2.chain_event = pair
+            selected = [(i, event.trigger_sec) for i, event in enumerate(pair) if event is not None]
+            stamps = tuple(e.trigger_sec if e is not None else None for e in pair)
+            self._fire(saved, snapshot, stamp, stamps, selected)
+
+    def _hold_confirmed_death(self, t_sec: float) -> None:
+        """死亡後の更新拒否に入る前の予測値を凍結せず、境界まで確定表示する。"""
+        if not self._confirmed_death_hold:
+            return
+        from src.exchange_event_terminal import confirmed_winner_probability
+        probability = confirmed_winner_probability(self._e16.dead_sides)
+        if probability is None:
+            return
+        if self.tracker.source != "confirmed_death":
+            record = next((r for r in reversed(self.tracker.records) if r.game_idx == self._game), None)
+            if record is not None:
+                record.values.append(dict(source="confirmed_death", t_sec=t_sec, p1=probability,
+                                          dead_sides=sorted(self._e16.dead_sides)))
+        self.tracker.source, self.tracker.probability = "confirmed_death", probability
 
     def _observe_placements(self, sides: tuple, scores: tuple | None, t_sec: float) -> None:
         """終了済み区間についても実表示の操作加点を観測し、次の発火と区別する。"""
@@ -154,6 +396,10 @@ class ExchangeEventOverlay:
     def _fire(self, result: Any, snapshot: Any, t_sec: float,
               triggers: tuple, fresh: list[tuple[int, float]]) -> None:
         """今回の発火前に得られた各側STABLE盤面で評価入力を作る。"""
+        if (self._e16 is not None and self._e16.sync_enabled
+                and any(s.accepted is None for s in self._e16.sync)):
+            self.tracker.missing_input("E16_waiting_initial_count_pair", t_sec, "S1", triggers)
+            return
         first = min(ts for _, ts in fresh)
         selected = [next((s for s in reversed(h) if s.t_sec < first), None)
                     for h in self._history]
@@ -189,14 +435,31 @@ class ExchangeEventOverlay:
                 self._predict_completion(chain, (result.p1, result.p2)[idx].chain_event, idx)
 
     def _predict_completion(self, chain: Any, event: Any, idx: int) -> None:
+        """既存起点予測を維持し、明示ONだけ欠落起点の候補と整合証拠を保持する。"""
+        history = self._history[idx]
+        if self._origin_guard is not None:
+            event = self._origin_guard.select(chain, event, idx, self._game)
+            history = self._origin_guard.history[idx]
+        self._predict_completion_base(chain, event, idx, history)
+        if self._landing_projection.safety is not None:
+            self._landing_projection.safety.recovery.seed(
+                chain, event, history, self._landing_projection.simulator,
+                allow_recovery=self._landing_projection.safety.recovery_enabled)
+        if self._prefire is not None:
+            self._prefire.seed(chain, event, history, self._game, self.tracker._score_elapsed)
+
+    def _predict_completion_base(self, chain: Any, event: Any, idx: int,
+                                 history: list | None = None) -> None:
         """決着先読みと同じ完走シミュレーションを発火時に一度だけ行う。"""
         board = getattr(event, "before_board", None)
         if board is None:
-            saved = next((s for s in reversed(self._history[idx])
+            saved = next((s for s in reversed(self._history[idx] if history is None else history)
                           if s.t_sec < chain.trigger_sec), None)
             board = saved.board if saved is not None else None
         if board is None:
             return
+        if self._e16 is not None and np.any(board._grid == COLOR_UNKNOWN):
+            self._e16.unknown.add(chain.chain_id)
         try:
             result = self._landing_projection.simulator.simulate(board)
         except (ValueError, TypeError, FloatingPointError):
@@ -205,7 +468,7 @@ class ExchangeEventOverlay:
         chain.predicted_chain_count = result.chain_count
         if result.chain_count > 0 and not np.any(board._grid == COLOR_UNKNOWN):
             chain.predicted_final_board = result.final_board._grid.tolist()
-        # 旧記録には起点盤面がない。発火通知に保存された既存シミュ結果も再用する。
+        # 起点盤面を持たない通知では、保存された既存シミュ結果も再用する。
         if (event is not None and getattr(event, "before_board", None) is None
                 and event.mechanism != CHAIN_MECHANISM_FORMULA_READ):
             chain.predicted_final_score = max(chain.predicted_final_score, event.total_score)
@@ -217,6 +480,8 @@ class ExchangeEventOverlay:
     def _refresh_features(self, snapshot: Any, t_sec: float) -> None:
         """両側の最新確定盤面でDと近未来火力を更新し、同一盤面の探索を再用する。"""
         if getattr(self.tracker.models, "count_features", False):
+            if self.tracker.live_count:
+                self._refresh_live_count(t_sec)
             return
         if self.tracker.current is None or self._start is None or not all(self._history):
             return
@@ -234,6 +499,54 @@ class ExchangeEventOverlay:
             self.tracker.refresh_features(static, np.stack(features))
         except (ValueError, TypeError, FloatingPointError) as error:
             self.tracker.missing_input("current_input: " + str(error), t_sec, "S3")
+
+    def _refresh_live_count(self, t_sec: float) -> None:
+        """STABLE更新と連鎖遷移だけでcountを交換し、暫定S3を失効させる。"""
+        tracker = self.tracker
+        if tracker.current is None or self._start is None or not all(self._history):
+            return
+        grids, queues = [], []
+        latest_sides = self._count_inputs()
+        if latest_sides is None:
+            return
+        for idx, latest in enumerate(latest_sides):
+            history = self._history[idx]
+            chain = tracker.latest_chain(SIDE_LABELS[idx])
+            grid = latest.board._grid
+            if chain is not None and (chain.end_signal_sec is None
+                                      or latest.t_sec < chain.end_signal_sec):
+                if chain.predicted_final_board is None:
+                    from src.exchange_event_count_features import completion
+                    saved = next((s for s in reversed(history) if s.t_sec < chain.trigger_sec), None)
+                    if saved is None:
+                        tracker.missing_input("missing_live_completion", t_sec, "S3", chain.chain_id)
+                        return
+                    _, _, final = completion(saved.board._grid.astype(np.int8).tobytes(), True,
+                                              chain.trigger_sec - self._start)
+                    grid = np.frombuffer(final, np.int8).reshape(saved.board._grid.shape)
+                else:
+                    grid = np.asarray(chain.predicted_final_board, dtype=np.int8)
+            grids.append(np.asarray(grid, dtype=np.int8))
+            queues.append(latest.queue)
+        observation = CountObservation(np.stack(grids), np.stack(queues),
+            t_sec - self._start, live=True, score_elapsed_sec=tracker._score_elapsed)
+        key = (tracker.current.exchange_id, observation.grids.tobytes(),
+               observation.queues.tobytes(), compute_effective_rate(observation.elapsed_sec),
+               tuple(h[-1].board._grid.tobytes() for h in self._history))
+        if key == self._live_count_key:
+            return
+        # E15はcountだけを更新し、既存のD・到着特徴の定義を保つ。
+        tracker.refresh_features(tracker.firing.static, tracker.firing.prefire_sides, observation)
+        self._live_count_key = key
+
+    def _count_inputs(self) -> list[ConfirmedSide] | None:
+        """新フラグONだけ、手番が揃った確定盤面/NEXTをcountへ渡す。"""
+        if self._e16 is None or not self._e16.sync_enabled:
+            return [h[-1] for h in self._history]
+        synced = [s.accepted for s in self._e16.sync]
+        if any(s is None for s in synced):
+            return None
+        return [ConfirmedSide(s.t_sec, Board.from_list(s.grid.tolist()), s.queue) for s in synced]
 
     def _observations(self, result: Any, t_sec: float,
                       changed: list[tuple[int, float]]) -> tuple[ChainObservation, ...]:

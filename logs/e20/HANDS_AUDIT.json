@@ -1,0 +1,271 @@
+[
+  {
+    "game": 2,
+    "exchange": 11,
+    "representative_sec": 2690.65,
+    "decision_sec": 2690.483333333333,
+    "receiver": "2P",
+    "old_hands": 6,
+    "landing_sec": 2691.2833333333333,
+    "e19_time_proxy": 2,
+    "hands": 3,
+    "reason": "observed_animation_and_placements",
+    "confirmed_sec": null,
+    "remaining_animation_sec": 2.700000000000273,
+    "placement_interval_sec": 1.133333333333212,
+    "placement_intervals": [
+      1.133333333333212,
+      0.900000000000091,
+      0.466666666666697,
+      2.799999999999727,
+      2.033333333333303
+    ],
+    "animation_samples": [
+      2.766666666666424,
+      2.300000000000182,
+      3.0,
+      2.266666666666879,
+      2.700000000000273
+    ],
+    "animation_chain_count": 2,
+    "actual_placement_sec": [],
+    "recorded_placements": 0
+  },
+  {
+    "game": 6,
+    "exchange": 25,
+    "representative_sec": 2890.983333333333,
+    "decision_sec": 2889.883333333333,
+    "receiver": "1P",
+    "old_hands": 6,
+    "landing_sec": 2890.55,
+    "e19_time_proxy": 1,
+    "hands": 4,
+    "reason": "observed_animation_and_placements",
+    "confirmed_sec": null,
+    "remaining_animation_sec": 2.799999999999727,
+    "placement_interval_sec": 0.7000000000002728,
+    "placement_intervals": [
+      1.5,
+      0.533333333333303,
+      0.7000000000002728,
+      0.5,
+      1.699999999999818
+    ],
+    "animation_samples": [
+      3.466666666666697,
+      3.533333333333303,
+      2.733333333333576,
+      2.83333333333303,
+      2.666666666666515
+    ],
+    "animation_chain_count": 2,
+    "actual_placement_sec": [
+      2890.35
+    ],
+    "recorded_placements": 1
+  },
+  {
+    "game": 8,
+    "exchange": 30,
+    "representative_sec": 2976.9166666666665,
+    "decision_sec": 2974.15,
+    "receiver": "2P",
+    "old_hands": 6,
+    "landing_sec": 2974.883333333333,
+    "e19_time_proxy": 2,
+    "hands": 4,
+    "reason": "observed_animation_and_placements",
+    "confirmed_sec": null,
+    "remaining_animation_sec": 2.66666666666697,
+    "placement_interval_sec": 0.6666666666669698,
+    "placement_intervals": [
+      0.6999999999998181,
+      0.6666666666669698,
+      0.6666666666665151,
+      0.7999999999997272,
+      0.5333333333337578
+    ],
+    "animation_samples": [
+      2.83333333333303,
+      2.666666666666515,
+      2.66666666666697,
+      2.299999999999727,
+      2.733333333333576
+    ],
+    "animation_chain_count": 2,
+    "actual_placement_sec": [
+      2974.1833333333334,
+      2974.7833333333333
+    ],
+    "recorded_placements": 2
+  },
+  {
+    "game": 9,
+    "exchange": 32,
+    "representative_sec": 3011.7166666666667,
+    "decision_sec": 3011.05,
+    "receiver": "2P",
+    "old_hands": 6,
+    "landing_sec": 3011.1833333333334,
+    "e19_time_proxy": 1,
+    "hands": 3,
+    "reason": "observed_animation_and_placements",
+    "confirmed_sec": null,
+    "remaining_animation_sec": 2.666666666666515,
+    "placement_interval_sec": 0.900000000000091,
+    "placement_intervals": [
+      1.866666666666788,
+      0.900000000000091,
+      0.6999999999998181,
+      0.466666666666697,
+      1.033333333333303
+    ],
+    "animation_samples": [
+      2.666666666666515,
+      2.66666666666697,
+      2.299999999999727,
+      2.733333333333576,
+      2.266666666666424
+    ],
+    "animation_chain_count": 2,
+    "actual_placement_sec": [],
+    "recorded_placements": 0
+  },
+  {
+    "game": 10,
+    "exchange": 36,
+    "representative_sec": 3045.116666666667,
+    "decision_sec": 3043.15,
+    "receiver": "1P",
+    "old_hands": 4,
+    "landing_sec": 3044.05,
+    "e19_time_proxy": 2,
+    "hands": 2,
+    "reason": "observed_animation_and_placements",
+    "confirmed_sec": null,
+    "remaining_animation_sec": 0.933333333333394,
+    "placement_interval_sec": 0.7666666666664241,
+    "placement_intervals": [
+      0.6666666666665151,
+      1.533333333333303,
+      0.5666666666670608,
+      0.7666666666664241,
+      0.8333333333334849
+    ],
+    "animation_samples": [
+      1.466666666666697,
+      1.599999999999909,
+      0.933333333333394,
+      0.566666666666606,
+      0.36666666666678793
+    ],
+    "animation_chain_count": 1,
+    "actual_placement_sec": [
+      3043.616666666667
+    ],
+    "recorded_placements": 1
+  },
+  {
+    "game": 14,
+    "exchange": 49,
+    "representative_sec": 3265.383333333333,
+    "decision_sec": 3264.25,
+    "receiver": "1P",
+    "old_hands": 6,
+    "landing_sec": 3266.483333333333,
+    "e19_time_proxy": 4,
+    "hands": 3,
+    "reason": "observed_animation_and_placements",
+    "confirmed_sec": null,
+    "remaining_animation_sec": 2.300000000000182,
+    "placement_interval_sec": 0.7999999999997272,
+    "placement_intervals": [
+      0.466666666666697,
+      2.133333333333212,
+      0.7999999999997272,
+      1.0333333333337578,
+      0.6999999999998181
+    ],
+    "animation_samples": [
+      0.533333333333303,
+      2.299999999999727,
+      2.333333333333485,
+      2.799999999999727,
+      2.833333333333485
+    ],
+    "animation_chain_count": 2,
+    "actual_placement_sec": [
+      3264.45,
+      3265.1833333333334,
+      3266.4166666666665
+    ],
+    "recorded_placements": 3
+  },
+  {
+    "game": 15,
+    "exchange": 52,
+    "representative_sec": 3309.0833333333335,
+    "decision_sec": 3302.65,
+    "receiver": "2P",
+    "old_hands": 4,
+    "landing_sec": 3303.516666666667,
+    "e19_time_proxy": 2,
+    "hands": 2,
+    "reason": "observed_animation_and_placements",
+    "confirmed_sec": null,
+    "remaining_animation_sec": 0.9333333333329392,
+    "placement_interval_sec": 0.6333333333336668,
+    "placement_intervals": [
+      0.6333333333336668,
+      1.4666666666662422,
+      0.6666666666669698,
+      0.566666666666606,
+      0.6333333333336668
+    ],
+    "animation_samples": [
+      0.9333333333329392,
+      1.166666666666515,
+      0.8666666666667879,
+      0.5,
+      0.933333333333394
+    ],
+    "animation_chain_count": 1,
+    "actual_placement_sec": [],
+    "recorded_placements": 0
+  },
+  {
+    "game": 16,
+    "exchange": 54,
+    "representative_sec": 3349.7166666666667,
+    "decision_sec": 3348.75,
+    "receiver": "1P",
+    "old_hands": 6,
+    "landing_sec": 3350.7166666666667,
+    "e19_time_proxy": 3,
+    "hands": 4,
+    "reason": "observed_animation_and_placements",
+    "confirmed_sec": null,
+    "remaining_animation_sec": 2.266666666666879,
+    "placement_interval_sec": 0.7333333333335759,
+    "placement_intervals": [
+      2.866666666666788,
+      0.466666666666697,
+      0.6999999999998181,
+      1.066666666666606,
+      0.7333333333335759
+    ],
+    "animation_samples": [
+      0.900000000000091,
+      0.36666666666678793,
+      2.266666666666879,
+      3.633333333333667,
+      2.533333333333303
+    ],
+    "animation_chain_count": 3,
+    "actual_placement_sec": [
+      3348.883333333333
+    ],
+    "recorded_placements": 1
+  }
+]

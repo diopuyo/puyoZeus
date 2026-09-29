@@ -1,0 +1,14 @@
+[
+  {
+    "game": 8,
+    "side": "1P",
+    "trigger_sec": 736.2,
+    "held_sec": 736.2333333333333,
+    "deadline_sec": 736.7,
+    "score_before": 234.0,
+    "board_sec": 736.2,
+    "outcome": "discarded_timeout",
+    "resolved_sec": 736.7333333333333,
+    "wait_sec": 0.5
+  }
+]

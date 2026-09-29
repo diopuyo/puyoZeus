@@ -66,7 +66,8 @@ def prepare() -> None:
     save_json(OUT / "assets.json", {name: digest(ROOT / name) for name in files})
 
 
-def command(source: str, mode: str, dest: Path, seconds: int) -> list[str]:
+def command(source: str, mode: str, dest: Path, seconds: int,
+            live_count: bool = False, e16: bool = False) -> list[str]:
     """本番フラグは単一情報源を実行時に読む。"""
     flags = shlex.split(advantage_overlay_flags())
     if "--exchange-event-update" in flags:
@@ -78,6 +79,11 @@ def command(source: str, mode: str, dest: Path, seconds: int) -> list[str]:
             "--dump-display-timeline", str(dest / "display.npz"), *flags]
     if mode == "on":
         args += ["--exchange-event-update", "--dump-exchange-events", str(dest / "events.jsonl")]
+        if live_count or e16:
+            directory = "models/exchange_event_v4" if e16 else "models/exchange_event_v3"
+            args += ["--exchange-event-live-count", "--exchange-event-model-dir", directory]
+        if e16:
+            args += ["--exchange-event-e16"]
     return args
 
 
@@ -104,13 +110,14 @@ def validate(source: str, dest: Path, seconds: int) -> dict:
     return dict(frames=count, fps=fps, stride=stride)
 
 
-def run_one(source: str, mode: str, smoke: bool = False) -> dict:
+def run_one(source: str, mode: str, smoke: bool = False, live_count: bool = False,
+            e16: bool = False) -> dict:
     """成功済み単位はスキップし、失敗単位は再実行できる。"""
-    dest = OUT / ("smoke" if smoke else "renders") / source / mode
+    dest = OUT / ("e16" if e16 else "live_count" if live_count else "") / ("smoke" if smoke else "renders") / source / mode
     dest.mkdir(parents=True, exist_ok=True)
     status_path = dest / "status.json"
     seconds = SMOKE_SECONDS if smoke else MAX_SECONDS
-    args = command(source, mode, dest, seconds)
+    args = command(source, mode, dest, seconds, live_count, e16)
     if status_path.exists():
         previous = json.loads(status_path.read_text(encoding="utf-8"))
         if previous.get("state") == "completed" and previous.get("command") == args:
@@ -155,6 +162,8 @@ def main() -> None:
     import fcntl
     parser = argparse.ArgumentParser()
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--exchange-event-live-count", action="store_true", default=False)
+    parser.add_argument("--exchange-event-e16", action="store_true", default=False)
     options = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     lock = (OUT / "runner.lock").open("w")
@@ -163,12 +172,16 @@ def main() -> None:
     prepare()
     save_json(OUT / "runner.json", dict(pid=os.getpid(), nice=os.nice(0),
               start_utc=datetime.now(timezone.utc).isoformat(), smoke=options.smoke,
+              exchange_event_live_count=options.exchange_event_live_count,
+              exchange_event_e16=options.exchange_event_e16,
               preregistration_sha256=digest(OUT / "PREREGISTRATION.md")))
     if options.smoke:
-        results = [run_one(SOURCES[0], mode, True) for mode in MODES]
+        results = [run_one(SOURCES[0], mode, True, options.exchange_event_live_count,
+                           options.exchange_event_e16) for mode in MODES]
     else:
         with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            futures = [pool.submit(run_one, source, mode)
+            futures = [pool.submit(run_one, source, mode, False, options.exchange_event_live_count,
+                                    options.exchange_event_e16)
                        for mode in MODES for source in SOURCES]
             results = [future.result() for future in futures]
     save_json(OUT / ("smoke_summary.json" if options.smoke else "render_summary.json"), results)

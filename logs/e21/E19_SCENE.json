@@ -1,0 +1,212 @@
+[
+  {
+    "t_sec": "2633.8166666666666",
+    "source": "S3_landing",
+    "p1_selected": "0.4006974507091946",
+    "p1_display": "0.7809441242387629",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2633.85",
+    "source": "S3_landing",
+    "p1_selected": "0.4006974507091946",
+    "p1_display": "0.6858824558563708",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2633.883333333333",
+    "source": "S3_landing",
+    "p1_selected": "0.4006974507091946",
+    "p1_display": "0.6145862045695767",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2633.9166666666665",
+    "source": "S3_landing",
+    "p1_selected": "0.4006974507091946",
+    "p1_display": "0.5611140161044812",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2633.95",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.5090538268498546",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2633.983333333333",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.47000868490888453",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.016666666667",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.440724828453157",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.05",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.41876193611136137",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.0833333333335",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.40228976685501466",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.116666666667",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.3899356399127546",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.15",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.38067004470605953",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.1833333333334",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.37372084830103824",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.2166666666667",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.36850895099727227",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.25",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.3646000280194478",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.2833333333333",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.36166833578607943",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.3166666666666",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.35946956661105317",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.35",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.3578204897297835",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.383333333333",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.35658368206883123",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.4166666666665",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.355656076323117",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.45",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.3549603720138314",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.483333333333",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.35443859378186715",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.516666666667",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.35404726010789395",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.55",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.3537537598524141",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.5833333333335",
+    "source": "S3_landing",
+    "p1_selected": "0.3528732590859745",
+    "p1_display": "0.3535336346608042",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.616666666667",
+    "source": "S3_landing",
+    "p1_selected": "0.34894021668111885",
+    "p1_display": "0.35238528016588283",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.65",
+    "source": "S3_landing",
+    "p1_selected": "0.34894021668111885",
+    "p1_display": "0.3515240142946918",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.6833333333334",
+    "source": "S3_landing",
+    "p1_selected": "0.34894021668111885",
+    "p1_display": "0.3508780648912986",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.7166666666667",
+    "source": "S3_landing",
+    "p1_selected": "0.34894021668111885",
+    "p1_display": "0.35039360283875365",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.75",
+    "source": "confirmed_death",
+    "p1_selected": "1.0",
+    "p1_display": "1.0",
+    "2P_state": "CHAIN"
+  },
+  {
+    "t_sec": "2634.7833333333333",
+    "source": "confirmed_death",
+    "p1_selected": "1.0",
+    "p1_display": "1.0",
+    "2P_state": "CHAIN"
+  }
+]

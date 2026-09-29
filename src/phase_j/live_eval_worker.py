@@ -10,8 +10,10 @@ from typing import Any
 
 from .live_evaluation import DeferredTracker, SplitExchangeOverlay
 
+AUDIT_ENGINES = ('_origin_guard', '_midchain', '_hidden_death', '_prefire')
 
-def boundary_tracker(models: Any) -> Any:
+
+def boundary_tracker(models: Any, original: Any = None) -> Any:
     class Tracker(DeferredTracker):
         def __init__(self, models: Any) -> None:
             super().__init__(models)
@@ -28,11 +30,15 @@ def boundary_tracker(models: Any) -> Any:
                 self._contexts.clear()
                 self.diagnostics.clear()
                 self._diagnostic_keys.clear()
-    return Tracker(models)
+    tracker = Tracker(models)
+    if original is not None:
+        tracker.__dict__.update(original.__dict__)
+    return tracker
 
 
 def make_overlay(connection: Any, config: tuple) -> SplitExchangeOverlay:
-    models, signals, m0, settled = config
+    models, signals, m0, settled = config[:4]
+    options = config[4] if len(config) > 4 else {}
 
     def build(*args: Any) -> Any:
         connection.send(dict(kind='static', args=args))
@@ -41,8 +47,8 @@ def make_overlay(connection: Any, config: tuple) -> SplitExchangeOverlay:
             raise RuntimeError(reply['message'])
         return reply['value']
 
-    overlay = SplitExchangeOverlay(models, build, signals, m0, per_side_settled=settled)
-    overlay.tracker = boundary_tracker(models)
+    overlay = SplitExchangeOverlay(models, build, signals, m0, per_side_settled=settled, **options)
+    overlay.tracker = boundary_tracker(models, overlay.tracker)
     return overlay
 
 
@@ -100,7 +106,10 @@ def serve(connection: Any, config: tuple, overlay: Any) -> None:
                 if request['op'] == 'records':
                     tracker = overlay.tracker
                     reply = dict(kind='ok', records=tracker.sealed+[asdict(r) for r in tracker.records],
-                                 diagnostics=tracker.sealed_diagnostics+tracker.diagnostics)
+                                 diagnostics=tracker.sealed_diagnostics+tracker.diagnostics,
+                                 audits={name: engine.summary() if engine is not None else None
+                                         for name in AUDIT_ENGINES
+                                         for engine in (getattr(overlay, name),)})
                 else:
                     if request.get('reset'):
                         overlay = make_overlay(connection, config)

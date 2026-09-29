@@ -519,6 +519,12 @@ class SideResult:
     # フィルタ後の観測を基準にしたために直せなかったものだった。
     # 既定 None = 従来挙動と bit-identical (誰も読まなければ影響しない)。
     raw_cnn_board: Board | None = None
+    # E26: 明示ON時だけ、予測専用読取器で補完。現在層の盤面には使用しない。
+    midchain_board: Board | None = None
+    # E31: 発火前画像の多数決。現在層には書き戻さない。
+    prefire_snapshot: dict | None = None
+    # E34: W48bを有効にした描画・補完だけが保存する。Noneは未取得。
+    prefire_origin_hold: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -537,6 +543,9 @@ class PipelineResult:
     # 幻盤面を個別に除外できるようにする、docs/KNOWN_WEAKNESSES.md W20)。
     # backwards compat のため default False (既存呼び出しは無指定で従来通り)。
     match_end_locked: bool = False
+    # E16専用の評価境界で追記する観測事実。既定は従来通り未供給。
+    confirmed_dead_sides: tuple[str, ...] = ()
+    terminal_evidence_available: bool = False
 
 
 # ============================

@@ -1,0 +1,197 @@
+[
+  {
+    "game": 3,
+    "side": "2P",
+    "chain_id": 9,
+    "trigger_sec": 2751.383333333333,
+    "colors": [
+      1,
+      3,
+      4,
+      5
+    ],
+    "queue": [
+      4,
+      9,
+      0,
+      0
+    ],
+    "trials": 19960,
+    "skipped": null,
+    "enumeration_sec": 1.468246803036891,
+    "initial": {
+      "candidates": 3655,
+      "unique": 2141,
+      "mean_score": 8852.6292749658,
+      "mean_send": 126.14555403556771,
+      "predicted_count": 13
+    },
+    "observations": [
+      {
+        "t_sec": 2751.383333333333,
+        "count": 1,
+        "observed": 100,
+        "erased_colors": null,
+        "filter_sec": 0.002614335040561855,
+        "candidates": 882,
+        "unique": 366,
+        "mean_score": 7112.3015873015875,
+        "mean_send": 101.32426303854875,
+        "predicted_count": 13
+      },
+      {
+        "t_sec": 2752.6833333333334,
+        "count": 2,
+        "observed": 420,
+        "erased_colors": null,
+        "filter_sec": 0.000978230033069849,
+        "candidates": 527,
+        "unique": 229,
+        "mean_score": 10592.675521821631,
+        "mean_send": 151.1707779886148,
+        "predicted_count": 13
+      },
+      {
+        "t_sec": 2754.116666666667,
+        "count": 3,
+        "observed": 1320,
+        "erased_colors": null,
+        "filter_sec": 0.0003898260183632374,
+        "candidates": 12,
+        "unique": 3,
+        "mean_score": 1320.0,
+        "mean_send": 18.0,
+        "predicted_count": 3
+      },
+      {
+        "t_sec": 2755.45,
+        "count": 4,
+        "observed": 2600,
+        "erased_colors": null,
+        "filter_sec": 1.3196025975048542e-05,
+        "candidates": 0,
+        "unique": 0,
+        "mean_score": null,
+        "mean_send": null,
+        "predicted_count": null
+      },
+      {
+        "t_sec": 2756.75,
+        "count": 5,
+        "observed": 5160,
+        "erased_colors": null,
+        "filter_sec": 6.224028766155243e-06,
+        "candidates": 0,
+        "unique": 0,
+        "mean_score": null,
+        "mean_send": null,
+        "predicted_count": null
+      },
+      {
+        "t_sec": 2758.15,
+        "count": 6,
+        "observed": 9000,
+        "erased_colors": null,
+        "filter_sec": 5.451962351799011e-06,
+        "candidates": 0,
+        "unique": 0,
+        "mean_score": null,
+        "mean_send": null,
+        "predicted_count": null
+      },
+      {
+        "t_sec": 2759.516666666667,
+        "count": 7,
+        "observed": 15500,
+        "erased_colors": null,
+        "filter_sec": 5.119945853948593e-06,
+        "candidates": 0,
+        "unique": 0,
+        "mean_score": null,
+        "mean_send": null,
+        "predicted_count": null
+      },
+      {
+        "t_sec": 2760.883333333333,
+        "count": 8,
+        "observed": 21900,
+        "erased_colors": null,
+        "filter_sec": 5.478039383888245e-06,
+        "candidates": 0,
+        "unique": 0,
+        "mean_score": null,
+        "mean_send": null,
+        "predicted_count": null
+      },
+      {
+        "t_sec": 2762.2833333333333,
+        "count": 9,
+        "observed": 29580,
+        "erased_colors": null,
+        "filter_sec": 6.023910827934742e-06,
+        "candidates": 0,
+        "unique": 0,
+        "mean_score": null,
+        "mean_send": null,
+        "predicted_count": null
+      },
+      {
+        "t_sec": 2763.616666666667,
+        "count": 10,
+        "observed": 40880,
+        "erased_colors": null,
+        "filter_sec": 5.667912773787975e-06,
+        "candidates": 0,
+        "unique": 0,
+        "mean_score": null,
+        "mean_send": null,
+        "predicted_count": null
+      },
+      {
+        "t_sec": 2764.95,
+        "count": 11,
+        "observed": 51120,
+        "erased_colors": null,
+        "filter_sec": 8.628936484456062e-06,
+        "candidates": 0,
+        "unique": 0,
+        "mean_score": null,
+        "mean_send": null,
+        "predicted_count": null
+      },
+      {
+        "t_sec": 2766.3166666666666,
+        "count": 12,
+        "observed": 62640,
+        "erased_colors": null,
+        "filter_sec": 5.502952262759209e-06,
+        "candidates": 0,
+        "unique": 0,
+        "mean_score": null,
+        "mean_send": null,
+        "predicted_count": null
+      },
+      {
+        "t_sec": 2767.6833333333334,
+        "count": 13,
+        "observed": 75440,
+        "erased_colors": null,
+        "filter_sec": 5.655921995639801e-06,
+        "candidates": 0,
+        "unique": 0,
+        "mean_score": null,
+        "mean_send": null,
+        "predicted_count": null
+      }
+    ],
+    "used": true,
+    "uses": 3,
+    "final_score": 75440,
+    "remaining": 0,
+    "first_mean_score": 7112.3015873015875,
+    "first_error": -68327.69841269842,
+    "last_mean_score": 1320.0,
+    "last_error": -74120.0,
+    "became_zero": true
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "state": "passed",
+  "scripts": [
+    "scripts/_d2_compare.py",
+    "scripts/_d2_evidence.py",
+    "scripts/_d2_inventory.py",
+    "scripts/_d2_probe.py",
+    "scripts/_d2_run.py",
+    "scripts/_d2_verify.py"
+  ],
+  "sources": 5,
+  "rows_per_condition": 300,
+  "repetitions_equal": true,
+  "original_rows_unchanged": 114146
+}

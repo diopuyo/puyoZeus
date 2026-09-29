@@ -1366,6 +1366,64 @@ def known_pipeline_gap_columns() -> frozenset[str]:
     return frozenset(g.column for g in KNOWN_PIPELINE_GAPS)
 
 
+
+# E32固定検収の実効引数から抽出した撃ち合い評価の本番構成。
+EXCHANGE_EVENT_ADOPTED: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag(
+        '--exchange-event-update', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--exchange-event-model-dir models/exchange_event_v3', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--exchange-event-live-count', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--exchange-event-death-guard', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--confirmed-death-hold', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--death-formula-guard', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--color-score-safety', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--multi-landing-death', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--midchain-completion', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--death-pending-ledger', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--hidden-row-death', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--prefire-snapshot', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--hidden-row-belief', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+)
+
+
 def _join(flags: tuple[AdoptedFlag, ...]) -> str:
     """フラグ文字列を空白区切りで連結する。"""
     return " ".join(f.flag for f in flags)
@@ -1409,6 +1467,11 @@ def advantage_overlay_flags() -> str:
     return _join(ADVANTAGE_ADOPTED)
 
 
+def exchange_event_flags() -> str:
+    """撃ち合いイベント評価の本番構成フラグを返す。"""
+    return _join(EXCHANGE_EVENT_ADOPTED)
+
+
 def visualization_flags() -> str:
     """認識オーバーレイ表示の本番構成フラグを返す。"""
     return _join(VISUALIZATION_ADOPTED)
@@ -1421,6 +1484,7 @@ def describe() -> str:
         ("認識(共通)", RECOGNITION_ADOPTED),
         ("認識(収集専用)", COLLECT_ONLY_ADOPTED),
         ("有利不利", ADVANTAGE_ADOPTED),
+        ("撃ち合いイベント評価", EXCHANGE_EVENT_ADOPTED),
         ("表示", VISUALIZATION_ADOPTED),
         ("連鎖シミュレーション", CHAIN_SIM_ADOPTED),
         ("指標大整理", INDICATOR_REORG_DECISIONS),

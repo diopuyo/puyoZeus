@@ -1,0 +1,780 @@
+[
+  {
+    "game": 51,
+    "internal_game": 11,
+    "start": 3095.95,
+    "end": 3105.05,
+    "n": 274,
+    "delta": 1,
+    "first_row": 15462,
+    "last_row": 15735,
+    "old_source": "S3_landing",
+    "new_source": "S3_landing",
+    "old_p1": 0.2892521465991364,
+    "new_p1": 0.667402508050141,
+    "adoptions": [
+      {
+        "chain_id": 5,
+        "side": "2P",
+        "trigger": 3084.383333333333,
+        "active_in_interval": true,
+        "snapshot_start": 3084.1166666666663,
+        "snapshot_end": 3084.25,
+        "initial_candidates": 25,
+        "initial_score": 100789.0625,
+        "e31_reason": "unknown",
+        "observations_at_start": [
+          {
+            "game": 11,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 3095.35,
+            "count": 9,
+            "score": 40340,
+            "visible_now": true,
+            "first_visible_sec": 3095.35,
+            "event_trigger": 3090.4166666666665,
+            "snapshot_end": 3084.25,
+            "snapshot_is_past": true
+          }
+        ],
+        "observations_during": [
+          {
+            "game": 11,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 3096.75,
+            "count": 10,
+            "score": 49300,
+            "visible_now": true,
+            "first_visible_sec": 3096.75,
+            "event_trigger": 3090.4166666666665,
+            "snapshot_end": 3084.25,
+            "snapshot_is_past": true
+          },
+          {
+            "game": 11,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 3098.0833333333335,
+            "count": 11,
+            "score": 62200,
+            "visible_now": true,
+            "first_visible_sec": 3098.0833333333335,
+            "event_trigger": 3090.4166666666665,
+            "snapshot_end": 3084.25,
+            "snapshot_is_past": true
+          },
+          {
+            "game": 11,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 3099.4166666666665,
+            "count": 12,
+            "score": 73720,
+            "visible_now": true,
+            "first_visible_sec": 3099.4166666666665,
+            "event_trigger": 3090.4166666666665,
+            "snapshot_end": 3084.25,
+            "snapshot_is_past": true
+          },
+          {
+            "game": 11,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 3100.8166666666666,
+            "count": 13,
+            "score": 86520,
+            "visible_now": true,
+            "first_visible_sec": 3100.8166666666666,
+            "event_trigger": 3090.4166666666665,
+            "snapshot_end": 3084.25,
+            "snapshot_is_past": true
+          },
+          {
+            "game": 11,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 3102.1833333333334,
+            "count": 14,
+            "score": 100600,
+            "visible_now": true,
+            "first_visible_sec": 3102.1833333333334,
+            "event_trigger": 3090.4166666666665,
+            "snapshot_end": 3084.25,
+            "snapshot_is_past": true
+          }
+        ]
+      },
+      {
+        "chain_id": 6,
+        "side": "1P",
+        "trigger": 3089.95,
+        "active_in_interval": true,
+        "snapshot_start": 3088.95,
+        "snapshot_end": 3089.1499999999996,
+        "initial_candidates": 585,
+        "initial_score": 89890.40927021697,
+        "e31_reason": "unknown",
+        "observations_at_start": [
+          {
+            "game": 11,
+            "side": "1P",
+            "chain_id": 6,
+            "t": 3095.35,
+            "count": 5,
+            "score": 6680,
+            "visible_now": true,
+            "first_visible_sec": 3095.35,
+            "event_trigger": 3094.65,
+            "snapshot_end": 3089.1499999999996,
+            "snapshot_is_past": true
+          }
+        ],
+        "observations_during": [
+          {
+            "game": 11,
+            "side": "1P",
+            "chain_id": 6,
+            "t": 3096.6833333333334,
+            "count": 6,
+            "score": 10520,
+            "visible_now": true,
+            "first_visible_sec": 3096.6833333333334,
+            "event_trigger": 3096.05,
+            "snapshot_end": 3089.1499999999996,
+            "snapshot_is_past": true
+          },
+          {
+            "game": 11,
+            "side": "1P",
+            "chain_id": 6,
+            "t": 3098.05,
+            "count": 7,
+            "score": 17020,
+            "visible_now": true,
+            "first_visible_sec": 3098.05,
+            "event_trigger": 3097.45,
+            "snapshot_end": 3089.1499999999996,
+            "snapshot_is_past": true
+          },
+          {
+            "game": 11,
+            "side": "1P",
+            "chain_id": 6,
+            "t": 3099.4166666666665,
+            "count": 8,
+            "score": 25120,
+            "visible_now": true,
+            "first_visible_sec": 3099.4166666666665,
+            "event_trigger": 3098.7833333333333,
+            "snapshot_end": 3089.1499999999996,
+            "snapshot_is_past": true
+          },
+          {
+            "game": 11,
+            "side": "1P",
+            "chain_id": 6,
+            "t": 3100.7833333333333,
+            "count": 9,
+            "score": 34820,
+            "visible_now": true,
+            "first_visible_sec": 3100.7833333333333,
+            "event_trigger": 3100.116666666667,
+            "snapshot_end": 3089.1499999999996,
+            "snapshot_is_past": true
+          },
+          {
+            "game": 11,
+            "side": "1P",
+            "chain_id": 6,
+            "t": 3102.2166666666667,
+            "count": 10,
+            "score": 43780,
+            "visible_now": true,
+            "first_visible_sec": 3102.2166666666667,
+            "event_trigger": 3101.55,
+            "snapshot_end": 3089.1499999999996,
+            "snapshot_is_past": true
+          }
+        ]
+      }
+    ],
+    "first_event": {
+      "source": "S3_landing",
+      "t_sec": 3095.35,
+      "p1": 0.667402508050141,
+      "base_p1": 0.6087211297974521,
+      "gfe_p1": 0.710586946852167,
+      "incoming": [
+        0,
+        25.777517564402842
+      ],
+      "dead_sides": [],
+      "completion_sides": [
+        "1P",
+        "2P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        0,
+        0
+      ],
+      "prefire_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 5,
+          "candidates": 1.0,
+          "mean_score": 100934.28571428571,
+          "mean_send": 1441.7142857142858,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        },
+        {
+          "side": "1P",
+          "chain_id": 6,
+          "candidates": 1.0,
+          "mean_score": 102340.98360655738,
+          "mean_send": 1461.4918032786886,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    },
+    "event_count": 42
+  },
+  {
+    "game": 45,
+    "internal_game": 5,
+    "start": 2848.45,
+    "end": 2851.3166666666666,
+    "n": 87,
+    "delta": 1,
+    "first_row": 8037,
+    "last_row": 8123,
+    "old_source": "S3_landing",
+    "new_source": "S3_landing",
+    "old_p1": 0.17338693510697534,
+    "new_p1": 0.814170853535254,
+    "adoptions": [
+      {
+        "chain_id": 7,
+        "side": "1P",
+        "trigger": 2839.1833333333334,
+        "active_in_interval": false,
+        "snapshot_start": 2838.75,
+        "snapshot_end": 2839.15,
+        "initial_candidates": 5,
+        "initial_score": 700.0,
+        "e31_reason": "unknown",
+        "observations_at_start": [
+          {
+            "game": 5,
+            "side": "1P",
+            "chain_id": 7,
+            "t": 2840.516666666667,
+            "count": 2,
+            "score": 700,
+            "visible_now": true,
+            "first_visible_sec": 2840.516666666667,
+            "event_trigger": 2839.85,
+            "snapshot_end": 2839.15,
+            "snapshot_is_past": true
+          }
+        ],
+        "observations_during": []
+      },
+      {
+        "chain_id": 9,
+        "side": "1P",
+        "trigger": 2848.383333333333,
+        "active_in_interval": true,
+        "snapshot_start": 2847.9166666666665,
+        "snapshot_end": 2847.983333333333,
+        "initial_candidates": 585,
+        "initial_score": 41647.3224852071,
+        "e31_reason": "unknown",
+        "observations_at_start": [
+          {
+            "game": 5,
+            "side": "1P",
+            "chain_id": 9,
+            "t": 2848.383333333333,
+            "count": 1,
+            "score": 40,
+            "visible_now": true,
+            "first_visible_sec": 2848.383333333333,
+            "event_trigger": 2848.383333333333,
+            "snapshot_end": 2847.983333333333,
+            "snapshot_is_past": true
+          }
+        ],
+        "observations_during": [
+          {
+            "game": 5,
+            "side": "1P",
+            "chain_id": 9,
+            "t": 2849.7833333333333,
+            "count": 2,
+            "score": 2740,
+            "visible_now": true,
+            "first_visible_sec": 2849.7833333333333,
+            "event_trigger": 2849.7833333333333,
+            "snapshot_end": 2847.983333333333,
+            "snapshot_is_past": true
+          },
+          {
+            "game": 5,
+            "side": "1P",
+            "chain_id": 9,
+            "t": 2851.3166666666666,
+            "count": 3,
+            "score": 3640,
+            "visible_now": true,
+            "first_visible_sec": 2851.3166666666666,
+            "event_trigger": 2851.3166666666666,
+            "snapshot_end": 2847.983333333333,
+            "snapshot_is_past": true
+          }
+        ]
+      }
+    ],
+    "first_event": {
+      "source": "S3_landing",
+      "t_sec": 2848.383333333333,
+      "p1": 0.814170853535254,
+      "base_p1": 0.6852728612104322,
+      "gfe_p1": 0.8986001257415107,
+      "incoming": [
+        0,
+        382.306952662722
+      ],
+      "dead_sides": [],
+      "completion_sides": [
+        "1P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        0,
+        382
+      ],
+      "prefire_prediction": [
+        {
+          "side": "1P",
+          "chain_id": 9,
+          "candidates": 1.0,
+          "mean_score": 41647.3224852071,
+          "mean_send": 594.306952662722,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    },
+    "event_count": 25
+  },
+  {
+    "game": 51,
+    "internal_game": 11,
+    "start": 3105.383333333333,
+    "end": 3108.15,
+    "n": 84,
+    "delta": 1,
+    "first_row": 15745,
+    "last_row": 15828,
+    "old_source": "S3_landing",
+    "new_source": "S3_landing",
+    "old_p1": 0.3679150414649641,
+    "new_p1": 0.8563027014708455,
+    "adoptions": [
+      {
+        "chain_id": 5,
+        "side": "2P",
+        "trigger": 3084.383333333333,
+        "active_in_interval": false,
+        "snapshot_start": 3084.1166666666663,
+        "snapshot_end": 3084.25,
+        "initial_candidates": 25,
+        "initial_score": 100789.0625,
+        "e31_reason": "unknown",
+        "observations_at_start": [
+          {
+            "game": 11,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 3102.1833333333334,
+            "count": 14,
+            "score": 100600,
+            "visible_now": true,
+            "first_visible_sec": 3102.1833333333334,
+            "event_trigger": 3090.4166666666665,
+            "snapshot_end": 3084.25,
+            "snapshot_is_past": true
+          }
+        ],
+        "observations_during": []
+      },
+      {
+        "chain_id": 6,
+        "side": "1P",
+        "trigger": 3089.95,
+        "active_in_interval": true,
+        "snapshot_start": 3088.95,
+        "snapshot_end": 3089.1499999999996,
+        "initial_candidates": 585,
+        "initial_score": 89890.40927021697,
+        "e31_reason": "unknown",
+        "observations_at_start": [
+          {
+            "game": 11,
+            "side": "1P",
+            "chain_id": 6,
+            "t": 3102.2166666666667,
+            "count": 10,
+            "score": 43780,
+            "visible_now": true,
+            "first_visible_sec": 3102.2166666666667,
+            "event_trigger": 3101.55,
+            "snapshot_end": 3089.1499999999996,
+            "snapshot_is_past": true
+          }
+        ],
+        "observations_during": []
+      }
+    ],
+    "first_event": {
+      "source": "S3_landing",
+      "t_sec": 3105.383333333333,
+      "p1": 0.8563027014708455,
+      "base_p1": 0.6471113494924803,
+      "gfe_p1": 0.9508959941687228,
+      "incoming": [
+        0,
+        216.0
+      ],
+      "dead_sides": [],
+      "completion_sides": [
+        "1P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        0,
+        216
+      ],
+      "prefire_prediction": [
+        {
+          "side": "1P",
+          "chain_id": 6,
+          "candidates": 1.0,
+          "mean_score": 115740.0,
+          "mean_send": 1653.0,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    },
+    "event_count": 35
+  },
+  {
+    "game": 47,
+    "internal_game": 7,
+    "start": 2936.55,
+    "end": 2937.8166666666666,
+    "n": 39,
+    "delta": 1,
+    "first_row": 10680,
+    "last_row": 10718,
+    "old_source": "S3_provisional",
+    "new_source": "S3_landing",
+    "old_p1": 0.580836143005766,
+    "new_p1": 0.48103849658354886,
+    "adoptions": [
+      {
+        "chain_id": 5,
+        "side": "2P",
+        "trigger": 2934.883333333333,
+        "active_in_interval": true,
+        "snapshot_start": 2934.7166666666667,
+        "snapshot_end": 2934.85,
+        "initial_candidates": 120,
+        "initial_score": 3925.9960552268244,
+        "e31_reason": "unknown",
+        "observations_at_start": [
+          {
+            "game": 7,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 2936.2166666666667,
+            "count": 2,
+            "score": 360,
+            "visible_now": true,
+            "first_visible_sec": 2936.2166666666667,
+            "event_trigger": 2935.4166666666665,
+            "snapshot_end": 2934.85,
+            "snapshot_is_past": true
+          }
+        ],
+        "observations_during": [
+          {
+            "game": 7,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 2937.55,
+            "count": 3,
+            "score": 1000,
+            "visible_now": true,
+            "first_visible_sec": 2937.55,
+            "event_trigger": 2936.7166666666667,
+            "snapshot_end": 2934.85,
+            "snapshot_is_past": true
+          }
+        ]
+      }
+    ],
+    "first_event": {
+      "source": "S3_landing",
+      "t_sec": 2936.35,
+      "p1": 0.48103849658354886,
+      "base_p1": 0.5214272075102988,
+      "gfe_p1": 0.4408917815618605,
+      "incoming": [
+        51.04966139954854,
+        0
+      ],
+      "dead_sides": [],
+      "completion_sides": [
+        "1P",
+        "2P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        51,
+        0
+      ],
+      "prefire_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 5,
+          "candidates": 1.0,
+          "mean_score": 3947.8103837471785,
+          "mean_send": 56.04966139954854,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    },
+    "event_count": 3
+  },
+  {
+    "game": 47,
+    "internal_game": 7,
+    "start": 2935.05,
+    "end": 2936.1833333333334,
+    "n": 35,
+    "delta": 1,
+    "first_row": 10635,
+    "last_row": 10669,
+    "old_source": "S3_provisional",
+    "new_source": "S3_landing",
+    "old_p1": 0.5144736313170009,
+    "new_p1": 0.39224908932064473,
+    "adoptions": [
+      {
+        "chain_id": 5,
+        "side": "2P",
+        "trigger": 2934.883333333333,
+        "active_in_interval": true,
+        "snapshot_start": 2934.7166666666667,
+        "snapshot_end": 2934.85,
+        "initial_candidates": 120,
+        "initial_score": 3925.9960552268244,
+        "e31_reason": "unknown",
+        "observations_at_start": [
+          {
+            "game": 7,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 2934.883333333333,
+            "count": 1,
+            "score": 40,
+            "visible_now": true,
+            "first_visible_sec": 2934.883333333333,
+            "event_trigger": 2934.883333333333,
+            "snapshot_end": 2934.85,
+            "snapshot_is_past": true
+          }
+        ],
+        "observations_during": []
+      }
+    ],
+    "first_event": {
+      "source": "S3_landing",
+      "t_sec": 2934.95,
+      "p1": 0.39224908932064473,
+      "base_p1": 0.36878008294341763,
+      "gfe_p1": 0.41622680046777455,
+      "incoming": [
+        55.69625246548324,
+        0
+      ],
+      "dead_sides": [],
+      "completion_sides": [
+        "2P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        56,
+        0
+      ],
+      "prefire_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 5,
+          "candidates": 1.0,
+          "mean_score": 3925.9960552268244,
+          "mean_send": 55.69625246548324,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    },
+    "event_count": 16
+  },
+  {
+    "game": 47,
+    "internal_game": 7,
+    "start": 2941.05,
+    "end": 2941.55,
+    "n": 16,
+    "delta": 1,
+    "first_row": 10815,
+    "last_row": 10830,
+    "old_source": "G_fe",
+    "new_source": "unavoidable_death",
+    "old_p1": 0.5736150342079739,
+    "new_p1": 0.02,
+    "adoptions": [
+      {
+        "chain_id": 5,
+        "side": "2P",
+        "trigger": 2934.883333333333,
+        "active_in_interval": false,
+        "snapshot_start": 2934.7166666666667,
+        "snapshot_end": 2934.85,
+        "initial_candidates": 120,
+        "initial_score": 3925.9960552268244,
+        "e31_reason": "unknown",
+        "observations_at_start": [
+          {
+            "game": 7,
+            "side": "2P",
+            "chain_id": 5,
+            "t": 2938.9166666666665,
+            "count": 4,
+            "score": 3520,
+            "visible_now": true,
+            "first_visible_sec": 2938.9166666666665,
+            "event_trigger": 2938.116666666667,
+            "snapshot_end": 2934.85,
+            "snapshot_is_past": true
+          }
+        ],
+        "observations_during": []
+      }
+    ],
+    "first_event": {
+      "source": "unavoidable_death",
+      "t_sec": 2940.9166666666665,
+      "p1": 0.02,
+      "base_p1": 0.5438389189582635,
+      "gfe_p1": 0.19944202075159176,
+      "incoming": [
+        45,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        45,
+        0
+      ]
+    },
+    "event_count": 8
+  },
+  {
+    "game": 55,
+    "internal_game": 15,
+    "start": 3315.2166666666667,
+    "end": 3315.35,
+    "n": 5,
+    "delta": 1,
+    "first_row": 22040,
+    "last_row": 22044,
+    "old_source": "S3_landing",
+    "new_source": "S3_landing",
+    "old_p1": 0.483722829123078,
+    "new_p1": 0.531593548664543,
+    "adoptions": [
+      {
+        "chain_id": 2,
+        "side": "1P",
+        "trigger": 3302.65,
+        "active_in_interval": true,
+        "snapshot_start": 3302.116666666667,
+        "snapshot_end": 3302.616666666667,
+        "initial_candidates": 585,
+        "initial_score": 102113.26183431954,
+        "e31_reason": "unknown",
+        "observations_at_start": [
+          {
+            "game": 15,
+            "side": "1P",
+            "chain_id": 2,
+            "t": 3314.9166666666665,
+            "count": 10,
+            "score": 37640,
+            "visible_now": true,
+            "first_visible_sec": 3314.9166666666665,
+            "event_trigger": 3312.8166666666666,
+            "snapshot_end": 3302.616666666667,
+            "snapshot_is_past": true
+          }
+        ],
+        "observations_during": []
+      }
+    ],
+    "first_event": {
+      "source": "S3_landing",
+      "t_sec": 3315.1833333333334,
+      "p1": 0.531593548664543,
+      "base_p1": 0.5804041190552872,
+      "gfe_p1": 0.4821708161263507,
+      "incoming": [
+        0,
+        1444.358189081225
+      ],
+      "dead_sides": [],
+      "completion_sides": [
+        "1P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        0,
+        1445
+      ],
+      "prefire_prediction": [
+        {
+          "side": "1P",
+          "chain_id": 2,
+          "candidates": 1.0,
+          "mean_score": 101858.25122059476,
+          "mean_send": 1454.358189081225,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    },
+    "event_count": 1
+  }
+]

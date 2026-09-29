@@ -1,0 +1,8 @@
+{
+  "source_sha256": "e88b553c571514c404d4eac2becf9097e28f2e604b41d92b196aeff0dd19a70b",
+  "video": "/mnt/d/puyo_analyzer/videos/source/fcXG83vInDY_first_0_900_20260925_v1.mp4",
+  "fps": 30.0,
+  "windows_path": "logs/e31/records/fcXG83vInDY.jsonl.windows.json.gz",
+  "windows_sha256": "6a7ddd64e1b8e244deebe3c316fe95ff0e8e2b838f234fd81c829edb310d01c5",
+  "window_count": 61
+}

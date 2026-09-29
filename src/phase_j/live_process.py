@@ -23,7 +23,8 @@ from .live_source import VideoFileSource
 
 PROTOCOL = pickle.HIGHEST_PROTOCOL
 NOTICE_FIELDS = frozenset({'side', 'state', 'confirmed_board', 'score', 'score_delta',
-    'chain_event', 'next_pair', 'dnext_pair', 'next_slide_motion', 'landing_chain_started'})
+    'chain_event', 'next_pair', 'dnext_pair', 'next_slide_motion', 'landing_chain_started',
+    'midchain_board', 'prefire_snapshot', 'prefire_origin_hold'})
 EMPTY_COUNTER_RESULT = (0.0, float('nan'), float('nan'))
 PROGRESS_PERIOD_SEC = 1.0
 

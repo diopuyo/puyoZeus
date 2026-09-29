@@ -22,11 +22,13 @@ NEW_COLUMNS = tuple(f"NF_ojama_k{k}_{side}" for side in ("self", "opp", "diff")
 
 @dataclass(frozen=True)
 class CountObservation:
-    """発火前盤面・NEXTを参照共有せず保持する。"""
+    """盤面・NEXTを参照共有せず保持する。live時は連鎖消費後の盤面を受ける。"""
 
     grids: np.ndarray
     queues: np.ndarray
     elapsed_sec: float
+    live: bool = False
+    score_elapsed_sec: float | None = None
 
     def __post_init__(self) -> None:
         ivalue = (("grids", (2, BOARD_ROWS, BOARD_COLS)), ("queues", (2, 4)))
@@ -46,14 +48,25 @@ class NativeSimulator:
         return native.simulate_chain(board, exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED)
 
 
-@lru_cache(maxsize=CACHE_SIZE)
 def fire(raw: bytes, queue: tuple[int, ...], elapsed: float,
          levels: tuple[int, ...], response: bool = False) -> np.ndarray:
+    """換算率が同じ時間帯の探索を共有する。計算値は変更しない。"""
+    rate = compute_effective_rate(elapsed)
+    _RATE_ELAPSED.setdefault(rate, elapsed)
+    return _fire_at_rate(raw, queue, rate, levels, response)
+
+
+_RATE_ELAPSED: dict[int, float] = {}
+
+
+@lru_cache(maxsize=CACHE_SIZE)
+def _fire_at_rate(raw: bytes, queue: tuple[int, ...], rate: int,
+                  levels: tuple[int, ...], response: bool) -> np.ndarray:
     """学習時の探索幅・既知NEXT・換算率で生個数を計算する。"""
     grid = np.frombuffer(raw, dtype=np.int8).reshape(BOARD_ROWS, BOARD_COLS)
     board = Board.from_list(grid.tolist())
     width = RESPONSE_WIDTH if response else iv.NEAR_FUTURE_BEAM_WIDTH
-    result = iv.near_future_fire_power(board, queue[:2], queue[2:], elapsed,
+    result = iv.near_future_fire_power(board, queue[:2], queue[2:], _RATE_ELAPSED[rate],
         simulator=NativeSimulator(), k_levels=levels, beam_width=width,
         active_colors=iv._near_future_active_colors(board), resolve_before_death=response,
         use_exact_score=True)
@@ -73,17 +86,22 @@ def completion(raw: bytes, firing: bool, elapsed: float) -> tuple[float, int, by
 
 def side_features(observation: CountObservation, firing: tuple[bool, bool],
                   before: np.ndarray | None = None, after: np.ndarray | None = None) -> np.ndarray:
-    """S1は完走予測、S3は得点差とn=1。どちらも同じ発火前観測を使う。"""
+    """S1は完走予測、S3は得点差とn=1。live入力は既に連鎖を消費済み。"""
     from src.exchange_event_landing import remaining_hands
 
     elapsed = observation.elapsed_sec
+    # live入力は既に完走予測盤面へ置換済み。初回発火フラグを再適用しない。
+    if observation.live:
+        firing = (False, False)
     completed = [completion(grid.tobytes(), active, elapsed)
                  for grid, active in zip(observation.grids, firing)]
     sends = np.array([row[0] for row in completed])
     counts = [row[1] for row in completed]
     if before is not None:
         missing = ~np.isfinite(before) | ~np.isfinite(after) | (before < 0) | (after < 0)
-        sends = np.where(missing, np.nan, np.maximum(after-before, 0)/compute_effective_rate(elapsed))
+        score_elapsed = observation.score_elapsed_sec
+        rate = compute_effective_rate(elapsed if score_elapsed is None else score_elapsed)
+        sends = np.where(missing, np.nan, np.maximum(after-before, 0)/rate)
         counts = [0, 0]
     values = np.empty((2, len(iv.NEAR_FUTURE_K_LEVELS) + 1))
     for side, grid in enumerate(observation.grids):

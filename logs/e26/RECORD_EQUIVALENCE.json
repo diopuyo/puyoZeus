@@ -1,0 +1,37 @@
+{
+  "q_7gc4TgFig": {
+    "rows": 69449,
+    "observations": 1285,
+    "original_fields": "identical",
+    "before_sha256": "8597e2712bb01e8ff291055154a48bfab912096e9b7d26b95c8dc110d77b62c7",
+    "after_sha256": "632c360c0cce2ef968019ae9514d0efae0ab3e85f0251cea05174ef98732dd4f"
+  },
+  "fcXG83vInDY": {
+    "rows": 68574,
+    "observations": 1119,
+    "original_fields": "identical",
+    "before_sha256": "e8fc2c873743a40e9f04706ce370c651992e304b3ea13f5611d1e1ce7bcf639c",
+    "after_sha256": "e88b553c571514c404d4eac2becf9097e28f2e604b41d92b196aeff0dd19a70b"
+  },
+  "mia8KCjr52g": {
+    "rows": 70157,
+    "observations": 1203,
+    "original_fields": "identical",
+    "before_sha256": "dd33fb7c43b5d4ff8032bb0c7d46767cc408697b41adad572cd8624dd55a02f0",
+    "after_sha256": "aac342c853ce01fda6cafb7dc57d42d77ce8640454e0974f7f62a81e29e753d0"
+  },
+  "zenchi": {
+    "rows": 69719,
+    "observations": 1488,
+    "original_fields": "identical",
+    "before_sha256": "f3cb9e45ec77ee2a400aaf19542f22b693e68a59b298dece15bed97822c0d9f7",
+    "after_sha256": "e5a2dd50cf727dfda38b64f698cecc03c33a83cdac49bc1d8577767fc44b684b"
+  },
+  "review": {
+    "rows": 17569,
+    "observations": 460,
+    "original_fields": "identical",
+    "before_sha256": "f91c2d8e893175f217927263acac60212d17ab62c158d7bfd71502f2548607f6",
+    "after_sha256": "ae2aa3407e1d4194efa5b2895bf06c3d1a9953bc33de1b5330798f9085334ce7"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "fixed_replay": {
+    "variant": "on",
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5110788416714259,
+      "auc": 0.7624637966078388
+    },
+    "zenchi": {
+      "hits": 6798,
+      "frames": 8333,
+      "agreement": 0.8157926317052682
+    },
+    "deaths": {
+      "false": 1,
+      "total": 25,
+      "unlabelled": 0
+    },
+    "scenes": {
+      "prefire_frames": 62,
+      "prefire_mean": 0.2702919012720453,
+      "margin_sign_flips": 3,
+      "terminal_frames": 45,
+      "terminal_min": 1.0
+    },
+    "gates": {
+      "q": true,
+      "zenchi": false,
+      "deaths": false,
+      "scene": true
+    },
+    "candidate": false,
+    "scene": {
+      "frames": 29,
+      "minimum": 0.8513024387854775
+    }
+  },
+  "corpus_audit_complete": false,
+  "accepted": false,
+  "limitation": "原票はSTABLE抽出。非STABLEの発火通知・event.before_board・ばたんきゅー確定時刻なし。実行時の正しい保留件数は同定不能。terminal_loserは勝敗ラベルによる代理であり死亡画像確認ではない。"
+}

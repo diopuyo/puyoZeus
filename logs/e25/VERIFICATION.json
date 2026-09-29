@@ -1,0 +1,43 @@
+{
+  "defaults": {
+    "ExchangeEventOverlay": false,
+    "ExchangeLandingProjection": false,
+    "replay": false
+  },
+  "max_function_lines": {
+    "src/exchange_pending_ledger.py": 16,
+    "src/exchange_completion_recovery.py": 26,
+    "src/exchange_landing_safety.py": 20,
+    "scripts/diagnose_e25_completion_20260928.py": 43,
+    "scripts/run_e25_state_safety_20260928.py": 27,
+    "scripts/summarize_e25_evidence_20260928.py": 17,
+    "scripts/verify_e25_20260928.py": 17,
+    "tests/test_e25_completion_recovery.py": 11,
+    "tests/test_e25_landing_safety.py": 16,
+    "tests/test_e25_pending_ledger.py": 8
+  },
+  "source_sha256": {
+    "src/exchange_pending_ledger.py": "ebe470b8458768e312eeb16ff50f4423cb1acec83e5fea5e43f4c786bb19dd98",
+    "src/exchange_completion_recovery.py": "0442ce3e352c990fc89d306a7c2320d7b1abd3dd06c1fbaf713d1fdf9282fa10",
+    "src/exchange_landing_safety.py": "456a14cca3c7d442d6cc1c57668c9e45cbc5ba95e8bea1ec22dd2ee1ef129a6b",
+    "src/exchange_event_overlay.py": "4674b26b675d65d68741196c9c4ab4629412d8914324d08eb77813148dd585b3",
+    "src/exchange_event_landing.py": "57cd37f5396be390d6c8bb7e86b914e1742a2a4f89b66fe2c2885ae004922d08",
+    "src/exchange_event_multilanding.py": "c0eb1663acbd48e0a3e0170ec6d8616b18dee35e143325c25f46b2c7e39042b7",
+    "scripts/replay_exchange_event_20260926.py": "55739448f8998df1543816bd8bb06fa2e35e24b6bdde988e064201b816f66153",
+    "scripts/visualize_advantage_overlay.py": "5f4c42ce3bce2a25f2db2324f2859e875a3b799f42e31cbb227358ad8e5ab095"
+  },
+  "tests": "470 passed, 1 skipped in 72.32s (0:01:12)",
+  "production_config": "unchanged_from_a9f8ca1",
+  "off_equivalence": {
+    "off_e22": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "off_e23": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    }
+  }
+}

@@ -1,0 +1,464 @@
+{
+  "video": "51",
+  "rows": [
+    {
+      "video": "51",
+      "game": 0,
+      "side": "1P",
+      "start_sec": 9.866999626159668,
+      "end_sec": 10.232999801635742,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 0,
+      "side": "1P",
+      "start_sec": 13.067000389099121,
+      "end_sec": 13.432999610900879,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 0,
+      "side": "1P",
+      "start_sec": 20.267000198364258,
+      "end_sec": 20.632999420166016,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 0,
+      "side": "1P",
+      "start_sec": 58.16699981689453,
+      "end_sec": 72.5999984741211,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 0,
+      "side": "1P",
+      "start_sec": 72.73300170898438,
+      "end_sec": 77.23300170898438,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 0,
+      "side": "1P",
+      "start_sec": 139.66700744628906,
+      "end_sec": 141.5330047607422,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 0,
+      "side": "2P",
+      "start_sec": 75.83300018310547,
+      "end_sec": 77.0999984741211,
+      "outcome": "cleared_before_end",
+      "won": 1.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 2,
+      "side": "1P",
+      "start_sec": 238.89999389648438,
+      "end_sec": 244.5,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 3,
+      "side": "1P",
+      "start_sec": 274.79998779296875,
+      "end_sec": 276.79998779296875,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 3,
+      "side": "1P",
+      "start_sec": 277.8330078125,
+      "end_sec": 280.63299560546875,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 3,
+      "side": "2P",
+      "start_sec": 275.13299560546875,
+      "end_sec": 277.63299560546875,
+      "outcome": "cleared_before_end",
+      "won": 1.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 4,
+      "side": "1P",
+      "start_sec": 342.5329895019531,
+      "end_sec": 343.8999938964844,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 5,
+      "side": "1P",
+      "start_sec": 382.1000061035156,
+      "end_sec": 383.2330017089844,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 6,
+      "side": "1P",
+      "start_sec": 414.9670104980469,
+      "end_sec": 416.36700439453125,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 7,
+      "side": "1P",
+      "start_sec": 453.70001220703125,
+      "end_sec": 455.20001220703125,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 8,
+      "side": "1P",
+      "start_sec": 527.2329711914062,
+      "end_sec": 528.0999755859375,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 11,
+      "side": "1P",
+      "start_sec": 638.6329956054688,
+      "end_sec": 641.9000244140625,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 11,
+      "side": "1P",
+      "start_sec": 644.2329711914062,
+      "end_sec": 646.9329833984375,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 12,
+      "side": "1P",
+      "start_sec": 686.7329711914062,
+      "end_sec": 688.0,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 13,
+      "side": "1P",
+      "start_sec": 755.3670043945312,
+      "end_sec": 757.7329711914062,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 14,
+      "side": "1P",
+      "start_sec": 807.3670043945312,
+      "end_sec": 809.5999755859375,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 14,
+      "side": "2P",
+      "start_sec": 790.5999755859375,
+      "end_sec": 795.3330078125,
+      "outcome": "cleared_before_end",
+      "won": 1.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 14,
+      "side": "2P",
+      "start_sec": 795.4669799804688,
+      "end_sec": 796.5999755859375,
+      "outcome": "cleared_before_end",
+      "won": 1.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 15,
+      "side": "1P",
+      "start_sec": 852.1329956054688,
+      "end_sec": 854.4329833984375,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 16,
+      "side": "2P",
+      "start_sec": 910.2329711914062,
+      "end_sec": 921.2670288085938,
+      "outcome": "terminal_loser",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 18,
+      "side": "1P",
+      "start_sec": 1023.4329833984375,
+      "end_sec": 1023.8330078125,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 18,
+      "side": "2P",
+      "start_sec": 1024.866943359375,
+      "end_sec": 1026.3330078125,
+      "outcome": "cleared_before_end",
+      "won": 1.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 19,
+      "side": "1P",
+      "start_sec": 1087.5670166015625,
+      "end_sec": 1090.866943359375,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 20,
+      "side": "1P",
+      "start_sec": 1146.532958984375,
+      "end_sec": 1148.366943359375,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 21,
+      "side": "1P",
+      "start_sec": 1301.300048828125,
+      "end_sec": 1304.0,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 23,
+      "side": "1P",
+      "start_sec": 1408.3330078125,
+      "end_sec": 1409.967041015625,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 24,
+      "side": "1P",
+      "start_sec": 1462.1669921875,
+      "end_sec": 1463.1669921875,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 24,
+      "side": "1P",
+      "start_sec": 1476.4000244140625,
+      "end_sec": 1477.1669921875,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 24,
+      "side": "2P",
+      "start_sec": 1450.300048828125,
+      "end_sec": 1454.1669921875,
+      "outcome": "cleared_before_end",
+      "won": 1.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 25,
+      "side": "1P",
+      "start_sec": 1532.1669921875,
+      "end_sec": 1533.133056640625,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 26,
+      "side": "1P",
+      "start_sec": 1605.633056640625,
+      "end_sec": 1608.032958984375,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 27,
+      "side": "1P",
+      "start_sec": 1651.5670166015625,
+      "end_sec": 1654.0670166015625,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 27,
+      "side": "1P",
+      "start_sec": 1666.7669677734375,
+      "end_sec": 1668.967041015625,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 28,
+      "side": "1P",
+      "start_sec": 1725.532958984375,
+      "end_sec": 1725.800048828125,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 29,
+      "side": "1P",
+      "start_sec": 1758.467041015625,
+      "end_sec": 1761.4329833984375,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 30,
+      "side": "1P",
+      "start_sec": 1814.866943359375,
+      "end_sec": 1815.467041015625,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 32,
+      "side": "1P",
+      "start_sec": 1889.2669677734375,
+      "end_sec": 1892.467041015625,
+      "outcome": "cleared_before_end",
+      "won": 0.0,
+      "notifications": []
+    },
+    {
+      "video": "51",
+      "game": 32,
+      "side": "2P",
+      "start_sec": 1865.366943359375,
+      "end_sec": 1869.032958984375,
+      "outcome": "cleared_before_end",
+      "won": 1.0,
+      "notifications": []
+    }
+  ],
+  "counts": {
+    "game_sides": 66,
+    "labelled_loser_sides": 33,
+    "labelled_winner_sides": 33,
+    "unknown_sides": 0,
+    "loser_sides_with_candidate": 27,
+    "cleared_before_end": 42,
+    "terminal_loser": 1,
+    "candidate_episodes": 43,
+    "known_survivor_candidates": 7,
+    "candidate_outcome_not_proven": 36,
+    "terminal_loser_with_recorded_notice": 0
+  },
+  "fields": [
+    "grids",
+    "video_id",
+    "side",
+    "t_sec",
+    "game_idx",
+    "frame_idx",
+    "won",
+    "score",
+    "next1_a",
+    "next1_b",
+    "dnext_a",
+    "dnext_b",
+    "chain_trigger_sec",
+    "chain_mechanism"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "method": "原動画の時刻付き盤面画像を目視。予測判断時刻から最初の実おじゃま落下までの設置を数える。着弾のないケースは数値を捏造せずnullとする。連鎖応手による落下延期も含む事後観測であり、非発火を仮定した時間予算とは区別する。",
+  "source": "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+  "rows": [
+    {"game": 2, "decision_sec": 2690.483333333333, "actual_hands": 2, "fall_bracket": [2694.833, 2695.083], "placements_brackets": [[2690.833, 2691.083], [2691.333, 2691.583]], "note": "2手目で連鎖、連鎖終了後に実落下。2691.283の通知は攻撃エフェクト。", "image": "logs/e20/frames/actual_game_2.jpg"},
+    {"game": 6, "decision_sec": 2889.883333333333, "actual_hands": 5, "fall_bracket": [2893.233, 2893.483], "placements_brackets": [[2890.233, 2890.483], [2890.983, 2891.233], [2891.483, 2891.733], [2891.983, 2892.233], [2892.483, 2892.733]], "note": "5手設置後に灰色おじゃまが落下。2890.55の通知時には落ちていない。", "image": "logs/e20/frames/actual_game_6.jpg"},
+    {"game": 8, "decision_sec": 2974.15, "actual_hands": 4, "fall_bracket": [2977.5, 2977.75], "placements_brackets": [[2974.125, 2974.25], [2974.625, 2974.75], [2975.25, 2975.5], [2975.75, 2976.0]], "note": "4手目後の1連鎖終了後に落下。旧『実約2手』は2974.883の攻撃エフェクトまでの換算。", "image": "logs/e20/frames/actual_game_8.jpg"},
+    {"game": 9, "decision_sec": 3011.05, "actual_hands": 0, "fall_bracket": [3011.15, 3011.4], "placements_brackets": [], "note": "判断時点で最後の設置が済み、次の設置前に実落下。", "image": "logs/e20/frames/actual_game_9.jpg"},
+    {"game": 10, "decision_sec": 3043.15, "actual_hands": 5, "fall_bracket": [3047.0, 3047.25], "placements_brackets": [[3043.625, 3043.875], [3044.25, 3044.5], [3044.875, 3045.125], [3045.5, 3045.75], [3046.25, 3046.5]], "note": "開始直前の紫青の設置を除き、緑赤・青緑・青青・青青・青青の5手。", "image": "logs/e20/frames/actual_game_10.jpg"},
+    {"game": 14, "decision_sec": 3264.25, "actual_hands": 6, "fall_bracket": [3268.6, 3268.85], "placements_brackets": [[3264.6, 3264.85], [3265.1, 3265.35], [3265.85, 3266.1], [3266.35, 3266.6], [3267.1, 3267.6], [3267.6, 3268.1]], "note": "6手設置後に実落下。3266.483の通知後も設置を続けている。", "image": "logs/e20/frames/actual_game_14.jpg"},
+    {"game": 15, "decision_sec": 3302.65, "actual_hands": null, "observed_hands_to_response": 2, "fall_bracket": null, "audit_end_sec": 3305.0, "note": "2手目で実際に連鎖応手。3303.516の通知は攻撃エフェクトで、監査窓内の実落下なし。相殺完了か後続延期かはこの窓から断定しない。", "image": "logs/e20/frames/actual_game_15.jpg"},
+    {"game": 16, "decision_sec": 3348.75, "actual_hands": null, "observed_hands_to_death": 4, "fall_bracket": null, "audit_end_sec": 3353.4, "note": "開始時の自側1連鎖後、4手置いて窒息。3350.716の通知は攻撃エフェクトで、今回判断以降の新たな実おじゃま落下を確認できない。", "image": "logs/e20/frames/actual_game_16.jpg"}
+  ]
+}

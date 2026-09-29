@@ -1,0 +1,40 @@
+{
+  "defaults_off": true,
+  "production_unchanged": true,
+  "models_and_inputs_unchanged": true,
+  "max_function_lines": 50,
+  "records": {
+    "logs/e26/records/fcXG83vInDY.jsonl.gz": "e88b553c571514c404d4eac2becf9097e28f2e604b41d92b196aeff0dd19a70b",
+    "logs/e26/records/mia8KCjr52g.jsonl.gz": "aac342c853ce01fda6cafb7dc57d42d77ce8640454e0974f7f62a81e29e753d0",
+    "logs/e26/records/q_7gc4TgFig.jsonl.gz": "632c360c0cce2ef968019ae9514d0efae0ab3e85f0251cea05174ef98732dd4f",
+    "logs/e26/records/review.jsonl.gz": "ae2aa3407e1d4194efa5b2895bf06c3d1a9953bc33de1b5330798f9085334ce7",
+    "logs/e26/records/zenchi.jsonl.gz": "e5a2dd50cf727dfda38b64f698cecc03c33a83cdac49bc1d8577767fc44b684b"
+  },
+  "sources": {
+    "src/exchange_prefire_candidates.py": "c31e8f0cd3957145dc6778e8a135aab8e73f1f8a1aa754e37161451dd6e465f6",
+    "src/exchange_event_overlay.py": "29396afb81781345ac030c279fedd45f24f25a3afbb84c928e24e370ae8b61a1",
+    "src/exchange_event_landing.py": "e3d6d90a922846f65a5137926116be2edbbef2894ae9dcc3ff8b3c3c9e5281b6",
+    "src/exchange_death_inputs.py": "feb134f9f7439f385432186300f00c22d9d9e1067ffc027051c6697736f4da76",
+    "scripts/audit_e30_predictions.py": "d6d5454c8bf9cb96b9841c9f6610d6e5a08b896c0af6494774cfe2d9794f18df",
+    "scripts/run_e30.py": "8b00a24e11762650468c26a0540eaf75ce68c8b7b2b8ab1da0635efe9113675a",
+    "scripts/verify_e30.py": "ef915b90ea5aca3dc2c19f2f14fb95c324a6d4fcfb31941a3e396b9f33ff4a63",
+    "scripts/report_e30.py": "106ebc0d5a2a5ba18e518919172742a27091f361e1075339aef5203fb302f69f",
+    "scripts/render_e30_review.py": "92a77c6934a1885cbd65c9ae927907aa1cbe6e3473b5f4f140da9dc30586c56d",
+    "scripts/review_data_panel.py": "9c6e18195d582b812de1d5e51f15703ae3474d9ecbcfbd1bf04c0e82ab153db6",
+    "tests/test_e30_prefire_candidates.py": "2ed3e599da37aa22a72392f42771ebc8df25d9a3d8b43313925da449f67864ae",
+    "tests/test_e30_integration.py": "93e90cc6cc3053dbd28b5ac5c5bac0c2c50cae186a7c0393f6e11f5d2764f9ab"
+  },
+  "preregistration_sha256": "fb126ad99799f8b45f349f305d9b4f0cfd0ec48d31e254f437dbc10188246af4",
+  "off_controls": {
+    "OFF_q_7gc4TgFig": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "OFF_review": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    }
+  }
+}

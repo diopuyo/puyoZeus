@@ -281,6 +281,13 @@ class _NotificationCalls(ast.NodeTransformer):
             return ast.copy_location(ast.parse('pipe.' + aliases[node.func.id]).body[0].value, node)
         return self.generic_visit(node)
 
+    def visit_If(self, node: ast.If) -> ast.AST | None:
+        # 評価側に画像はない。通知にある画像由来情報を保持し、未取得は欠測のまま扱う。
+        if ast.unparse(node.test) in ('terminal_detector is not None',
+                                     'midchain_reader is not None', 'snapshot_reader is not None'):
+            return None
+        return self.generic_visit(node)
+
 
 def adapt_loop(loop: ast.For) -> None:
     """認識境界より後ろの評価コードは元の順序を一切変えない。"""
@@ -313,6 +320,13 @@ def build_live_generate(module: Any, bridge: RecognitionBridge) -> Callable[...,
     """新経路に限り既存generateを接続。旧CLI・既存ファイルには変更なし。"""
     tree = ast.parse(inspect.getsource(module.generate))
     function = tree.body[0]
+    # 画像読取器の生成も認識側の責務。未配線の観測用CNNを評価processへロードしない。
+    readers = {'terminal_detector', 'midchain_reader', 'snapshot_reader'}
+    for node in function.body:
+        if isinstance(node, ast.If) and any(isinstance(child, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id in readers for target in child.targets)
+                for child in node.body):
+            node.test = ast.Constant(False)
     loops = [node for node in function.body if isinstance(node, ast.For)
              and ast.unparse(node.target) == 'fi']
     if len(loops) != 1:

@@ -1,0 +1,398 @@
+{
+  "first_death": null,
+  "hidden_candidates": [
+    {
+      "game": 3,
+      "side": "2P",
+      "chain_id": 9,
+      "candidate_sec": 2755.4166666666665,
+      "unknown": 2,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "trials": 25,
+      "candidates": 25,
+      "outcome": "accepted",
+      "used": false,
+      "uses": 0,
+      "verified_sec": 2755.45,
+      "observed_count": 4,
+      "observed_score": 2600,
+      "matching": 25,
+      "maximum_score": 75440,
+      "final_score": 75440,
+      "final_mismatch": false
+    },
+    {
+      "game": 3,
+      "side": "2P",
+      "chain_id": 9,
+      "candidate_sec": 2756.7166666666667,
+      "unknown": 1,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 5,
+      "outcome": "accepted",
+      "used": true,
+      "uses": 2,
+      "verified_sec": 2756.75,
+      "observed_count": 5,
+      "observed_score": 5160,
+      "matching": 5,
+      "maximum_score": 75440,
+      "first_used_sec": 2760.116666666667,
+      "final_score": 75440,
+      "final_mismatch": false
+    },
+    {
+      "game": 3,
+      "side": "2P",
+      "chain_id": 9,
+      "candidate_sec": 2760.8166666666666,
+      "unknown": 1,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 5,
+      "outcome": "accepted",
+      "used": true,
+      "uses": 69,
+      "verified_sec": 2760.883333333333,
+      "observed_count": 8,
+      "observed_score": 21900,
+      "matching": 5,
+      "maximum_score": 75440,
+      "first_used_sec": 2760.883333333333,
+      "final_score": 75440,
+      "final_mismatch": false
+    },
+    {
+      "game": 3,
+      "side": "2P",
+      "chain_id": 9,
+      "candidate_sec": 2770.15,
+      "unknown": 1,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    }
+  ],
+  "first_hidden_death_attempt": {
+    "source": "S3_landing",
+    "t_sec": 2760.116666666667,
+    "p1": 0.7239310169558104,
+    "base_p1": 0.6528366039546416,
+    "gfe_p1": 0.7852553570523624,
+    "incoming": [
+      0,
+      1027
+    ],
+    "hands": [
+      3,
+      1
+    ],
+    "required_cancel": [
+      0,
+      0
+    ],
+    "near_future_send": [
+      null,
+      null
+    ],
+    "resolving_send": [
+      0,
+      0
+    ],
+    "dead_sides": [],
+    "overflow_rows": [
+      null,
+      null
+    ],
+    "verified_attack": [
+      false,
+      false
+    ],
+    "rejected_boards": [],
+    "optimistic_send": [
+      null,
+      null
+    ],
+    "completion_certain": [
+      false,
+      true
+    ],
+    "completion_sides": [
+      "2P"
+    ],
+    "death_incoming": [
+      0,
+      171
+    ],
+    "hidden_death_scores": [
+      null,
+      75440
+    ],
+    "state_safety": [
+      "completion_prefix_unverified",
+      "completion_prefix_unverified"
+    ],
+    "pending_ledger": [
+      0,
+      1027
+    ],
+    "multi_landing": [
+      {
+        "dead": false,
+        "reason": "single_landing"
+      },
+      {
+        "dead": false,
+        "reason": "hidden_maximum_response",
+        "maximum_score": 75440,
+        "tied_boards": 5,
+        "checked": 1,
+        "proofs": [
+          {
+            "dead": false,
+            "reason": "node_limit",
+            "rounds": [
+              [
+                {
+                  "incoming": 171,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 141,
+                  "responses": 22
+                }
+              ],
+              [
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 18
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 18
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 18
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 20
+                },
+                {
+                  "incoming": 141,
+                  "optimistic_send": 0.0,
+                  "maximum_send": 0.0,
+                  "cancelled": 0,
+                  "dropped": 30,
+                  "remaining": 111,
+                  "responses": 18
+                }
+              ]
+            ],
+            "nodes": 20001
+          }
+        ]
+      }
+    ],
+    "midchain_prediction": []
+  }
+}

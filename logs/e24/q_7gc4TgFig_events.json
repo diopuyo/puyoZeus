@@ -1,0 +1,259 @@
+[
+  {
+    "exchange_id": 38,
+    "game_idx": 13,
+    "trigger_sec": 815.9333333333333,
+    "chains": [
+      {
+        "side": "1P",
+        "chain_id": 1,
+        "trigger_sec": 815.9333333333333,
+        "observed_sec": 815.9666666666667,
+        "end_signal_sec": 820.5,
+        "score_finalize_sec": null,
+        "score_delta": 2672.0,
+        "end_reason": "next",
+        "end_signals": [
+          {
+            "t_sec": 820.5,
+            "reason": "next"
+          }
+        ],
+        "score_ready_sec": 820.8,
+        "score_ready_reason": "display_stable",
+        "score_before": 282.0,
+        "formula_total": 2670,
+        "display_score": 2954,
+        "stable_frames": 10,
+        "last_activity_sec": 819.8666666666667,
+        "drop_bonus_score": 58.0,
+        "post_end_drop_sec": 825.6,
+        "predicted_final_score": 2670,
+        "predicted_chain_count": 3,
+        "predicted_final_board": null,
+        "end_confirmed": true
+      },
+      {
+        "side": "2P",
+        "chain_id": 3,
+        "trigger_sec": 819.2333333333333,
+        "observed_sec": 819.2333333333333,
+        "end_signal_sec": 826.3333333333334,
+        "score_finalize_sec": 831.8,
+        "score_delta": 5440,
+        "end_reason": "next",
+        "end_signals": [
+          {
+            "t_sec": 826.3333333333334,
+            "reason": "next"
+          }
+        ],
+        "score_ready_sec": 826.3333333333334,
+        "score_ready_reason": "formula_match",
+        "score_before": 305.0,
+        "formula_total": 5440,
+        "display_score": 5745,
+        "stable_frames": 1,
+        "last_activity_sec": 825.7,
+        "drop_bonus_score": 72.0,
+        "post_end_drop_sec": 834.7333333333333,
+        "predicted_final_score": 0.0,
+        "predicted_chain_count": 0,
+        "predicted_final_board": null,
+        "end_confirmed": true
+      },
+      {
+        "side": "1P",
+        "chain_id": 4,
+        "trigger_sec": 825.9,
+        "observed_sec": 825.9,
+        "end_signal_sec": 835.7,
+        "score_finalize_sec": 843.6,
+        "score_delta": 19840,
+        "end_reason": "next",
+        "end_signals": [
+          {
+            "t_sec": 835.7,
+            "reason": "next"
+          }
+        ],
+        "score_ready_sec": 835.7,
+        "score_ready_reason": "formula_match",
+        "score_before": 3086.0,
+        "formula_total": 19840,
+        "display_score": 22926,
+        "stable_frames": 1,
+        "last_activity_sec": 835.1,
+        "drop_bonus_score": 132.0,
+        "post_end_drop_sec": 849.7666666666667,
+        "predicted_final_score": 0.0,
+        "predicted_chain_count": 0,
+        "predicted_final_board": null,
+        "end_confirmed": true
+      },
+      {
+        "side": "2P",
+        "chain_id": 5,
+        "trigger_sec": 835.5333333333333,
+        "observed_sec": 835.5333333333333,
+        "end_signal_sec": 848.1,
+        "score_finalize_sec": 851.7666666666667,
+        "score_delta": 40240,
+        "end_reason": "next",
+        "end_signals": [
+          {
+            "t_sec": 848.1,
+            "reason": "next"
+          }
+        ],
+        "score_ready_sec": 848.1,
+        "score_ready_reason": "formula_match",
+        "score_before": 5761.0,
+        "formula_total": 40240,
+        "display_score": 46001,
+        "stable_frames": 1,
+        "last_activity_sec": 847.5,
+        "drop_bonus_score": 16.0,
+        "post_end_drop_sec": 851.1333333333333,
+        "predicted_final_score": 0.0,
+        "predicted_chain_count": 0,
+        "predicted_final_board": null,
+        "end_confirmed": true
+      }
+    ],
+    "landings": [
+      {
+        "side": "2P",
+        "fall_start_sec": 817.1,
+        "t_sec": 817.3
+      },
+      {
+        "side": "2P",
+        "fall_start_sec": 818.3666666666667,
+        "t_sec": 818.4333333333333
+      },
+      {
+        "side": "2P",
+        "fall_start_sec": 818.5,
+        "t_sec": 819.1666666666666
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 821.5,
+        "t_sec": 821.8333333333334
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 822.9,
+        "t_sec": 823.2
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 824.2666666666667,
+        "t_sec": 824.4666666666667
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 825.5666666666667,
+        "t_sec": 825.6
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 825.7,
+        "t_sec": 831.3333333333334
+      },
+      {
+        "side": "2P",
+        "fall_start_sec": 828.2333333333333,
+        "t_sec": 828.4666666666667
+      },
+      {
+        "side": "2P",
+        "fall_start_sec": 829.6,
+        "t_sec": 829.7333333333333
+      },
+      {
+        "side": "2P",
+        "fall_start_sec": 830.9666666666667,
+        "t_sec": 831.0666666666667
+      },
+      {
+        "side": "2P",
+        "fall_start_sec": 832.3,
+        "t_sec": 832.3333333333334
+      },
+      {
+        "side": "2P",
+        "fall_start_sec": 833.7,
+        "t_sec": 833.9
+      },
+      {
+        "side": "2P",
+        "fall_start_sec": 834.1,
+        "t_sec": 834.1333333333333
+      },
+      {
+        "side": "2P",
+        "fall_start_sec": 835.1,
+        "t_sec": 848.0333333333333
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 837.8,
+        "t_sec": 837.8666666666667
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 839.2,
+        "t_sec": 839.2333333333333
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 840.6,
+        "t_sec": 840.6333333333333
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 841.9666666666667,
+        "t_sec": 842.0
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 843.3333333333334,
+        "t_sec": 843.6666666666666
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 844.6666666666666,
+        "t_sec": 844.7
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 846.1333333333333,
+        "t_sec": 846.3
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 847.5,
+        "t_sec": 847.8333333333334
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 848.6333333333333,
+        "t_sec": 849.2666666666667
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 850.5666666666667,
+        "t_sec": 850.9333333333333
+      },
+      {
+        "side": "1P",
+        "fall_start_sec": 851.6,
+        "t_sec": null
+      }
+    ],
+    "closed_sec": 849.3,
+    "close_reason": "confirmed_after_score"
+  }
+]

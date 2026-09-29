@@ -1,0 +1,6995 @@
+{
+  "rows": [
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9962,
+        "t_sec": 332.06666666666666,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9962,
+        "t_sec": 332.06666666666666,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9963,
+        "t_sec": 332.1,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9963,
+        "t_sec": 332.1,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9964,
+        "t_sec": 332.1333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9964,
+        "t_sec": 332.1333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9965,
+        "t_sec": 332.1666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9965,
+        "t_sec": 332.1666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9966,
+        "t_sec": 332.2,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9966,
+        "t_sec": 332.2,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9967,
+        "t_sec": 332.23333333333335,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9967,
+        "t_sec": 332.23333333333335,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9968,
+        "t_sec": 332.26666666666665,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9968,
+        "t_sec": 332.26666666666665,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9969,
+        "t_sec": 332.3,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9969,
+        "t_sec": 332.3,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9970,
+        "t_sec": 332.3333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9970,
+        "t_sec": 332.3333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9971,
+        "t_sec": 332.3666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9971,
+        "t_sec": 332.3666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9972,
+        "t_sec": 332.4,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9972,
+        "t_sec": 332.4,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9973,
+        "t_sec": 332.43333333333334,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9973,
+        "t_sec": 332.43333333333334,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9974,
+        "t_sec": 332.46666666666664,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9974,
+        "t_sec": 332.46666666666664,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9975,
+        "t_sec": 332.5,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9975,
+        "t_sec": 332.5,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9976,
+        "t_sec": 332.53333333333336,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9976,
+        "t_sec": 332.53333333333336,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9977,
+        "t_sec": 332.56666666666666,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9977,
+        "t_sec": 332.56666666666666,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9978,
+        "t_sec": 332.6,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9978,
+        "t_sec": 332.6,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9979,
+        "t_sec": 332.6333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9979,
+        "t_sec": 332.6333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9980,
+        "t_sec": 332.6666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9980,
+        "t_sec": 332.6666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9981,
+        "t_sec": 332.7,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9981,
+        "t_sec": 332.7,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9982,
+        "t_sec": 332.73333333333335,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9982,
+        "t_sec": 332.73333333333335,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9983,
+        "t_sec": 332.76666666666665,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9983,
+        "t_sec": 332.76666666666665,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9984,
+        "t_sec": 332.8,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9984,
+        "t_sec": 332.8,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9985,
+        "t_sec": 332.8333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9985,
+        "t_sec": 332.8333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9986,
+        "t_sec": 332.8666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9986,
+        "t_sec": 332.8666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9987,
+        "t_sec": 332.9,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9987,
+        "t_sec": 332.9,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9988,
+        "t_sec": 332.93333333333334,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9988,
+        "t_sec": 332.93333333333334,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9989,
+        "t_sec": 332.96666666666664,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9989,
+        "t_sec": 332.96666666666664,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9990,
+        "t_sec": 333.0,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9990,
+        "t_sec": 333.0,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9991,
+        "t_sec": 333.03333333333336,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9991,
+        "t_sec": 333.03333333333336,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9992,
+        "t_sec": 333.06666666666666,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9992,
+        "t_sec": 333.06666666666666,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9993,
+        "t_sec": 333.1,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9993,
+        "t_sec": 333.1,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9994,
+        "t_sec": 333.1333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9994,
+        "t_sec": 333.1333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9995,
+        "t_sec": 333.1666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9995,
+        "t_sec": 333.1666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9996,
+        "t_sec": 333.2,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9996,
+        "t_sec": 333.2,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9997,
+        "t_sec": 333.23333333333335,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9997,
+        "t_sec": 333.23333333333335,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9998,
+        "t_sec": 333.26666666666665,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9998,
+        "t_sec": 333.26666666666665,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 9999,
+        "t_sec": 333.3,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 9999,
+        "t_sec": 333.3,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10000,
+        "t_sec": 333.3333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10000,
+        "t_sec": 333.3333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10001,
+        "t_sec": 333.3666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10001,
+        "t_sec": 333.3666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10002,
+        "t_sec": 333.4,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10002,
+        "t_sec": 333.4,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10003,
+        "t_sec": 333.43333333333334,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10003,
+        "t_sec": 333.43333333333334,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10004,
+        "t_sec": 333.46666666666664,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10004,
+        "t_sec": 333.46666666666664,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10005,
+        "t_sec": 333.5,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10005,
+        "t_sec": 333.5,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10006,
+        "t_sec": 333.53333333333336,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10006,
+        "t_sec": 333.53333333333336,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10007,
+        "t_sec": 333.56666666666666,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10007,
+        "t_sec": 333.56666666666666,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10008,
+        "t_sec": 333.6,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10008,
+        "t_sec": 333.6,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10009,
+        "t_sec": 333.6333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10009,
+        "t_sec": 333.6333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10010,
+        "t_sec": 333.6666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10010,
+        "t_sec": 333.6666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10011,
+        "t_sec": 333.7,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10011,
+        "t_sec": 333.7,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10012,
+        "t_sec": 333.73333333333335,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10012,
+        "t_sec": 333.73333333333335,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10013,
+        "t_sec": 333.76666666666665,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10013,
+        "t_sec": 333.76666666666665,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10014,
+        "t_sec": 333.8,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10014,
+        "t_sec": 333.8,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10015,
+        "t_sec": 333.8333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10015,
+        "t_sec": 333.8333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 332.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 2760.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10018,
+        "t_sec": 333.93333333333334,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10018,
+        "t_sec": 333.93333333333334,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10019,
+        "t_sec": 333.96666666666664,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10019,
+        "t_sec": 333.96666666666664,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10020,
+        "t_sec": 334.0,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10020,
+        "t_sec": 334.0,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10021,
+        "t_sec": 334.03333333333336,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10021,
+        "t_sec": 334.03333333333336,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10022,
+        "t_sec": 334.06666666666666,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10022,
+        "t_sec": 334.06666666666666,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10023,
+        "t_sec": 334.1,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10023,
+        "t_sec": 334.1,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10024,
+        "t_sec": 334.1333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10024,
+        "t_sec": 334.1333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10025,
+        "t_sec": 334.1666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10025,
+        "t_sec": 334.1666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10026,
+        "t_sec": 334.2,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10026,
+        "t_sec": 334.2,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10027,
+        "t_sec": 334.23333333333335,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10027,
+        "t_sec": 334.23333333333335,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10028,
+        "t_sec": 334.26666666666665,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10028,
+        "t_sec": 334.26666666666665,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10029,
+        "t_sec": 334.3,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10029,
+        "t_sec": 334.3,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10030,
+        "t_sec": 334.3333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10030,
+        "t_sec": 334.3333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10031,
+        "t_sec": 334.3666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10031,
+        "t_sec": 334.3666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10032,
+        "t_sec": 334.4,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10032,
+        "t_sec": 334.4,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10033,
+        "t_sec": 334.43333333333334,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10033,
+        "t_sec": 334.43333333333334,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10034,
+        "t_sec": 334.46666666666664,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10034,
+        "t_sec": 334.46666666666664,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10035,
+        "t_sec": 334.5,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10035,
+        "t_sec": 334.5,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10036,
+        "t_sec": 334.53333333333336,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10036,
+        "t_sec": 334.53333333333336,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10037,
+        "t_sec": 334.56666666666666,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10037,
+        "t_sec": 334.56666666666666,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10038,
+        "t_sec": 334.6,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10038,
+        "t_sec": 334.6,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10039,
+        "t_sec": 334.6333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10039,
+        "t_sec": 334.6333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10040,
+        "t_sec": 334.6666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10040,
+        "t_sec": 334.6666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10041,
+        "t_sec": 334.7,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10041,
+        "t_sec": 334.7,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10042,
+        "t_sec": 334.73333333333335,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10042,
+        "t_sec": 334.73333333333335,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10043,
+        "t_sec": 334.76666666666665,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10043,
+        "t_sec": 334.76666666666665,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10044,
+        "t_sec": 334.8,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10044,
+        "t_sec": 334.8,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10045,
+        "t_sec": 334.8333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10045,
+        "t_sec": 334.8333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10046,
+        "t_sec": 334.8666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10046,
+        "t_sec": 334.8666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10047,
+        "t_sec": 334.9,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10047,
+        "t_sec": 334.9,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10048,
+        "t_sec": 334.93333333333334,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10048,
+        "t_sec": 334.93333333333334,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10049,
+        "t_sec": 334.96666666666664,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10049,
+        "t_sec": 334.96666666666664,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10050,
+        "t_sec": 335.0,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10050,
+        "t_sec": 335.0,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 333.93333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 10220.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10052,
+        "t_sec": 335.06666666666666,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10052,
+        "t_sec": 335.06666666666666,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10053,
+        "t_sec": 335.1,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10053,
+        "t_sec": 335.1,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10054,
+        "t_sec": 335.1333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10054,
+        "t_sec": 335.1333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10055,
+        "t_sec": 335.1666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10055,
+        "t_sec": 335.1666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10056,
+        "t_sec": 335.2,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10056,
+        "t_sec": 335.2,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10057,
+        "t_sec": 335.23333333333335,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10057,
+        "t_sec": 335.23333333333335,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10058,
+        "t_sec": 335.26666666666665,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10058,
+        "t_sec": 335.26666666666665,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10059,
+        "t_sec": 335.3,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10059,
+        "t_sec": 335.3,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10060,
+        "t_sec": 335.3333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10060,
+        "t_sec": 335.3333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10061,
+        "t_sec": 335.3666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10061,
+        "t_sec": 335.3666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10062,
+        "t_sec": 335.4,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10062,
+        "t_sec": 335.4,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10063,
+        "t_sec": 335.43333333333334,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10063,
+        "t_sec": 335.43333333333334,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10064,
+        "t_sec": 335.46666666666664,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10064,
+        "t_sec": 335.46666666666664,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10065,
+        "t_sec": 335.5,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10065,
+        "t_sec": 335.5,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10066,
+        "t_sec": 335.53333333333336,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10066,
+        "t_sec": 335.53333333333336,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10067,
+        "t_sec": 335.56666666666666,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10067,
+        "t_sec": 335.56666666666666,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10068,
+        "t_sec": 335.6,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10068,
+        "t_sec": 335.6,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10069,
+        "t_sec": 335.6333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10069,
+        "t_sec": 335.6333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10070,
+        "t_sec": 335.6666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10070,
+        "t_sec": 335.6666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10071,
+        "t_sec": 335.7,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10071,
+        "t_sec": 335.7,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10072,
+        "t_sec": 335.73333333333335,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10072,
+        "t_sec": 335.73333333333335,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10073,
+        "t_sec": 335.76666666666665,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10073,
+        "t_sec": 335.76666666666665,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10074,
+        "t_sec": 335.8,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10074,
+        "t_sec": 335.8,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10075,
+        "t_sec": 335.8333333333333,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10075,
+        "t_sec": 335.8333333333333,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10076,
+        "t_sec": 335.8666666666667,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10076,
+        "t_sec": 335.8666666666667,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10077,
+        "t_sec": 335.9,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10077,
+        "t_sec": 335.9,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10078,
+        "t_sec": 335.93333333333334,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10078,
+        "t_sec": 335.93333333333334,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10079,
+        "t_sec": 335.96666666666664,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10079,
+        "t_sec": 335.96666666666664,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10080,
+        "t_sec": 336.0,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10080,
+        "t_sec": 336.0,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10081,
+        "t_sec": 336.03333333333336,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10081,
+        "t_sec": 336.03333333333336,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10082,
+        "t_sec": 336.06666666666666,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10082,
+        "t_sec": 336.06666666666666,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "q_7gc4TgFig",
+      "target": {
+        "frame": 10083,
+        "t_sec": 336.1,
+        "game": 4,
+        "side": "1P",
+        "chain_id": 7,
+        "actual": 21753.0
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 10083,
+        "t_sec": 336.1,
+        "game": 4,
+        "source": "unavoidable_death",
+        "value_sec": 335.06666666666666,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 5,
+            "score": 5960.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 3,
+            "score": 360.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 5020.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 15340.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 18099,
+        "t_sec": 603.3,
+        "game": 6,
+        "side": "2P",
+        "chain_id": 8,
+        "actual": 43420
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 18099,
+        "t_sec": 603.3,
+        "game": 6,
+        "source": "unavoidable_death",
+        "value_sec": 603.3,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 3920.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 25680.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 8,
+            "score": 33720.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 18107,
+        "t_sec": 603.5666666666667,
+        "game": 6,
+        "side": "2P",
+        "chain_id": 8,
+        "actual": 43420
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 18107,
+        "t_sec": 603.5666666666667,
+        "game": 6,
+        "source": "unavoidable_death",
+        "value_sec": 603.5666666666667,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 6,
+            "score": 3920.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 7,
+            "score": 25680.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 8,
+            "score": 33720.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24207,
+        "t_sec": 806.9,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24207,
+        "t_sec": 806.9,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24208,
+        "t_sec": 806.9333333333333,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24208,
+        "t_sec": 806.9333333333333,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24209,
+        "t_sec": 806.9666666666667,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24209,
+        "t_sec": 806.9666666666667,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24210,
+        "t_sec": 807.0,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24210,
+        "t_sec": 807.0,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24211,
+        "t_sec": 807.0333333333333,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24211,
+        "t_sec": 807.0333333333333,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24212,
+        "t_sec": 807.0666666666667,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24212,
+        "t_sec": 807.0666666666667,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24213,
+        "t_sec": 807.1,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24213,
+        "t_sec": 807.1,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24214,
+        "t_sec": 807.1333333333333,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24214,
+        "t_sec": 807.1333333333333,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24215,
+        "t_sec": 807.1666666666666,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24215,
+        "t_sec": 807.1666666666666,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24216,
+        "t_sec": 807.2,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24216,
+        "t_sec": 807.2,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24217,
+        "t_sec": 807.2333333333333,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24217,
+        "t_sec": 807.2333333333333,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24218,
+        "t_sec": 807.2666666666667,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24218,
+        "t_sec": 807.2666666666667,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24219,
+        "t_sec": 807.3,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24219,
+        "t_sec": 807.3,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24220,
+        "t_sec": 807.3333333333334,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24220,
+        "t_sec": 807.3333333333334,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24221,
+        "t_sec": 807.3666666666667,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24221,
+        "t_sec": 807.3666666666667,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24222,
+        "t_sec": 807.4,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24222,
+        "t_sec": 807.4,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 24223,
+        "t_sec": 807.4333333333333,
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "actual": 57370
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 24223,
+        "t_sec": 807.4333333333333,
+        "game": 10,
+        "source": "unavoidable_death",
+        "value_sec": 806.9,
+        "scores": [
+          {
+            "side": "2P",
+            "chain_id": 1,
+            "score": 1340.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 2,
+            "score": 4830.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26202,
+        "t_sec": 873.4,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26202,
+        "t_sec": 873.4,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26203,
+        "t_sec": 873.4333333333333,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26203,
+        "t_sec": 873.4333333333333,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26204,
+        "t_sec": 873.4666666666667,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26204,
+        "t_sec": 873.4666666666667,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26205,
+        "t_sec": 873.5,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26205,
+        "t_sec": 873.5,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26206,
+        "t_sec": 873.5333333333333,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26206,
+        "t_sec": 873.5333333333333,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26207,
+        "t_sec": 873.5666666666667,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26207,
+        "t_sec": 873.5666666666667,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26208,
+        "t_sec": 873.6,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26208,
+        "t_sec": 873.6,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26209,
+        "t_sec": 873.6333333333333,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26209,
+        "t_sec": 873.6333333333333,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26210,
+        "t_sec": 873.6666666666666,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26210,
+        "t_sec": 873.6666666666666,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26211,
+        "t_sec": 873.7,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26211,
+        "t_sec": 873.7,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26212,
+        "t_sec": 873.7333333333333,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26212,
+        "t_sec": 873.7333333333333,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26213,
+        "t_sec": 873.7666666666667,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26213,
+        "t_sec": 873.7666666666667,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26214,
+        "t_sec": 873.8,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26214,
+        "t_sec": 873.8,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 873.4,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 30640.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26260,
+        "t_sec": 875.3333333333334,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26260,
+        "t_sec": 875.3333333333334,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26261,
+        "t_sec": 875.3666666666667,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26261,
+        "t_sec": 875.3666666666667,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26262,
+        "t_sec": 875.4,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26262,
+        "t_sec": 875.4,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26263,
+        "t_sec": 875.4333333333333,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26263,
+        "t_sec": 875.4333333333333,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26264,
+        "t_sec": 875.4666666666667,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26264,
+        "t_sec": 875.4666666666667,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26265,
+        "t_sec": 875.5,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26265,
+        "t_sec": 875.5,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26266,
+        "t_sec": 875.5333333333333,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26266,
+        "t_sec": 875.5333333333333,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26267,
+        "t_sec": 875.5666666666667,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26267,
+        "t_sec": 875.5666666666667,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26268,
+        "t_sec": 875.6,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26268,
+        "t_sec": 875.6,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26269,
+        "t_sec": 875.6333333333333,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26269,
+        "t_sec": 875.6333333333333,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26270,
+        "t_sec": 875.6666666666666,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26270,
+        "t_sec": 875.6666666666666,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26271,
+        "t_sec": 875.7,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26271,
+        "t_sec": 875.7,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26272,
+        "t_sec": 875.7333333333333,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26272,
+        "t_sec": 875.7333333333333,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26273,
+        "t_sec": 875.7666666666667,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26273,
+        "t_sec": 875.7666666666667,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26274,
+        "t_sec": 875.8,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26274,
+        "t_sec": 875.8,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26275,
+        "t_sec": 875.8333333333334,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26275,
+        "t_sec": 875.8333333333334,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26276,
+        "t_sec": 875.8666666666667,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26276,
+        "t_sec": 875.8666666666667,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26277,
+        "t_sec": 875.9,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26277,
+        "t_sec": 875.9,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26278,
+        "t_sec": 875.9333333333333,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26278,
+        "t_sec": 875.9333333333333,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26279,
+        "t_sec": 875.9666666666667,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26279,
+        "t_sec": 875.9666666666667,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26280,
+        "t_sec": 876.0,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26280,
+        "t_sec": 876.0,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26281,
+        "t_sec": 876.0333333333333,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26281,
+        "t_sec": 876.0333333333333,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26282,
+        "t_sec": 876.0666666666667,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26282,
+        "t_sec": 876.0666666666667,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    },
+    {
+      "variant": "on",
+      "source": "fcXG83vInDY",
+      "target": {
+        "frame": 26283,
+        "t_sec": 876.1,
+        "game": 11,
+        "side": "1P",
+        "chain_id": 3,
+        "actual": 61490
+      },
+      "reason": "nonprediction_display",
+      "observed": {
+        "frame": 26283,
+        "t_sec": 876.1,
+        "game": 11,
+        "source": "unavoidable_death",
+        "value_sec": 875.3333333333334,
+        "scores": [
+          {
+            "side": "1P",
+            "chain_id": 1,
+            "score": 700.0
+          },
+          {
+            "side": "2P",
+            "chain_id": 2,
+            "score": 8080.0
+          },
+          {
+            "side": "1P",
+            "chain_id": 3,
+            "score": 51250.0
+          }
+        ]
+      }
+    }
+  ],
+  "reasons": {
+    "off": {},
+    "on": {
+      "nonprediction_display": 175
+    }
+  }
+}

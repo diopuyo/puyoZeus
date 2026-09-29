@@ -1,0 +1,1627 @@
+{
+  "replays": [
+    {
+      "source": "q_7gc4TgFig",
+      "counts": {
+        "candidates": 24,
+        "confirmed_deaths": 14,
+        "false_candidates": 0,
+        "unknown_candidates": 9,
+        "cleared_candidates": 17,
+        "held_new_fires": 3,
+        "correctly_held": 0
+      },
+      "rows": [
+        {
+          "game": 0,
+          "side": "1P",
+          "start_sec": 66.43333333333334,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 70.83333333333333,
+          "candidate_false": null,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "2P",
+          "start_sec": 66.43333333333334,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 84.73333333333333,
+          "candidate_false": null,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "1P",
+          "start_sec": 71.4,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 72.0,
+          "candidate_false": null,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "1P",
+          "start_sec": 72.9,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 78.96666666666667,
+          "candidate_false": null,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "1P",
+          "start_sec": 79.33333333333333,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 85.36666666666666,
+          "candidate_false": null,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "1P",
+          "start_sec": 85.8,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 124.66666666666667,
+          "candidate_false": null,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "2P",
+          "start_sec": 86.03333333333333,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 108.76666666666667,
+          "candidate_false": null,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "1P",
+          "start_sec": 125.13333333333334,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 127.76666666666667,
+              "trigger_sec": 127.73333333333333,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 128.9,
+          "candidate_false": null,
+          "held_new_fires": 1,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "2P",
+          "start_sec": 126.93333333333334,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 127.8,
+          "candidate_false": null,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 1,
+          "side": "1P",
+          "start_sec": 173.5,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 175.0,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 2,
+          "side": "1P",
+          "start_sec": 232.76666666666668,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 236.03333333333333,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 4,
+          "side": "2P",
+          "start_sec": 342.26666666666665,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 344.26666666666665,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 5,
+          "side": "2P",
+          "start_sec": 385.53333333333336,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 386.43333333333334,
+              "trigger_sec": 386.43333333333334,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 386.73333333333335,
+              "trigger_sec": 386.73333333333335,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 388.1,
+          "candidate_false": false,
+          "held_new_fires": 2,
+          "correctly_held": 0
+        },
+        {
+          "game": 5,
+          "side": "2P",
+          "start_sec": 391.06666666666666,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 396.06666666666666,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 6,
+          "side": "1P",
+          "start_sec": 441.06666666666666,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 443.23333333333335,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 7,
+          "side": "1P",
+          "start_sec": 495.8,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 497.96666666666664,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 7,
+          "side": "1P",
+          "start_sec": 513.4333333333333,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 515.0,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 8,
+          "side": "2P",
+          "start_sec": 581.8666666666667,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 583.7,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 9,
+          "side": "1P",
+          "start_sec": 660.6,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 661.2666666666667,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 10,
+          "side": "1P",
+          "start_sec": 692.8666666666667,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 694.2666666666667,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 11,
+          "side": "1P",
+          "start_sec": 743.7333333333333,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 745.2666666666667,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 12,
+          "side": "2P",
+          "start_sec": 785.2333333333333,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 786.8,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 13,
+          "side": "1P",
+          "start_sec": 850.9333333333333,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 851.5666666666667,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 14,
+          "side": "2P",
+          "start_sec": 896.8,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 898.7,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        }
+      ],
+      "definition": "候補誤りは同試合生還（死亡確定信号、欠測時は既存勝敗原票）。解除は別列。正しく保留は未受理のまま当該候補が死亡確定した通知。"
+    },
+    {
+      "source": "fcXG83vInDY",
+      "counts": {
+        "candidates": 18,
+        "confirmed_deaths": 11,
+        "false_candidates": 0,
+        "unknown_candidates": 5,
+        "cleared_candidates": 11,
+        "held_new_fires": 8,
+        "correctly_held": 0
+      },
+      "rows": [
+        {
+          "game": 0,
+          "side": "2P",
+          "start_sec": 146.06666666666666,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 160.0,
+              "trigger_sec": 159.96666666666667,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 162.26666666666668,
+          "candidate_false": null,
+          "held_new_fires": 1,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "1P",
+          "start_sec": 146.23333333333332,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 160.16666666666666,
+              "trigger_sec": 160.13333333333333,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 162.26666666666668,
+          "candidate_false": null,
+          "held_new_fires": 1,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "2P",
+          "start_sec": 162.66666666666666,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 164.83333333333334,
+          "candidate_false": null,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "1P",
+          "start_sec": 165.66666666666666,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 166.16666666666666,
+              "trigger_sec": 166.13333333333333,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 167.16666666666666,
+          "candidate_false": null,
+          "held_new_fires": 1,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "2P",
+          "start_sec": 165.66666666666666,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 166.16666666666666,
+          "candidate_false": null,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 1,
+          "side": "1P",
+          "start_sec": 230.7,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 239.06666666666666,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 2,
+          "side": "1P",
+          "start_sec": 309.6,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 311.06666666666666,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 3,
+          "side": "2P",
+          "start_sec": 368.3666666666667,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 370.93333333333334,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 4,
+          "side": "2P",
+          "start_sec": 439.0,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 440.6,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 5,
+          "side": "2P",
+          "start_sec": 536.5666666666667,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 537.7333333333333,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 6,
+          "side": "1P",
+          "start_sec": 628.2,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 631.0,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 7,
+          "side": "2P",
+          "start_sec": 675.9333333333333,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 677.5333333333333,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 8,
+          "side": "2P",
+          "start_sec": 730.1666666666666,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 731.8,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 9,
+          "side": "2P",
+          "start_sec": 766.0,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 767.5,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 10,
+          "side": "1P",
+          "start_sec": 805.4666666666667,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 805.6333333333333,
+              "trigger_sec": 805.6333333333333,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 806.2333333333333,
+              "trigger_sec": 806.2333333333333,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 806.9666666666667,
+              "trigger_sec": 806.2333333333333,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 807.5666666666667,
+              "trigger_sec": 807.5666666666667,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 808.3666666666667,
+              "trigger_sec": 807.5666666666667,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 809.0,
+              "trigger_sec": 809.0,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 809.7333333333333,
+              "trigger_sec": 809.0,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 810.3666666666667,
+              "trigger_sec": 810.3666666666667,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 811.1,
+              "trigger_sec": 810.3666666666667,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 812.5,
+              "trigger_sec": 810.3666666666667,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 813.8333333333334,
+              "trigger_sec": 810.3666666666667,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 815.1666666666666,
+              "trigger_sec": 810.3666666666667,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 817.3,
+          "candidate_false": false,
+          "held_new_fires": 5,
+          "correctly_held": 0
+        },
+        {
+          "game": 10,
+          "side": "1P",
+          "start_sec": 823.3666666666667,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 824.3333333333334,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 10,
+          "side": "1P",
+          "start_sec": 824.6666666666666,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 825.6666666666666,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 11,
+          "side": "2P",
+          "start_sec": 877.4,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 879.8666666666667,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        }
+      ],
+      "definition": "候補誤りは同試合生還（死亡確定信号、欠測時は既存勝敗原票）。解除は別列。正しく保留は未受理のまま当該候補が死亡確定した通知。"
+    },
+    {
+      "source": "mia8KCjr52g",
+      "counts": {
+        "candidates": 11,
+        "confirmed_deaths": 10,
+        "false_candidates": 4,
+        "unknown_candidates": 0,
+        "cleared_candidates": 6,
+        "held_new_fires": 8,
+        "correctly_held": 1
+      },
+      "rows": [
+        {
+          "game": 1,
+          "side": "1P",
+          "start_sec": 159.66666666666666,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 162.63333333333333,
+          "candidate_false": true,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 1,
+          "side": "2P",
+          "start_sec": 176.06666666666666,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 177.43333333333334,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 2,
+          "side": "1P",
+          "start_sec": 228.03333333333333,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 228.56666666666666,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 4,
+          "side": "2P",
+          "start_sec": 421.6666666666667,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 423.43333333333334,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 5,
+          "side": "1P",
+          "start_sec": 472.6333333333333,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 477.76666666666665,
+          "candidate_false": true,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 5,
+          "side": "1P",
+          "start_sec": 545.3333333333334,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 546.8333333333334,
+              "trigger_sec": 546.8333333333334,
+              "mechanism": "formula"
+            },
+            {
+              "t_sec": 551.8,
+              "trigger_sec": 551.8,
+              "mechanism": "formula"
+            },
+            {
+              "t_sec": 552.7333333333333,
+              "trigger_sec": 552.7333333333333,
+              "mechanism": "formula"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 553.1333333333333,
+          "candidate_false": true,
+          "held_new_fires": 3,
+          "correctly_held": 0
+        },
+        {
+          "game": 5,
+          "side": "2P",
+          "start_sec": 570.9,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 572.4666666666667,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 7,
+          "side": "2P",
+          "start_sec": 650.6333333333333,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 650.9,
+              "trigger_sec": 650.9,
+              "mechanism": "formula"
+            },
+            {
+              "t_sec": 651.4,
+              "trigger_sec": 651.4,
+              "mechanism": "formula"
+            },
+            {
+              "t_sec": 652.0,
+              "trigger_sec": 652.0,
+              "mechanism": "formula"
+            },
+            {
+              "t_sec": 656.9,
+              "trigger_sec": 656.9,
+              "mechanism": "formula"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 659.5,
+          "candidate_false": true,
+          "held_new_fires": 4,
+          "correctly_held": 0
+        },
+        {
+          "game": 7,
+          "side": "1P",
+          "start_sec": 702.5,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 703.9,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 8,
+          "side": "1P",
+          "start_sec": 735.0666666666667,
+          "outcome": "confirmed_death",
+          "held": [
+            {
+              "t_sec": 736.2333333333333,
+              "trigger_sec": 736.2,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 736.8333333333334,
+          "candidate_false": false,
+          "held_new_fires": 1,
+          "correctly_held": 1
+        },
+        {
+          "game": 9,
+          "side": "1P",
+          "start_sec": 796.2333333333333,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 798.2666666666667,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        }
+      ],
+      "definition": "候補誤りは同試合生還（死亡確定信号、欠測時は既存勝敗原票）。解除は別列。正しく保留は未受理のまま当該候補が死亡確定した通知。"
+    },
+    {
+      "source": "zenchi",
+      "counts": {
+        "candidates": 29,
+        "confirmed_deaths": 18,
+        "false_candidates": 5,
+        "unknown_candidates": 0,
+        "cleared_candidates": 17,
+        "held_new_fires": 27,
+        "correctly_held": 3
+      },
+      "rows": [
+        {
+          "game": 0,
+          "side": "2P",
+          "start_sec": 2569.05,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 2569.2833333333333,
+              "trigger_sec": 2569.2833333333333,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2569.8166666666666,
+              "trigger_sec": 2569.8166666666666,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2571.016666666667,
+          "candidate_false": true,
+          "held_new_fires": 2,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "1P",
+          "start_sec": 2572.6833333333334,
+          "outcome": "confirmed_death",
+          "held": [
+            {
+              "t_sec": 2576.8166666666666,
+              "trigger_sec": 2576.7833333333333,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2576.983333333333,
+          "candidate_false": false,
+          "held_new_fires": 1,
+          "correctly_held": 1
+        },
+        {
+          "game": 1,
+          "side": "2P",
+          "start_sec": 2608.75,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 2608.9166666666665,
+              "trigger_sec": 2608.9166666666665,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2610.25,
+              "trigger_sec": 2608.9166666666665,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2611.5833333333335,
+              "trigger_sec": 2608.9166666666665,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2612.883333333333,
+          "candidate_false": false,
+          "held_new_fires": 1,
+          "correctly_held": 0
+        },
+        {
+          "game": 1,
+          "side": "2P",
+          "start_sec": 2632.2833333333333,
+          "outcome": "confirmed_death",
+          "held": [
+            {
+              "t_sec": 2633.8166666666666,
+              "trigger_sec": 2633.7833333333333,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2634.75,
+          "candidate_false": false,
+          "held_new_fires": 1,
+          "correctly_held": 1
+        },
+        {
+          "game": 2,
+          "side": "2P",
+          "start_sec": 2690.7166666666667,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 2691.8166666666666,
+              "trigger_sec": 2691.8166666666666,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2692.5833333333335,
+              "trigger_sec": 2692.5833333333335,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2693.1833333333334,
+              "trigger_sec": 2692.5833333333335,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2695.616666666667,
+          "candidate_false": false,
+          "held_new_fires": 2,
+          "correctly_held": 0
+        },
+        {
+          "game": 2,
+          "side": "2P",
+          "start_sec": 2697.75,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 2698.983333333333,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 3,
+          "side": "2P",
+          "start_sec": 2772.05,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 2773.7833333333333,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 4,
+          "side": "2P",
+          "start_sec": 2777.383333333333,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 2777.4166666666665,
+              "trigger_sec": 2777.383333333333,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2777.7833333333333,
+          "candidate_false": true,
+          "held_new_fires": 1,
+          "correctly_held": 0
+        },
+        {
+          "game": 4,
+          "side": "1P",
+          "start_sec": 2805.0833333333335,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 2805.883333333333,
+              "trigger_sec": 2805.883333333333,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2806.45,
+              "trigger_sec": 2806.45,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2809.383333333333,
+          "candidate_false": false,
+          "held_new_fires": 2,
+          "correctly_held": 0
+        },
+        {
+          "game": 5,
+          "side": "2P",
+          "start_sec": 2862.4166666666665,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 2863.6833333333334,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 6,
+          "side": "1P",
+          "start_sec": 2894.0833333333335,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 2894.45,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 7,
+          "side": "1P",
+          "start_sec": 2929.05,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 2929.616666666667,
+              "trigger_sec": 2929.616666666667,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2929.6833333333334,
+              "trigger_sec": 2929.6833333333334,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2931.616666666667,
+          "candidate_false": false,
+          "held_new_fires": 2,
+          "correctly_held": 0
+        },
+        {
+          "game": 7,
+          "side": "1P",
+          "start_sec": 2934.516666666667,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 2936.35,
+              "trigger_sec": 2936.35,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2936.883333333333,
+              "trigger_sec": 2936.883333333333,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2937.6833333333334,
+              "trigger_sec": 2936.883333333333,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2938.25,
+              "trigger_sec": 2938.25,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2939.483333333333,
+          "candidate_false": false,
+          "held_new_fires": 3,
+          "correctly_held": 0
+        },
+        {
+          "game": 7,
+          "side": "1P",
+          "start_sec": 2941.5833333333335,
+          "outcome": "confirmed_death",
+          "held": [
+            {
+              "t_sec": 2942.25,
+              "trigger_sec": 2942.2166666666667,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2943.9166666666665,
+          "candidate_false": false,
+          "held_new_fires": 1,
+          "correctly_held": 1
+        },
+        {
+          "game": 9,
+          "side": "2P",
+          "start_sec": 3016.2833333333333,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 3017.95,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 10,
+          "side": "1P",
+          "start_sec": 3047.55,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 3049.75,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 11,
+          "side": "1P",
+          "start_sec": 3081.85,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 3082.15,
+              "trigger_sec": 3082.15,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3082.7833333333333,
+              "trigger_sec": 3082.7833333333333,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3083.516666666667,
+              "trigger_sec": 3082.7833333333333,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3084.05,
+              "trigger_sec": 3084.05,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 3084.7833333333333,
+          "candidate_false": true,
+          "held_new_fires": 3,
+          "correctly_held": 0
+        },
+        {
+          "game": 11,
+          "side": "1P",
+          "start_sec": 3086.983333333333,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 3087.4166666666665,
+          "candidate_false": true,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 11,
+          "side": "2P",
+          "start_sec": 3114.15,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 3115.7166666666667,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 12,
+          "side": "2P",
+          "start_sec": 3118.0833333333335,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 3118.116666666667,
+              "trigger_sec": 3118.0833333333335,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 3118.483333333333,
+          "candidate_false": true,
+          "held_new_fires": 1,
+          "correctly_held": 0
+        },
+        {
+          "game": 12,
+          "side": "1P",
+          "start_sec": 3164.0833333333335,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 3164.7833333333333,
+              "trigger_sec": 3164.7833333333333,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 3168.116666666667,
+          "candidate_false": false,
+          "held_new_fires": 1,
+          "correctly_held": 0
+        },
+        {
+          "game": 13,
+          "side": "2P",
+          "start_sec": 3210.4166666666665,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 3211.3166666666666,
+              "trigger_sec": 3211.3166666666666,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3212.65,
+              "trigger_sec": 3211.3166666666666,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3214.05,
+              "trigger_sec": 3211.3166666666666,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3214.85,
+              "trigger_sec": 3214.85,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3215.383333333333,
+              "trigger_sec": 3214.85,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3216.7833333333333,
+              "trigger_sec": 3214.85,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3217.0833333333335,
+              "trigger_sec": 3217.0833333333335,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3218.1833333333334,
+              "trigger_sec": 3217.0833333333335,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3218.45,
+              "trigger_sec": 3218.45,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 3219.45,
+          "candidate_false": false,
+          "held_new_fires": 4,
+          "correctly_held": 0
+        },
+        {
+          "game": 13,
+          "side": "2P",
+          "start_sec": 3230.45,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 3232.05,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 14,
+          "side": "1P",
+          "start_sec": 3269.15,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 3269.8166666666666,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 15,
+          "side": "2P",
+          "start_sec": 3309.8166666666666,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 3311.383333333333,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 15,
+          "side": "2P",
+          "start_sec": 3314.75,
+          "outcome": "cleared",
+          "held": [],
+          "accepted": [],
+          "end_sec": 3315.383333333333,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 15,
+          "side": "2P",
+          "start_sec": 3320.9166666666665,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 3323.616666666667,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 17,
+          "side": "2P",
+          "start_sec": 3397.3166666666666,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 3397.55,
+              "trigger_sec": 3397.55,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 3398.95,
+              "trigger_sec": 3398.95,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 3402.25,
+          "candidate_false": false,
+          "held_new_fires": 2,
+          "correctly_held": 0
+        },
+        {
+          "game": 17,
+          "side": "2P",
+          "start_sec": 3407.9166666666665,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 3409.983333333333,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        }
+      ],
+      "definition": "候補誤りは同試合生還（死亡確定信号、欠測時は既存勝敗原票）。解除は別列。正しく保留は未受理のまま当該候補が死亡確定した通知。"
+    },
+    {
+      "source": "review",
+      "counts": {
+        "candidates": 7,
+        "confirmed_deaths": 4,
+        "false_candidates": 1,
+        "unknown_candidates": 0,
+        "cleared_candidates": 3,
+        "held_new_fires": 7,
+        "correctly_held": 2
+      },
+      "rows": [
+        {
+          "game": 0,
+          "side": "2P",
+          "start_sec": 2569.05,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 2569.2833333333333,
+              "trigger_sec": 2569.2833333333333,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2569.8166666666666,
+              "trigger_sec": 2569.8166666666666,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2571.016666666667,
+          "candidate_false": true,
+          "held_new_fires": 2,
+          "correctly_held": 0
+        },
+        {
+          "game": 0,
+          "side": "1P",
+          "start_sec": 2572.6833333333334,
+          "outcome": "confirmed_death",
+          "held": [
+            {
+              "t_sec": 2576.8166666666666,
+              "trigger_sec": 2576.7833333333333,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2576.983333333333,
+          "candidate_false": false,
+          "held_new_fires": 1,
+          "correctly_held": 1
+        },
+        {
+          "game": 1,
+          "side": "2P",
+          "start_sec": 2608.75,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 2608.9166666666665,
+              "trigger_sec": 2608.9166666666665,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2610.25,
+              "trigger_sec": 2608.9166666666665,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2611.5833333333335,
+              "trigger_sec": 2608.9166666666665,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2612.883333333333,
+          "candidate_false": false,
+          "held_new_fires": 1,
+          "correctly_held": 0
+        },
+        {
+          "game": 1,
+          "side": "2P",
+          "start_sec": 2632.2833333333333,
+          "outcome": "confirmed_death",
+          "held": [
+            {
+              "t_sec": 2633.8166666666666,
+              "trigger_sec": 2633.7833333333333,
+              "mechanism": "baseline"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2634.75,
+          "candidate_false": false,
+          "held_new_fires": 1,
+          "correctly_held": 1
+        },
+        {
+          "game": 2,
+          "side": "2P",
+          "start_sec": 2690.7166666666667,
+          "outcome": "cleared",
+          "held": [
+            {
+              "t_sec": 2691.8166666666666,
+              "trigger_sec": 2691.8166666666666,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2692.5833333333335,
+              "trigger_sec": 2692.5833333333335,
+              "mechanism": "formula_read"
+            },
+            {
+              "t_sec": 2693.1833333333334,
+              "trigger_sec": 2692.5833333333335,
+              "mechanism": "formula_read"
+            }
+          ],
+          "accepted": [],
+          "end_sec": 2695.616666666667,
+          "candidate_false": false,
+          "held_new_fires": 2,
+          "correctly_held": 0
+        },
+        {
+          "game": 2,
+          "side": "2P",
+          "start_sec": 2697.75,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 2698.983333333333,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        },
+        {
+          "game": 3,
+          "side": "2P",
+          "start_sec": 2772.05,
+          "outcome": "confirmed_death",
+          "held": [],
+          "accepted": [],
+          "end_sec": 2773.7833333333333,
+          "candidate_false": false,
+          "held_new_fires": 0,
+          "correctly_held": 0
+        }
+      ],
+      "definition": "候補誤りは同試合生還（死亡確定信号、欠測時は既存勝敗原票）。解除は別列。正しく保留は未受理のまま当該候補が死亡確定した通知。"
+    }
+  ],
+  "replay_three": {
+    "candidates": 53,
+    "confirmed_deaths": 35,
+    "false_candidates": 4,
+    "unknown_candidates": 14,
+    "cleared_candidates": 34,
+    "held_new_fires": 19,
+    "correctly_held": 1
+  },
+  "corpus": {
+    "videos": 148,
+    "counts": {
+      "game_sides": 15373,
+      "labelled_loser_sides": 7684,
+      "labelled_winner_sides": 7679,
+      "unknown_sides": 10,
+      "loser_sides_with_candidate": 5652,
+      "cleared_before_end": 7573,
+      "terminal_loser": 1844,
+      "candidate_episodes": 9443,
+      "known_survivor_candidates": 1615,
+      "candidate_outcome_not_proven": 7828,
+      "terminal_loser_with_recorded_notice": 5,
+      "survived_winner": 25,
+      "unlabelled": 1
+    },
+    "exact_runtime_hold_correct": null,
+    "source_video_unavailable": [
+      "29",
+      "30",
+      "31",
+      "32",
+      "33",
+      "34",
+      "36",
+      "52",
+      "c1",
+      "c10",
+      "c100",
+      "c101",
+      "c102",
+      "c103",
+      "c104",
+      "c105",
+      "c106",
+      "c107",
+      "c108",
+      "c11",
+      "c110",
+      "c111",
+      "c112",
+      "c113",
+      "c114",
+      "c115",
+      "c116",
+      "c117",
+      "c118",
+      "c119",
+      "c12",
+      "c120",
+      "c121",
+      "c122",
+      "c123",
+      "c124",
+      "c125",
+      "c126",
+      "c127",
+      "c128",
+      "c129",
+      "c13",
+      "c130",
+      "c131",
+      "c132",
+      "c133",
+      "c134",
+      "c136",
+      "c137",
+      "c82",
+      "c83",
+      "c96s1",
+      "c96s2",
+      "c96s3"
+    ],
+    "limitation": "原票はSTABLE抽出。非STABLEの発火通知・event.before_board・ばたんきゅー確定時刻なし。実行時の正しい保留件数は同定不能。terminal_loserは勝敗ラベルによる代理であり死亡画像確認ではない。",
+    "source": "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/indicators_v2/boards_lean_phase_l_2026-08-11"
+  }
+}

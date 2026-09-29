@@ -54,7 +54,7 @@ def decode(value: Any) -> Any:
         return [decode(v) for v in value]
     if not isinstance(value, dict):
         return value
-    if "board" in value:
+    if "board" in value and len(value) == 1:
         board = Board()
         board._grid = decode(value["board"])
         return board
@@ -120,12 +120,22 @@ class ExchangeEventRecorder:
         sides = []
         for side in (result.p1, result.p2):
             saved = fields(side, SIDE_FIELDS)
+            if getattr(side, 'prefire_origin_hold', None) is not None:
+                saved.prefire_origin_hold = side.prefire_origin_hold
+            if getattr(side, 'prefire_snapshot', None) is not None:
+                saved.prefire_snapshot = side.prefire_snapshot
+            if getattr(side, 'midchain_board', None) is not None:
+                saved.midchain_board = side.midchain_board
             saved.chain_event = (fields(side.chain_event, CHAIN_FIELDS)
                                  if side.chain_event is not None else None)
             if saved.chain_event is not None:
                 saved.chain_event.before_board = getattr(side.chain_event, "before_board", None)
             sides.append(saved)
-        self.write(dict(kind="update", args=(SimpleNamespace(p1=sides[0], p2=sides[1]),
+        saved_result = SimpleNamespace(p1=sides[0], p2=sides[1])
+        if getattr(result, "terminal_evidence_available", False):
+            saved_result.confirmed_dead_sides = result.confirmed_dead_sides
+            saved_result.terminal_evidence_available = True
+        self.write(dict(kind="update", args=(saved_result,
             fields(snapshot, SNAPSHOT_FIELDS), fields(finalization, FINALIZATION_FIELDS),
             t_sec, game_idx, formula_totals, displayed_scores, formula_visible)))
         self.frames += 1

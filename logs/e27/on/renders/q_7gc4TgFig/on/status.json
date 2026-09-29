@@ -1,0 +1,9 @@
+{
+  "state": "completed",
+  "frames": 27000,
+  "display_frames": 27000,
+  "elapsed_seconds": 291.0815996930469,
+  "record_bytes": 1265284,
+  "live_count": true,
+  "model_dir": "models/exchange_event_v3"
+}

@@ -1,0 +1,32 @@
+{
+  "variant": "sync",
+  "q": {
+    "frames": 6526,
+    "matches": 4,
+    "log_loss": 0.5655716188949637,
+    "auc": 0.7406430345532911
+  },
+  "zenchi": {
+    "hits": 6722,
+    "frames": 8333,
+    "agreement": 0.8066722668906756
+  },
+  "deaths": {
+    "false": 1,
+    "total": 28,
+    "unlabelled": 0
+  },
+  "scenes": {
+    "prefire_frames": 62,
+    "prefire_mean": 0.31956223615400153,
+    "margin_sign_flips": 1,
+    "terminal_frames": 45,
+    "terminal_min": 0.42313061816415126
+  },
+  "gates": {
+    "q": false,
+    "zenchi": true,
+    "deaths": true
+  },
+  "candidate": false
+}

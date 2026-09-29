@@ -1,0 +1,8 @@
+{
+  "source_sha256": "632c360c0cce2ef968019ae9514d0efae0ab3e85f0251cea05174ef98732dd4f",
+  "video": "/mnt/d/puyo_analyzer/videos/source/q_7gc4TgFig_first_0_900_20260925_v1.mp4",
+  "fps": 30.0,
+  "windows_path": "logs/e31/records/q_7gc4TgFig.jsonl.windows.json.gz",
+  "windows_sha256": "742d9736c4a0799393039041f9b8bbe846c949232a50613dcd8b745efe5b75db",
+  "window_count": 83
+}

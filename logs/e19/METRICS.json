@@ -1,0 +1,128 @@
+{
+  "baseline": {
+    "variant": "combined",
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5292656906989881,
+      "auc": 0.7603251107587458
+    },
+    "zenchi": {
+      "hits": 6700,
+      "frames": 8333,
+      "agreement": 0.8040321612864515
+    },
+    "deaths": {
+      "false": 1,
+      "total": 28,
+      "unlabelled": 0
+    },
+    "scenes": {
+      "prefire_frames": 62,
+      "prefire_mean": 0.2702919012720453,
+      "margin_sign_flips": 3,
+      "terminal_frames": 45,
+      "terminal_min": 0.7644537332229514,
+      "first_half_mean": 0.30237649978166703,
+      "last_half_mean": 0.2382073027624237,
+      "half_frames": 31
+    },
+    "gates": {
+      "q": true,
+      "zenchi": true,
+      "deaths": true
+    },
+    "candidate": true
+  },
+  "terminal_span": {
+    "first_sec": 2698.983333333333,
+    "last_sec": 2701.2166666666667,
+    "frames": 68,
+    "p1_min": 1.0,
+    "next_boundary_sec": 2701.25
+  },
+  "prob": {
+    "variant": "prob",
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5190450619466646,
+      "auc": 0.7653616794076825
+    },
+    "zenchi": {
+      "hits": 6614,
+      "frames": 8333,
+      "agreement": 0.7937117484699387
+    },
+    "deaths": {
+      "false": 1,
+      "total": 28,
+      "unlabelled": 0
+    },
+    "scenes": {
+      "prefire_frames": 62,
+      "prefire_mean": 0.3540154261579876,
+      "margin_sign_flips": 3,
+      "terminal_frames": 45,
+      "terminal_min": 0.7644537332229514,
+      "first_half_mean": 0.36138331428423626,
+      "last_half_mean": 0.34664753803173926,
+      "half_frames": 31
+    },
+    "gates": {
+      "q": true,
+      "zenchi": false,
+      "deaths": true,
+      "scene_mean": true,
+      "scene_rise": false
+    },
+    "candidate": false
+  },
+  "hold": {
+    "variant": "hold",
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5110788416714259,
+      "auc": 0.7624637966078388
+    },
+    "zenchi": {
+      "hits": 6887,
+      "frames": 8333,
+      "agreement": 0.8264730589223569
+    },
+    "deaths": {
+      "false": 1,
+      "total": 28,
+      "unlabelled": 0
+    },
+    "scenes": {
+      "prefire_frames": 62,
+      "prefire_mean": 0.2702919012720453,
+      "margin_sign_flips": 3,
+      "terminal_frames": 45,
+      "terminal_min": 1.0,
+      "first_half_mean": 0.30237649978166703,
+      "last_half_mean": 0.2382073027624237,
+      "half_frames": 31
+    },
+    "gates": {
+      "q": true,
+      "zenchi": true,
+      "deaths": true
+    },
+    "candidate": true
+  },
+  "training": {
+    "rows": 2841,
+    "videos": 148,
+    "folds": 15,
+    "positives": 781,
+    "rate": 0.2749032030975009,
+    "auc": 0.6075357706699154,
+    "log_loss": 0.5743483234290401,
+    "brier": 0.19398540178079035,
+    "constant_log_loss": 0.588598523242154
+  },
+  "label_limitation": "148原票に実着弾時刻なし。識別可能な増加区間の代理ラベルであり全母集団の応手率ではない"
+}

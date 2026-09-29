@@ -1,0 +1,10 @@
+{
+  "source": "review",
+  "rows": 6848,
+  "matching_rows": 6848,
+  "core_matching_rows": 6848,
+  "differences": {},
+  "first": {},
+  "old_extra_rows": 0,
+  "passed": true
+}

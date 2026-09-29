@@ -1,0 +1,212 @@
+{
+  "results": {
+    "E22": {
+      "variant": "on",
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5110788416714259,
+        "auc": 0.7624637966078388
+      },
+      "zenchi": {
+        "hits": 6910,
+        "frames": 8333,
+        "agreement": 0.829233169326773
+      },
+      "deaths": {
+        "false": 1,
+        "total": 28,
+        "unlabelled": 0
+      },
+      "scenes": {
+        "prefire_frames": 62,
+        "prefire_mean": 0.2702919012720453,
+        "margin_sign_flips": 3,
+        "terminal_frames": 45,
+        "terminal_min": 1.0
+      },
+      "gates": {
+        "q": true,
+        "zenchi": true,
+        "deaths": true,
+        "scene": true
+      },
+      "candidate": true,
+      "scene": {
+        "frames": 29,
+        "minimum": 0.8513024387854775
+      }
+    },
+    "ledger": {
+      "variant": "ledger",
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5137213917294886,
+        "auc": 0.7629948155023569
+      },
+      "zenchi": {
+        "hits": 6963,
+        "frames": 8333,
+        "agreement": 0.8355934237369494
+      },
+      "deaths": {
+        "false": 1,
+        "total": 29,
+        "unlabelled": 0
+      },
+      "scenes": {
+        "prefire_frames": 62,
+        "prefire_mean": 0.2702919012720453,
+        "margin_sign_flips": 3,
+        "terminal_frames": 45,
+        "terminal_min": 1.0
+      },
+      "gates": {
+        "q": false,
+        "zenchi": true,
+        "deaths": true
+      },
+      "candidate": false
+    },
+    "color": {
+      "variant": "color",
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5110788138629594,
+        "auc": 0.7624637966078388
+      },
+      "zenchi": {
+        "hits": 6910,
+        "frames": 8333,
+        "agreement": 0.829233169326773
+      },
+      "deaths": {
+        "false": 2,
+        "total": 30,
+        "unlabelled": 0
+      },
+      "scenes": {
+        "prefire_frames": 62,
+        "prefire_mean": 0.2702919012720453,
+        "margin_sign_flips": 3,
+        "terminal_frames": 45,
+        "terminal_min": 1.0
+      },
+      "gates": {
+        "q": true,
+        "zenchi": true,
+        "deaths": false
+      },
+      "candidate": false
+    },
+    "multi": {
+      "variant": "multi",
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5104700950393432,
+        "auc": 0.7624758285957381
+      },
+      "zenchi": {
+        "hits": 6910,
+        "frames": 8333,
+        "agreement": 0.829233169326773
+      },
+      "deaths": {
+        "false": 3,
+        "total": 37,
+        "unlabelled": 0
+      },
+      "scenes": {
+        "prefire_frames": 62,
+        "prefire_mean": 0.2702919012720453,
+        "margin_sign_flips": 3,
+        "terminal_frames": 45,
+        "terminal_min": 1.0
+      },
+      "gates": {
+        "q": true,
+        "zenchi": true,
+        "deaths": false
+      },
+      "candidate": false
+    },
+    "safety": {
+      "variant": "safety",
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5257226581409893,
+        "auc": 0.7520621430689303
+      },
+      "zenchi": {
+        "hits": 6968,
+        "frames": 8333,
+        "agreement": 0.8361934477379095
+      },
+      "deaths": {
+        "false": 1,
+        "total": 29,
+        "unlabelled": 0
+      },
+      "scenes": {
+        "prefire_frames": 62,
+        "prefire_mean": 0.2702919012720453,
+        "margin_sign_flips": 3,
+        "terminal_frames": 45,
+        "terminal_min": 1.0
+      },
+      "gates": {
+        "q": false,
+        "zenchi": true,
+        "deaths": true
+      },
+      "candidate": false
+    },
+    "recovery": {
+      "variant": "recovery",
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5240931794842165,
+        "auc": 0.7514646259555762
+      },
+      "zenchi": {
+        "hits": 6915,
+        "frames": 8333,
+        "agreement": 0.8298331933277331
+      },
+      "deaths": {
+        "false": 2,
+        "total": 30,
+        "unlabelled": 0
+      },
+      "scenes": {
+        "prefire_frames": 62,
+        "prefire_mean": 0.2702919012720453,
+        "margin_sign_flips": 3,
+        "terminal_frames": 45,
+        "terminal_min": 1.0
+      },
+      "gates": {
+        "q": false,
+        "zenchi": true,
+        "deaths": false
+      },
+      "candidate": false
+    }
+  },
+  "selected": [
+    "color",
+    "multi"
+  ],
+  "options": {
+    "death_guard": true,
+    "confirmed_death_hold": true,
+    "death_formula_guard": true,
+    "color_score_safety": true,
+    "multi_landing_death": true
+  }
+}

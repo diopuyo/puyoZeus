@@ -1,0 +1,308 @@
+{
+  "production_unchanged": true,
+  "models_and_original_inputs_unchanged": true,
+  "defaults_off": true,
+  "maximum_new_function_lines": 39,
+  "input_records": {
+    "logs/e26/records/fcXG83vInDY.jsonl.gz": "e88b553c571514c404d4eac2becf9097e28f2e604b41d92b196aeff0dd19a70b",
+    "logs/e26/records/mia8KCjr52g.jsonl.gz": "aac342c853ce01fda6cafb7dc57d42d77ce8640454e0974f7f62a81e29e753d0",
+    "logs/e26/records/q_7gc4TgFig.jsonl.gz": "632c360c0cce2ef968019ae9514d0efae0ab3e85f0251cea05174ef98732dd4f",
+    "logs/e26/records/review.jsonl.gz": "ae2aa3407e1d4194efa5b2895bf06c3d1a9953bc33de1b5330798f9085334ce7",
+    "logs/e26/records/zenchi.jsonl.gz": "e5a2dd50cf727dfda38b64f698cecc03c33a83cdac49bc1d8577767fc44b684b"
+  },
+  "existing_large_functions": {},
+  "source_hashes": {
+    "src/exchange_hidden_row_death.py": "0d413e3d689b27604997eaa7665aaf844da4140e93a6a88023c2c6ed92d252c6",
+    "src/exchange_death_inputs.py": "4bab23896e7e16114f20a94d0ced54d208a4f4a07d820bae594b52a4576d065a",
+    "scripts/run_e27.py": "1b6fd3825ab88811d43065f67241b33e60164158f7832b30393d0c14a964ceb2",
+    "scripts/verify_e27.py": "f062caa1d02c2259f8d10258ba3665fa14a91f19f9b7d41adb20307b92012b80",
+    "tests/test_e27_hidden_death.py": "5d498290a91cfb3ee8f173149d9af5cfcedb2571bc4ed2026b8a1c98a086e2c9",
+    "tests/test_e27_death_inputs.py": "6c8950bff17766d853093f5c3de7a9aee157743ae9dab05de6e40165cca82464",
+    "src/match_color_evidence.py": "cfe4fd098ff05e917fd8997dbe0f0d84cbe4650b4ad0fe174e75fc386bb87255",
+    "tests/test_e27_match_colors.py": "d39a348ab4539234ae4f367b85df386d47560ff5b16c86eac2eafe4e84474f95",
+    "scripts/render_e27_review.py": "c094fef97a01218090898aac4bcfefdbabdfad2368bdb2251c2f5f6a5eedb5f5",
+    "scripts/measure_e27_scene.py": "41f78db672039d7007ee94183ba83703dd075022867797ffde64967910a77c94",
+    "scripts/diagnose_e27_hidden.py": "074a00b7312e4483556e9a2381fb3c1750b03a26e64b2a248403301a178dc980",
+    "scripts/report_e27.py": "4af36866bfb1581fb4b5b4aceb611cefbb90e3c88802235465147b68a8ab74e4",
+    "src/exchange_event_landing.py": "9b09f83ec068829f36551613d22b5fd75d670485b16f043d8c7b75aadcf50e9f",
+    "src/exchange_event_multilanding.py": "91709b75a9b57f7127c03f176addddf8add31c820b6cae41e223797dd5e0a7a7",
+    "src/exchange_event_overlay.py": "498fb527828ff72048e3770070c6ac76988e482afb389c2b9c9abe9205e5c874",
+    "scripts/replay_exchange_event_20260926.py": "2628b20f86ea68a6a21d0faad394196692788477066a5dbaaabe4d12c9968913",
+    "scripts/visualize_advantage_overlay.py": "7907d17eea5747e26e36f5864a321abbfbbf581926c9f000a751591fcadbf0c5"
+  },
+  "probability_isolation": {
+    "q_7gc4TgFig": {
+      "chains": 83,
+      "shared_landing_probability_rows": 2051,
+      "s3_rows": 1877,
+      "predictions_identical": true,
+      "shared_probabilities_identical": true,
+      "bookkeeping_changes": [],
+      "s3_timing_changes": []
+    },
+    "fcXG83vInDY": {
+      "chains": 61,
+      "shared_landing_probability_rows": 2331,
+      "s3_rows": 2075,
+      "predictions_identical": true,
+      "shared_probabilities_identical": true,
+      "bookkeeping_changes": [
+        {
+          "exchange": 12,
+          "side": "2P",
+          "chain": 4,
+          "changes": {
+            "score_before": [
+              4464.0,
+              4467.0
+            ],
+            "display_score": [
+              45684,
+              45687
+            ],
+            "drop_bonus_score": [
+              111.0,
+              114.0
+            ]
+          }
+        },
+        {
+          "exchange": 12,
+          "side": "1P",
+          "chain": 5,
+          "changes": {
+            "score_before": [
+              30080.0,
+              30086.0
+            ],
+            "display_score": [
+              54220,
+              54226
+            ],
+            "drop_bonus_score": [
+              6.0,
+              12.0
+            ]
+          }
+        },
+        {
+          "exchange": 18,
+          "side": "2P",
+          "chain": 10,
+          "changes": {
+            "score_before": [
+              49451.0,
+              49468.0
+            ],
+            "display_score": [
+              69451,
+              69468
+            ],
+            "drop_bonus_score": [
+              0.0,
+              17.0
+            ]
+          }
+        }
+      ],
+      "s3_timing_changes": [
+        {
+          "exchange": 12,
+          "change": "added",
+          "t_sec": 435.9,
+          "source": "S3",
+          "p1": 0.6287182961317784
+        },
+        {
+          "exchange": 12,
+          "change": "added",
+          "t_sec": 435.93333333333334,
+          "source": "S3",
+          "p1": 0.5694761704416329
+        },
+        {
+          "exchange": 18,
+          "change": "added",
+          "t_sec": 626.8,
+          "source": "S3",
+          "p1": 0.29517236536085784
+        },
+        {
+          "exchange": 18,
+          "change": "added",
+          "t_sec": 627.2,
+          "source": "S3",
+          "p1": 0.29517236536085784
+        },
+        {
+          "exchange": 18,
+          "change": "added",
+          "t_sec": 627.3666666666667,
+          "source": "S3",
+          "p1": 0.29517236536085784
+        },
+        {
+          "exchange": 18,
+          "change": "added",
+          "t_sec": 627.4,
+          "source": "S3",
+          "p1": 0.29517236536085784
+        },
+        {
+          "exchange": 18,
+          "change": "added",
+          "t_sec": 627.4333333333333,
+          "source": "S3",
+          "p1": 0.29517236536085784
+        },
+        {
+          "exchange": 18,
+          "change": "added",
+          "t_sec": 627.4666666666667,
+          "source": "S3",
+          "p1": 0.29517236536085784
+        },
+        {
+          "exchange": 18,
+          "change": "added",
+          "t_sec": 627.7,
+          "source": "S3",
+          "p1": 0.16516768356381203
+        }
+      ]
+    },
+    "mia8KCjr52g": {
+      "chains": 77,
+      "shared_landing_probability_rows": 2192,
+      "s3_rows": 2007,
+      "predictions_identical": true,
+      "shared_probabilities_identical": true,
+      "bookkeeping_changes": [],
+      "s3_timing_changes": [
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 333.73333333333335,
+          "source": "S3",
+          "p1": 0.33431976041413813
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 333.76666666666665,
+          "source": "S3",
+          "p1": 0.33431976041413813
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 333.8,
+          "source": "S3",
+          "p1": 0.368633954246919
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 333.8333333333333,
+          "source": "S3",
+          "p1": 0.368633954246919
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 333.8666666666667,
+          "source": "S3",
+          "p1": 0.368633954246919
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 334.46666666666664,
+          "source": "S3",
+          "p1": 0.33431976041413813
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 334.5,
+          "source": "S3",
+          "p1": 0.368633954246919
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 334.53333333333336,
+          "source": "S3",
+          "p1": 0.368633954246919
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 334.56666666666666,
+          "source": "S3",
+          "p1": 0.33431976041413813
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 334.6666666666667,
+          "source": "S3",
+          "p1": 0.33431976041413813
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 334.7,
+          "source": "S3",
+          "p1": 0.33431976041413813
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 334.73333333333335,
+          "source": "S3",
+          "p1": 0.33431976041413813
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 335.1666666666667,
+          "source": "S3",
+          "p1": 0.33431976041413813
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 335.46666666666664,
+          "source": "S3",
+          "p1": 0.33431976041413813
+        },
+        {
+          "exchange": 17,
+          "change": "removed",
+          "t_sec": 335.73333333333335,
+          "source": "S3",
+          "p1": 0.33431976041413813
+        }
+      ]
+    },
+    "zenchi": {
+      "chains": 96,
+      "shared_landing_probability_rows": 2060,
+      "s3_rows": 2302,
+      "predictions_identical": true,
+      "shared_probabilities_identical": true,
+      "bookkeeping_changes": [],
+      "s3_timing_changes": []
+    },
+    "review": {
+      "chains": 27,
+      "shared_landing_probability_rows": 597,
+      "s3_rows": 586,
+      "predictions_identical": true,
+      "shared_probabilities_identical": true,
+      "bookkeeping_changes": [],
+      "s3_timing_changes": []
+    }
+  }
+}

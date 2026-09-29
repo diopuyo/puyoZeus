@@ -1,0 +1,13 @@
+{
+  "python_files": 9,
+  "function_limit": 50,
+  "production_sha256": "4152435394271234e9b86ee206cfbe395d7d03ee76b536865ea9ba566e4070b4",
+  "csv_rows": 480,
+  "equivalence": {
+    "display": "byte_identical",
+    "events": "byte_identical",
+    "diagnostics": "identical"
+  },
+  "scene_checks": "passed",
+  "visual": "VISUAL_VERIFICATION.json"
+}

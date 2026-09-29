@@ -1,0 +1,182 @@
+{
+  "M1": {
+    "exchanges": 107,
+    "s3_exchanges": 91,
+    "paired": 88,
+    "missing_s3": 16,
+    "missing_pair": 19,
+    "delta_median_sec": 2.8000000000000114,
+    "before_landing": 8,
+    "before_landing_fraction": 0.09090909090909091,
+    "early": 6,
+    "early_fraction": 0.06593406593406594,
+    "pass_threshold": true,
+    "revoked": 1,
+    "revoked_fraction": 0.01098901098901099,
+    "continued": 5,
+    "continued_fraction": 0.054945054945054944
+  },
+  "M2": {
+    "exchanges": 107,
+    "common_excluded": {
+      "missing_end": 17,
+      "not_completed": 1
+    },
+    "off": {
+      "eligible": 60,
+      "unreached": 9,
+      "excluded": {
+        "small_change": 29
+      },
+      "median_seconds": 0.48333333333332007
+    },
+    "on": {
+      "eligible": 49,
+      "unreached": 2,
+      "excluded": {
+        "small_change": 40
+      },
+      "median_seconds": 0.0
+    }
+  },
+  "M3_q": {
+    "off": {
+      "all_frames": 27000,
+      "unlabeled_frames": 20474,
+      "groups": {
+        "all": {
+          "frames": 6526,
+          "matches": 4,
+          "log_loss": 1.1105608100516837,
+          "auc": 0.5937376725838264
+        },
+        "P_time_1": {
+          "frames": 2176,
+          "matches": 4,
+          "log_loss": 0.7171353423970013,
+          "auc": 0.24678085872115724
+        },
+        "P_time_2": {
+          "frames": 2176,
+          "matches": 4,
+          "log_loss": 1.4458274686030148,
+          "auc": 0.6662897633046887
+        },
+        "P_time_3": {
+          "frames": 2174,
+          "matches": 4,
+          "log_loss": 1.1687731231192522,
+          "auc": 0.7211548138857922
+        }
+      }
+    },
+    "on": {
+      "all_frames": 27000,
+      "unlabeled_frames": 20474,
+      "groups": {
+        "all": {
+          "frames": 6526,
+          "matches": 4,
+          "log_loss": 0.5710169497814942,
+          "auc": 0.7377275334854521
+        },
+        "P_time_1": {
+          "frames": 2176,
+          "matches": 4,
+          "log_loss": 0.7302098314128675,
+          "auc": 0.26086544743261164
+        },
+        "P_time_2": {
+          "frames": 2176,
+          "matches": 4,
+          "log_loss": 0.7104056760114213,
+          "auc": 0.7540618585394704
+        },
+        "P_time_3": {
+          "frames": 2174,
+          "matches": 4,
+          "log_loss": 0.272160657828325,
+          "auc": 0.9543453099838969
+        }
+      }
+    }
+  },
+  "M4": {
+    "off": {
+      "flips": 288,
+      "minutes": 45.0,
+      "flips_per_minute": 6.4
+    },
+    "on": {
+      "flips": 275,
+      "minutes": 45.0,
+      "flips_per_minute": 6.111111111111111
+    }
+  },
+  "freshness": {
+    "off": {
+      "frames": 81000,
+      "adjacent_pairs": 80997,
+      "equal_pairs": 78222,
+      "updates": 2775,
+      "missing_frames": 3042,
+      "longest_equal_seconds": 123.43333333333334,
+      "equal_fraction": 0.96573947183229,
+      "updates_per_minute": 61.666666666666664,
+      "minutes": 45.0
+    },
+    "on": {
+      "frames": 81000,
+      "adjacent_pairs": 80997,
+      "equal_pairs": 65218,
+      "updates": 15779,
+      "missing_frames": 0,
+      "longest_equal_seconds": 89.93333333333334,
+      "equal_fraction": 0.8051903156907045,
+      "updates_per_minute": 350.64444444444445,
+      "minutes": 45.0
+    }
+  },
+  "reach": {
+    "exchanges": 107,
+    "completed": 94,
+    "reached": 88,
+    "reach_fraction": 0.9361702127659575,
+    "display_reached": 28,
+    "display_reach_fraction": 0.2978723404255319,
+    "s1_median_seconds": 0.0,
+    "all_s1_median_seconds": 0.0,
+    "firing_to_last_end_median": 3.6000000000000227,
+    "end_observed_count": 89,
+    "close_reasons": {
+      "activity_timeout": 6,
+      "confirmed_after_score": 88,
+      "match_boundary": 12,
+      "stream_end": 1
+    },
+    "unreached_last_gate": {
+      "missing_end": 5,
+      "missing_score_ready": 1
+    },
+    "small_score": {
+      "small_score_updates": 4873,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    "reach_pass": true,
+    "display_reach_pass": false,
+    "dwell_pass": true
+  },
+  "gates_off": {
+    "M1": true,
+    "M2": true,
+    "M3": true,
+    "M4": true,
+    "reach": true,
+    "display_reach": false,
+    "dwell": true,
+    "freshness": true,
+    "all_pass": false
+  }
+}

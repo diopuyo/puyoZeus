@@ -1,0 +1,52 @@
+{
+  "three_videos": {
+    "candidates": 15,
+    "accepted": 8,
+    "accepted_chains": 7,
+    "next_mismatch": 1,
+    "final_mismatch": 0,
+    "final_unresolved": 1
+  },
+  "sources": {
+    "q_7gc4TgFig": {
+      "candidates": 9,
+      "accepted": 4,
+      "accepted_chains": 3,
+      "next_mismatch": 0,
+      "final_mismatch": 0,
+      "final_unresolved": 0
+    },
+    "fcXG83vInDY": {
+      "candidates": 6,
+      "accepted": 4,
+      "accepted_chains": 4,
+      "next_mismatch": 1,
+      "final_mismatch": 0,
+      "final_unresolved": 1
+    },
+    "mia8KCjr52g": {
+      "candidates": 0,
+      "accepted": 0,
+      "accepted_chains": 0,
+      "next_mismatch": 0,
+      "final_mismatch": 0,
+      "final_unresolved": 0
+    },
+    "zenchi": {
+      "candidates": 5,
+      "accepted": 2,
+      "accepted_chains": 1,
+      "next_mismatch": 1,
+      "final_mismatch": 0,
+      "final_unresolved": 0
+    },
+    "review": {
+      "candidates": 0,
+      "accepted": 0,
+      "accepted_chains": 0,
+      "next_mismatch": 0,
+      "final_mismatch": 0,
+      "final_unresolved": 0
+    }
+  }
+}

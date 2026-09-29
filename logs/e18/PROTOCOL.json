@@ -1,0 +1,19 @@
+{
+  "baseline": "E15+② / E17 combined / 75b0cbd",
+  "q_loss_max": 0.5313,
+  "zenchi_agreement_min": 0.801,
+  "false_max": 1,
+  "death_denominator": 28,
+  "scene": [
+    2612.0,
+    2614.08
+  ],
+  "frames": 62,
+  "half_frames": 31,
+  "scene_mean": "E17 combinedの未丸め平均より大",
+  "scene_rise": "前半31行平均 < 後半31行平均",
+  "selection": "応手量>=純受け量の場合だけ応手後G_feを既存S3合成へ渡す",
+  "model": "models/exchange_event_v3",
+  "inputs": "logs/e16/records",
+  "default": false
+}

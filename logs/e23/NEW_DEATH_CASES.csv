@@ -1,0 +1,7 @@
+source,game_idx,exchange_id,side,change,first_sec,baseline_first_sec,winner,observed_death_sec,observed_opponent_death_sec,actually_died,error,evidence
+q_7gc4TgFig,2,6,1P,earlier,231.1,232.56666666666666,2P,236.46666666666667,,True,False,terminal_signal
+q_7gc4TgFig,9,29,1P,new,656.0,,2P,663.1666666666666,,True,False,terminal_signal
+q_7gc4TgFig,13,38,2P,new,832.7333333333333,,2P,,852.6,False,True,terminal_signal
+q_7gc4TgFig,13,38,1P,new,848.3666666666667,,2P,852.6,,True,False,terminal_signal
+fcXG83vInDY,3,11,2P,new,364.93333333333334,,1P,370.93333333333334,,True,False,terminal_signal
+fcXG83vInDY,5,14,1P,new,490.8666666666667,,1P,,537.8666666666667,False,True,terminal_signal

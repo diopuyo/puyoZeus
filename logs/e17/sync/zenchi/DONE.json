@@ -1,0 +1,13 @@
+{
+  "options": {
+    "count_sync": true
+  },
+  "model": "v4",
+  "state": "completed",
+  "frames": 26298,
+  "display_frames": 25398,
+  "elapsed_seconds": 193.4813718079822,
+  "record_bytes": 1511414,
+  "live_count": true,
+  "model_dir": "models/exchange_event_v4"
+}

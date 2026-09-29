@@ -1,0 +1,62 @@
+[
+  {
+    "game": 0,
+    "side": "1P",
+    "trigger_sec": 2576.7833333333333,
+    "held_sec": 2576.8166666666666,
+    "deadline_sec": 2577.2833333333333,
+    "score_before": 301.0,
+    "board_sec": 2576.7833333333333,
+    "outcome": "discarded_death",
+    "resolved_sec": 2576.983333333333,
+    "wait_sec": 0.16666666666651508
+  },
+  {
+    "game": 1,
+    "side": "2P",
+    "trigger_sec": 2633.7833333333333,
+    "held_sec": 2633.8166666666666,
+    "deadline_sec": 2634.2833333333333,
+    "score_before": 29336.0,
+    "board_sec": 2633.7833333333333,
+    "outcome": "discarded_timeout",
+    "resolved_sec": 2634.3166666666666,
+    "wait_sec": 0.5
+  },
+  {
+    "game": 4,
+    "side": "2P",
+    "trigger_sec": 2777.383333333333,
+    "held_sec": 2777.4166666666665,
+    "deadline_sec": 2777.883333333333,
+    "score_before": 0.0,
+    "board_sec": 2777.383333333333,
+    "outcome": "discarded_timeout",
+    "resolved_sec": 2777.9166666666665,
+    "wait_sec": 0.5
+  },
+  {
+    "game": 7,
+    "side": "1P",
+    "trigger_sec": 2942.2166666666667,
+    "held_sec": 2942.25,
+    "deadline_sec": 2942.7166666666667,
+    "score_before": 709.0,
+    "board_sec": 2942.2166666666667,
+    "outcome": "discarded_timeout",
+    "resolved_sec": 2942.75,
+    "wait_sec": 0.5
+  },
+  {
+    "game": 12,
+    "side": "2P",
+    "trigger_sec": 3118.0833333333335,
+    "held_sec": 3118.116666666667,
+    "deadline_sec": 3118.5833333333335,
+    "score_before": 0.0,
+    "board_sec": 3118.0833333333335,
+    "outcome": "discarded_timeout",
+    "resolved_sec": 3118.616666666667,
+    "wait_sec": 0.5
+  }
+]

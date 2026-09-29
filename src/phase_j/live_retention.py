@@ -71,7 +71,9 @@ def bounded_overlay(base: type, directory: Path, stack: ExitStack) -> type:
     class BoundedOverlay(base):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
-            self.tracker = archived_tracker(type(self.tracker), directory, stack)(self.tracker.models)
+            original = self.tracker
+            self.tracker = archived_tracker(type(original), directory, stack)(original.models)
+            self.tracker.__dict__.update(original.__dict__)
     return BoundedOverlay
 
 

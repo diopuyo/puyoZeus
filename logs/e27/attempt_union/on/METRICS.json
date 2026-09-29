@@ -1,0 +1,46 @@
+{
+  "variant": "on",
+  "q": {
+    "frames": 6526,
+    "matches": 4,
+    "log_loss": 0.5107778391393154,
+    "auc": 0.7624758285957381
+  },
+  "zenchi": {
+    "hits": 7081,
+    "frames": 8333,
+    "agreement": 0.8497539901596064
+  },
+  "deaths": {
+    "false": 1,
+    "total": 37,
+    "unlabelled": 0
+  },
+  "scenes": {
+    "prefire_frames": 62,
+    "prefire_mean": 0.2702919012720453,
+    "margin_sign_flips": 3,
+    "terminal_frames": 45,
+    "terminal_min": 1.0
+  },
+  "gates": {
+    "q": true,
+    "zenchi": true,
+    "deaths": true,
+    "scene": false
+  },
+  "candidate": false,
+  "scene": {
+    "first_sec": 2771.25,
+    "deadline_sec": 2766.0,
+    "scenes": 1
+  },
+  "hidden_three_videos": {
+    "enumerated": 6,
+    "combinations": 50,
+    "accepted": 0,
+    "next_mismatch": 0,
+    "used": 0,
+    "uses": 0
+  }
+}

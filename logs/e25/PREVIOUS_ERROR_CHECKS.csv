@@ -1,0 +1,5 @@
+version,source,t_sec,side,incoming,dead,reason,safety
+e23,q_7gc4TgFig,832.7333333333333,2P,66,True,all_responses_dead,
+e25,q_7gc4TgFig,832.7333333333333,2P,66,False,board_unsettled,board_unsettled
+e23,fcXG83vInDY,490.8666666666667,1P,597,True,all_responses_dead,
+e25,fcXG83vInDY,490.8666666666667,1P,182,False,board_unsettled,board_unsettled

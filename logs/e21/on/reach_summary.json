@@ -1,0 +1,153 @@
+{
+  "videos": [
+    {
+      "source": "q_7gc4TgFig",
+      "frames": {
+        "waiting_confirmed": 1079,
+        "G_fe": 14276,
+        "S3_landing": 8082,
+        "S3": 57,
+        "confirmed_death": 2043,
+        "S3_provisional": 884,
+        "unavoidable_death": 579
+      },
+      "exchanges": 40,
+      "completed": 33,
+      "reached": 32,
+      "reach_fraction": 0.9696969696969697,
+      "display_reached": 13,
+      "display_reach_fraction": 0.3939393939393939,
+      "s1_median_seconds": 0.0,
+      "all_s1_median_seconds": 0.0,
+      "firing_to_last_end_median": 2.8166666666667197,
+      "end_observed_count": 32,
+      "close_reasons": {
+        "activity_timeout": 1,
+        "match_boundary": 7,
+        "confirmed_after_score": 32
+      },
+      "unreached_last_gate": {
+        "missing_end": 1
+      },
+      "small_score": {
+        "small_score_updates": 1522,
+        "small_score_timer_resets": 0,
+        "small_score_ready_resets": 0,
+        "small_score_s3_to_s1": 0
+      },
+      "reach_pass": true,
+      "display_reach_pass": false,
+      "dwell_pass": true
+    },
+    {
+      "source": "fcXG83vInDY",
+      "frames": {
+        "waiting_confirmed": 1192,
+        "G_fe": 14030,
+        "S3_landing": 9598,
+        "unavoidable_death": 295,
+        "confirmed_death": 1092,
+        "S3_provisional": 787,
+        "S3": 6
+      },
+      "exchanges": 27,
+      "completed": 22,
+      "reached": 19,
+      "reach_fraction": 0.8636363636363636,
+      "display_reached": 3,
+      "display_reach_fraction": 0.13636363636363635,
+      "s1_median_seconds": 0.0,
+      "all_s1_median_seconds": 0.0,
+      "firing_to_last_end_median": 15.0,
+      "end_observed_count": 19,
+      "close_reasons": {
+        "activity_timeout": 3,
+        "match_boundary": 5,
+        "confirmed_after_score": 19
+      },
+      "unreached_last_gate": {
+        "missing_end": 3
+      },
+      "small_score": {
+        "small_score_updates": 1917,
+        "small_score_timer_resets": 0,
+        "small_score_ready_resets": 0,
+        "small_score_s3_to_s1": 0
+      },
+      "reach_pass": true,
+      "display_reach_pass": false,
+      "dwell_pass": true
+    },
+    {
+      "source": "mia8KCjr52g",
+      "frames": {
+        "waiting_confirmed": 771,
+        "G_fe": 15514,
+        "S3_landing": 8592,
+        "S3": 59,
+        "S3_provisional": 1159,
+        "confirmed_death": 905
+      },
+      "exchanges": 51,
+      "completed": 45,
+      "reached": 41,
+      "reach_fraction": 0.9111111111111111,
+      "display_reached": 6,
+      "display_reach_fraction": 0.13333333333333333,
+      "s1_median_seconds": 0.0,
+      "all_s1_median_seconds": 0.0,
+      "firing_to_last_end_median": 3.1666666666666714,
+      "end_observed_count": 42,
+      "close_reasons": {
+        "match_boundary": 5,
+        "confirmed_after_score": 41,
+        "activity_timeout": 4,
+        "stream_end": 1
+      },
+      "unreached_last_gate": {
+        "missing_end": 3,
+        "missing_score_ready": 1
+      },
+      "small_score": {
+        "small_score_updates": 1037,
+        "small_score_timer_resets": 0,
+        "small_score_ready_resets": 0,
+        "small_score_s3_to_s1": 0
+      },
+      "reach_pass": true,
+      "display_reach_pass": false,
+      "dwell_pass": true
+    }
+  ],
+  "pooled": {
+    "exchanges": 118,
+    "completed": 100,
+    "reached": 92,
+    "reach_fraction": 0.92,
+    "display_reached": 22,
+    "display_reach_fraction": 0.22,
+    "s1_median_seconds": 0.0,
+    "all_s1_median_seconds": 0.0,
+    "firing_to_last_end_median": 3.7666666666666515,
+    "end_observed_count": 93,
+    "close_reasons": {
+      "activity_timeout": 8,
+      "match_boundary": 17,
+      "confirmed_after_score": 92,
+      "stream_end": 1
+    },
+    "unreached_last_gate": {
+      "missing_end": 7,
+      "missing_score_ready": 1
+    },
+    "small_score": {
+      "small_score_updates": 4476,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    "reach_pass": true,
+    "display_reach_pass": false,
+    "dwell_pass": true
+  }
+}

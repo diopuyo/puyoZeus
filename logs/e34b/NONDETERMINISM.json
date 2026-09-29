@@ -1,0 +1,67 @@
+{
+  "q_7gc4TgFig": {
+    "rows": 27000,
+    "board_mismatch_rows": 18236,
+    "side_mismatch_rows": [
+      12859,
+      12606
+    ],
+    "first_mismatch_sec": 1.8,
+    "first_side_mismatch_sec": [
+      1.8,
+      1.8
+    ]
+  },
+  "fcXG83vInDY": {
+    "rows": 27000,
+    "board_mismatch_rows": 17311,
+    "side_mismatch_rows": [
+      11421,
+      12605
+    ],
+    "first_mismatch_sec": 1.8,
+    "first_side_mismatch_sec": [
+      1.8,
+      1.8
+    ]
+  },
+  "mia8KCjr52g": {
+    "rows": 27000,
+    "board_mismatch_rows": 20975,
+    "side_mismatch_rows": [
+      17230,
+      16625
+    ],
+    "first_mismatch_sec": 1.8,
+    "first_side_mismatch_sec": [
+      1.8,
+      1.8
+    ]
+  },
+  "zenchi": {
+    "rows": 26298,
+    "board_mismatch_rows": 19967,
+    "side_mismatch_rows": [
+      15144,
+      13274
+    ],
+    "first_mismatch_sec": 2550.85,
+    "first_side_mismatch_sec": [
+      2550.85,
+      2550.983333333333
+    ]
+  },
+  "review": {
+    "rows": 6848,
+    "board_mismatch_rows": 5345,
+    "side_mismatch_rows": [
+      3774,
+      3913
+    ],
+    "first_mismatch_sec": 2549.7166666666667,
+    "first_side_mismatch_sec": [
+      2549.9166666666665,
+      2549.7166666666667
+    ]
+  }
+}

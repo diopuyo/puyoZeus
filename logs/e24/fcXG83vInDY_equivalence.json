@@ -1,0 +1,15 @@
+{
+  "state": "completed",
+  "frames": 27000,
+  "display_frames": 27000,
+  "elapsed_seconds": 934.8458994649118,
+  "record_bytes": 1149419,
+  "live_count": true,
+  "model_dir": "models/exchange_event_v3",
+  "equivalence": {
+    "display": "byte_identical",
+    "events": "byte_identical",
+    "diagnostics": "identical"
+  },
+  "evaluations": 310
+}

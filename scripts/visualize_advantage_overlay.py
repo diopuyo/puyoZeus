@@ -6364,6 +6364,8 @@ def _exchange_display(overlay: ExchangeEventOverlay, adv: float,
     if value is None:
         return adv, probability
     converted = max(-100.0, min(100.0, _winprob_to_adv(value)))
+    if getattr(overlay.tracker, "source", None) == "confirmed_death":
+        return converted, value  # 決着ホールド同様、EMAの内部状態を汚さず確定値を直接表示。
     return smoothing.apply(converted, value, t_sec) if smoothing else (converted, value)
 
 
@@ -6444,6 +6446,27 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              exchange_event_record_path: Path | None = None,
              review_data_panel: bool = False,
              review_data_csv: Path | None = None,
+             exchange_event_live_count: bool = False,
+             exchange_event_e16: bool = False,
+             exchange_event_death_guard: bool = False,
+             landing_counter_response: bool = False,
+             confirmed_death_hold: bool = False,
+             landing_counter_prob: bool = False,
+             landing_hands_spec: bool = False,
+             death_candidate_guard: bool = False,
+             death_formula_guard: bool = False,
+             multi_landing_death: bool = False,
+             landing_state_safety: bool = False,
+             pending_ledger: bool = False, color_score_safety: bool = False,
+             completion_recovery: bool = False, midchain_completion: bool = False,
+             death_pending_ledger: bool = False, hidden_row_death: bool = False,
+             midchain_single_observation: bool = False,
+             prefire_candidates: bool = False,
+             prefire_snapshot: bool = False,
+             hidden_row_belief: bool = False,
+             prefire_stage_timeout: bool = False,
+             prefire_stage_timeout_only: bool = False,
+             prefire_origin_guard: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7008,6 +7031,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         指示。底抜け演出検出による根治までの簡易実装)。感度を事後測定
         できるよう CLI (`--death-next-stationary-sec`) から変更可能。
     """
+    if prefire_origin_guard and not (enable_exchange_event_update and prefire_snapshot):
+        raise ValueError('E34には--exchange-event-updateと--prefire-snapshotが必要')
     if (review_data_panel or review_data_csv is not None) and not enable_exchange_event_update:
         raise ValueError("レビュー用データ出力には--exchange-event-updateが必要")
     review_enabled = review_data_panel or review_data_csv is not None
@@ -7020,6 +7045,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
     event_overlay: ExchangeEventOverlay | None = None
     event_recorder = None
+    terminal_detector = None
+    if exchange_event_e16 or exchange_event_death_guard or confirmed_death_hold:
+        from src.exchange_event_terminal import ObservedDeathDetector
+        terminal_detector = ObservedDeathDetector()
     if exchange_event_record_path is not None:
         if not enable_exchange_event_update:
             raise ValueError("--exchange-event-recordには--exchange-event-updateが必要")
@@ -7030,16 +7059,46 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         from src.exchange_event_m0 import FileM0Predictor
         if exchange_event_m0_predictor is None:
             exchange_event_m0_predictor = FileM0Predictor(exchange_event_model_dir / "M0")
+        prefire_match_gate = None
+        if prefire_origin_guard:
+            from src.exchange_prefire_origin import origin_match_gate
+            prefire_match_gate = origin_match_gate(video.stem, Path(__file__).resolve().parents[1])
         event_overlay = ExchangeEventOverlay(
             FileExchangeModels.load(exchange_event_model_dir, lightweight=True),
             (event_recorder.wrap_static(_exchange_static_input) if event_recorder
              else _exchange_static_input), _ExchangeEventEndSignals, exchange_event_m0_predictor,
-            per_side_settled=enable_per_side_settled)
+            per_side_settled=enable_per_side_settled, live_count=exchange_event_live_count,
+            e16=exchange_event_e16, death_guard=exchange_event_death_guard,
+            landing_counter_response=landing_counter_response, confirmed_death_hold=confirmed_death_hold,
+            landing_hands_spec=landing_hands_spec,
+            death_candidate_guard=death_candidate_guard,
+            death_formula_guard=death_formula_guard,
+            multi_landing_death=multi_landing_death,
+            landing_state_safety=landing_state_safety,
+            pending_ledger=pending_ledger, color_score_safety=color_score_safety,
+            completion_recovery=completion_recovery, midchain_completion=midchain_completion,
+            death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death,
+            midchain_single_observation=midchain_single_observation,
+            prefire_candidates=prefire_candidates,
+            prefire_snapshot=prefire_snapshot,
+            hidden_row_belief=hidden_row_belief,
+            prefire_stage_timeout=prefire_stage_timeout,
+            prefire_stage_timeout_only=prefire_stage_timeout_only,
+            prefire_origin_guard=prefire_origin_guard, prefire_match_gate=prefire_match_gate,
+            landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
         if dump_exchange_event_path is None:
             dump_exchange_event_path = out.with_suffix(".exchange_events.jsonl")
         print("[exchange-event] M0推論器接続済み。G_fe/S1/S3を使用します。")
+    midchain_reader = None
+    snapshot_reader = None
+    if prefire_snapshot:
+        from src.prefire_snapshot_reader import PrefireSnapshotReader
+        snapshot_reader = PrefireSnapshotReader()
+    if event_overlay is not None and (midchain_completion or hidden_row_death):
+        from src.midchain_board_reader import MidchainBoardReader
+        midchain_reader = MidchainBoardReader()
     if enable_platt_calibration and enable_phase_calibration:
         raise ValueError(
             "enable_platt_calibration と enable_phase_calibration は同時指定不可"
@@ -7126,6 +7185,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     _production_recognition_kwargs = (
         recognition_load_default_kwargs() if use_production_recognition else {}
     )
+    if prefire_origin_guard:
+        # 収集側W48/W48bの印だけを有効化し、盤面・STABLE判定は変更しない。
+        _production_recognition_kwargs.update(enable_landing_chain_record_hold=True,
+                                             enable_chain_active_record_hold=True)
     # tri-state 解決 (2026-08-15): 明示指定 (not None) は常にそれを使う。未指定
     # (None) かつ production_recognition が OFF のときはキー自体を渡さない
     # (test_no_production_recognition_skips_adopted_kwargs が要求する「RECOGNITION_
@@ -7557,9 +7620,26 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         snap = _drive_ojama(tracker, r.p1, r.p2, ps1, ps2, t,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
         if event_overlay is not None:
+            if terminal_detector is not None:
+                from dataclasses import replace
+                r = replace(r, confirmed_dead_sides=terminal_detector.update(recog_frame),
+                            terminal_evidence_available=True)
             from src.exchange_event_m0 import formula_totals_from_pipeline
             from src.exchange_event_overlay import displayed_scores_from_pipeline
             from src.exchange_event_overlay import formula_visible_from_pipeline
+            if midchain_reader is not None:
+                from dataclasses import replace
+                observed = midchain_reader.read(recog_frame, (r.p1, r.p2))
+                r = replace(r, p1=replace(r.p1, midchain_board=observed[0]),
+                            p2=replace(r.p2, midchain_board=observed[1]))
+            if snapshot_reader is not None:
+                from dataclasses import replace
+                observed = snapshot_reader.update(recog_frame, (r.p1, r.p2), t, game_idx)
+                r = replace(r, p1=replace(r.p1, prefire_snapshot=observed[0]),
+                            p2=replace(r.p2, prefire_snapshot=observed[1]))
+            if prefire_origin_guard:
+                r = replace(r, p1=replace(r.p1, prefire_origin_hold=r.p1.landing_chain_started),
+                            p2=replace(r.p2, prefire_origin_hold=r.p2.landing_chain_started))
             event_inputs = (r, snap, tracker.get_attack_finalization_counters(t),
                             t, game_idx, formula_totals_from_pipeline(pipe),
                             displayed_scores_from_pipeline(pipe, recog_frame),
@@ -8251,6 +8331,16 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         print(f"[done] {written} frames (no-render)")
     if event_overlay is not None and dump_exchange_event_path is not None:
         event_overlay.tracker.save(dump_exchange_event_path)
+        if event_overlay._origin_guard is not None:
+            from scripts.run_e3_exchange_eval_20260926 import save_json
+            save_json(dump_exchange_event_path.with_suffix('.origin_guard.json'),
+                      event_overlay._origin_guard.summary())
+        if event_overlay._midchain is not None:
+            from scripts.run_e3_exchange_eval_20260926 import save_json
+            save_json(dump_exchange_event_path.with_suffix('.midchain.json'), event_overlay._midchain.summary())
+        if event_overlay._hidden_death is not None:
+            from scripts.run_e3_exchange_eval_20260926 import save_json
+            save_json(dump_exchange_event_path.with_suffix('.hidden_death.json'), event_overlay._hidden_death.summary())
         print(f"[exchange-event] {len(event_overlay.tracker.records)} records -> {dump_exchange_event_path}")
     if event_recorder is not None:
         event_recorder.close()
@@ -8276,6 +8366,46 @@ def main() -> None:
                     help="レビュー用の同一データを出力フレーム別CSVへ保存する")
     ap.add_argument("--exchange-event-record", type=Path, default=None,
                     help="全評価入力をgzip JSONLへ記録する（ON時のみ、既定なし）")
+    ap.add_argument("--exchange-event-live-count", action="store_true", default=False,
+                    help="E15: 確定盤面更新ごとにcount特徴とS3暫定を更新する")
+    ap.add_argument("--exchange-event-e16", action="store_true", default=False,
+                    help="E16: 手番同期・死亡後発火抑止・現在/予測層の分離を有効にする")
+    ap.add_argument("--exchange-event-death-guard", action="store_true", default=False,
+                    help="E17②: 観測された窒息後の発火を拒否する")
+    ap.add_argument("--landing-hands-spec", action="store_true", default=False,
+                    help="観測設置間隔とNEXT移動確定による着弾前手数（既定OFF）")
+    ap.add_argument("--death-candidate-guard", action="store_true", default=False,
+                    help="窒息セル占有中の新発火を独立した消去観測まで保留（既定OFF）")
+    ap.add_argument("--death-formula-guard", action="store_true", default=False,
+                    help="窒息セル占有側のbaseline発火だけを式読取・得点増加で確認（既定OFF）")
+    ap.add_argument("--multi-landing-death", action="store_true", default=False,
+                    help="E23: 応手を挟む複数回の上限着弾で回避不能死を検査（既定OFF）")
+    ap.add_argument("--landing-state-safety", action="store_true", default=False,
+                    help="E25: 交換独立予告台帳・整合した完走復元・複数着弾限定の盤面検証（既定OFF）")
+    ap.add_argument("--midchain-single-observation", action="store_true", default=False,
+                    help="E29: 途中盤面1観測で候補化。次段得点一致までは使用しない（既定OFF）")
+    ap.add_argument("--prefire-candidates", action="store_true", default=False,
+                    help="E30: 保存起点の発火1・2手を全列挙し、各段の得点で絞る（既定OFF）")
+    ap.add_argument("--hidden-row-belief", action="store_true", default=False,
+                    help="発火前観測と併用し、隠し段を履歴の確率分布から推定")
+    ap.add_argument("--prefire-stage-timeout", action="store_true", default=False,
+                    help="E33: 次段の式の不在・絶対終了信号で長い候補を除外（既定OFF）")
+    ap.add_argument("--prefire-stage-timeout-only", action="store_true", default=False,
+                    help="E33b: 終了信号を使わず段間隔タイムアウトだけで候補を除外（既定OFF）")
+    ap.add_argument("--prefire-origin-guard", action="store_true", default=False,
+                    help="E34: 収集側の連鎖保持・試合範囲を予測起点保存へ適用（既定OFF）")
+    ap.add_argument("--prefire-snapshot", action="store_true", default=False,
+                    help="E31: 発火直前画像の多数決を予測層だけに使用（既定OFF）")
+    for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
+                 "death-pending-ledger", "hidden-row-death"):
+        ap.add_argument("--" + flag, action="store_true", default=False,
+                        help="E26: 独立した予測層実験（既定OFF）")
+    ap.add_argument("--landing-counter-response", action="store_true", default=False,
+                    help="E18: 受け量以上の応手がある場合に打ち返し後の仮想着弾を使う")
+    ap.add_argument("--confirmed-death-hold", action="store_true", default=False,
+                    help="E19: 観測死亡が確定したら勝者側の確定表示を試合境界まで保持する")
+    ap.add_argument("--landing-counter-prob", action="store_true", default=False,
+                    help="E19: ロジスティック回帰の応手確率で仮想着弾G_feを合成する")
     ap.add_argument("--exchange-event-model-dir", type=Path,
                     default=Path("models/exchange_event_v1"))
     ap.add_argument("--dump-exchange-events", type=Path, default=None,
@@ -8905,7 +9035,10 @@ def main() -> None:
             "構成の再現・A/B比較用)。"
         ),
     )
-    a = ap.parse_args()
+    from src.exchange_event_cli import parse_exchange_event_args
+    a = parse_exchange_event_args(ap)
+    if a.exchange_event_e16 and a.exchange_event_model_dir == Path("models/exchange_event_v1"):
+        a.exchange_event_model_dir = Path("models/exchange_event_v4")
     # 既定値解決 (collect_boards_lean.py と同じ方式): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず既定 True
     # (generate() 関数側の既定と一致させる)。
@@ -8928,7 +9061,28 @@ def main() -> None:
              enable_phase_calibration=a.enable_phase_calibration,
              enable_early_fire_reaction=a.enable_early_fire_reaction,
              enable_exchange_event_update=a.exchange_event_update,
-             exchange_event_model_dir=a.exchange_event_model_dir,
+              exchange_event_model_dir=a.exchange_event_model_dir,
+              exchange_event_live_count=a.exchange_event_live_count,
+              exchange_event_e16=a.exchange_event_e16,
+              exchange_event_death_guard=a.exchange_event_death_guard,
+              landing_counter_response=a.landing_counter_response,
+              landing_hands_spec=a.landing_hands_spec,
+              death_candidate_guard=a.death_candidate_guard,
+              death_formula_guard=a.death_formula_guard,
+              multi_landing_death=a.multi_landing_death,
+              landing_state_safety=a.landing_state_safety,
+              pending_ledger=a.pending_ledger, color_score_safety=a.color_score_safety,
+              completion_recovery=a.completion_recovery, midchain_completion=a.midchain_completion,
+              death_pending_ledger=a.death_pending_ledger, hidden_row_death=a.hidden_row_death,
+              midchain_single_observation=a.midchain_single_observation,
+              prefire_candidates=a.prefire_candidates,
+              prefire_snapshot=a.prefire_snapshot,
+              hidden_row_belief=a.hidden_row_belief,
+              prefire_stage_timeout=a.prefire_stage_timeout,
+              prefire_stage_timeout_only=a.prefire_stage_timeout_only,
+              prefire_origin_guard=a.prefire_origin_guard,
+              confirmed_death_hold=a.confirmed_death_hold,
+              landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,
              exchange_event_record_path=a.exchange_event_record,
              review_data_panel=a.review_data_panel,

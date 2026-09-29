@@ -1,0 +1,12 @@
+{
+  "reused_from": "logs/e16/on/renders/q_7gc4TgFig/on",
+  "sha256": {
+    "display.npz": "c1173c16d5cd3e9907bc6375c80e20ec9ddc45e978cf3c584c0e66c8f5fec1dd",
+    "events.jsonl": "39b211bf749b030192ff1bff1ec51df3e701777b0a30c9a6a9a9a027de74476f",
+    "events.diagnostics.json": "b9edadd51be2381bfb30904da720e4e8458d8b4c3ceb50b224ff8e767275e749",
+    "status.json": "36baa3d23dbb81edea5902f2eca6147689b7dd0ef94f22c97c2d200b6d920d11"
+  },
+  "options": {
+    "e16": true
+  }
+}

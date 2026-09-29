@@ -1,0 +1,113 @@
+{
+  "state": "input_blocked",
+  "passed": null,
+  "off": {
+    "q_7gc4TgFig": {
+      "rows": 27000,
+      "columns": 13,
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "fcXG83vInDY": {
+      "rows": 27000,
+      "columns": 13,
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "mia8KCjr52g": {
+      "rows": 27000,
+      "columns": 13,
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "zenchi": {
+      "rows": 25398,
+      "columns": 13,
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "review": {
+      "rows": 5948,
+      "columns": 13,
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    }
+  },
+  "baseline": {
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5079773295899405,
+      "auc": 0.7641503160545393
+    },
+    "zenchi": {
+      "hits": 7664,
+      "frames": 8333,
+      "agreement": 0.9197167886715468
+    },
+    "deaths": {
+      "false": 1,
+      "total": 35,
+      "unlabelled": 0
+    }
+  },
+  "baseline_score": {
+    "n": 11402,
+    "p50": 0.0,
+    "p95": 6366.0,
+    "mean": 796.0017862673067
+  },
+  "baseline_prefire": {
+    "fires": 221,
+    "accepted": 79,
+    "origin_difference": 13
+  },
+  "preflight": {
+    "q_7gc4TgFig": {
+      "video_id": "q_7gc4TgFig_first_0_900_20260925_v1",
+      "match_source": null,
+      "match_ranges": 0,
+      "hold_available": false
+    },
+    "fcXG83vInDY": {
+      "video_id": "fcXG83vInDY_first_0_900_20260925_v1",
+      "match_source": null,
+      "match_ranges": 0,
+      "hold_available": false
+    },
+    "mia8KCjr52g": {
+      "video_id": "mia8KCjr52g_first_0_900_20260925_v1",
+      "match_source": null,
+      "match_ranges": 0,
+      "hold_available": false
+    },
+    "zenchi": {
+      "video_id": "video_zenchi_c0BQoMJwwQU",
+      "match_source": null,
+      "match_ranges": 0,
+      "hold_available": false
+    },
+    "review": {
+      "video_id": "video_zenchi_c0BQoMJwwQU",
+      "match_source": null,
+      "match_ranges": 0,
+      "hold_available": false
+    }
+  },
+  "enrichment": {
+    "q_7gc4TgFig.jsonl": {
+      "source": "logs/e31/records/q_7gc4TgFig.jsonl.gz",
+      "source_sha256": "3e47e7a3ca7eb9e2b4c9f19e961eea4f47b94fce6cb1826cd7cadf62dea6a79b",
+      "video": "/mnt/d/puyo_analyzer/videos/source/q_7gc4TgFig_first_0_900_20260925_v1.mp4",
+      "state": "blocked",
+      "frames_verified": 54,
+      "error": "1.800000000秒 1P: 認識再生不一致 ['confirmed_board']"
+    }
+  },
+  "on": null
+}

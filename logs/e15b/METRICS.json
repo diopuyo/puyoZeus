@@ -1,0 +1,58 @@
+{
+  "cohort": {
+    "rows": 84445,
+    "videos": 144,
+    "exchanges": 21466,
+    "future_score_rows": 2458,
+    "rows_sha256": "b5a6f38b2689509e00f40dd880b7dbfc25ebb087db52d7d4eed72a29d767d440",
+    "unchanged": "D・arrival・行・重み・観測得点"
+  },
+  "folds": 15,
+  "predictions": 253335,
+  "metrics": {
+    "live_observed": {
+      "S3_prime": {
+        "auc": 0.7019269838890213,
+        "log_loss": 0.6246427329203246,
+        "weighted_auc": 0.7080658818877754,
+        "weighted_log_loss": 0.6162120300246701
+      },
+      "S3_prime_light": {
+        "auc": 0.7020251976514068,
+        "log_loss": 0.6238263478282766,
+        "weighted_auc": 0.7084616474886645,
+        "weighted_log_loss": 0.6154345547397171
+      }
+    },
+    "frozen_observed": {
+      "S3_prime": {
+        "auc": 0.6755320816640452,
+        "log_loss": 0.6433066373261446,
+        "weighted_auc": 0.6824931293024616,
+        "weighted_log_loss": 0.63556645766954
+      },
+      "S3_prime_light": {
+        "auc": 0.679091128535248,
+        "log_loss": 0.6400172000269392,
+        "weighted_auc": 0.6846411729642075,
+        "weighted_log_loss": 0.6335339538123509
+      }
+    },
+    "frozen_endpoint": {
+      "S3_prime": {
+        "auc": 0.6771936906270228,
+        "log_loss": 0.6424104450754812,
+        "weighted_auc": 0.6836099311640169,
+        "weighted_log_loss": 0.6349892646891471
+      },
+      "S3_prime_light": {
+        "auc": 0.6803302080125264,
+        "log_loss": 0.6403321754930483,
+        "weighted_auc": 0.6851297769999646,
+        "weighted_log_loss": 0.6339298464597871
+      }
+    }
+  },
+  "E15_verdict": "FAIL維持・本比較は補足",
+  "endpoint_warning": "未来の後続発火を含む参考条件。学習・推論への採用不可"
+}

@@ -82,8 +82,9 @@ class ExchangeRecord:
 class ExchangeEventTracker:
     """同一フレームの両側発火を先に登録し、全参加連鎖の確定を待つ。"""
 
-    def __init__(self, models: ExchangeModels) -> None:
+    def __init__(self, models: ExchangeModels, live_count: bool = False) -> None:
         self.models = models
+        self.live_count = live_count
         self.records: list[ExchangeRecord] = []
         self._next_exchange_id = 1
         self.current: ExchangeRecord | None = None
@@ -210,6 +211,8 @@ class ExchangeEventTracker:
                         t_sec: float) -> None:
         """参加側と最新確定盤面で再評価し、既存連鎖の確定送り量を引き継ぐ。"""
         if getattr(self.models, "count_features", False):
+            if getattr(self, "live_count", False):
+                self._provisional_key, self._s3_sec = None, None
             return  # F1bは区間の発火前観測と最初の発火側を凍結する。
         firing = tuple(any(c.side == side for c in self.current.chains) for side in SIDE_LABELS)
         try:
@@ -506,17 +509,19 @@ class ExchangeEventTracker:
                    and t_sec - c.end_signal_sec + TIME_EPSILON_SEC >= S3_END_QUIET_SEC
                    for c in self.current.chains)
 
-    def refresh_features(self, static: StaticInput, sides: np.ndarray) -> None:
+    def refresh_features(self, static: StaticInput, sides: np.ndarray,
+                         count_observation: CountObservation | None = None) -> None:
         """現在の確定盤面の特徴へ差し替え、変化があれば次の評価を更新する。"""
-        if getattr(self.models, "count_features", False):
+        if getattr(self.models, "count_features", False) and count_observation is None:
             return
         if self.firing is None or self.current is None:
             return
         old = self.firing
         if (np.array_equal(old.static.d_features, static.d_features, equal_nan=True)
-                and np.array_equal(old.prefire_sides, sides, equal_nan=True)):
+                and np.array_equal(old.prefire_sides, sides, equal_nan=True)
+                and count_observation is None):
             return
-        self.firing = FiringInput(static, sides, old.firing)
+        self.firing = FiringInput(static, sides, old.firing, count_observation)
         self._contexts[self.current.exchange_id] = (self.firing, self._score_elapsed)
         self._provisional_key, self._s3_sec = None, None
 
@@ -534,6 +539,8 @@ class ExchangeEventTracker:
             return
         scores = tuple(c.provisional_score for c in chains)
         key = tuple((c.chain_id, score) for c, score in zip(chains, scores))
+        if getattr(self, 'hidden_row_belief', None) is not None:
+            key += (('hidden_row_revision', self.hidden_row_belief.revision),)
         if key == self._provisional_key:
             return
         totals = np.array([sum(score for c, score in zip(chains, scores) if c.side == side)
@@ -590,6 +597,9 @@ class ExchangeEventTracker:
         """イベントの勝率を保持し、表示値と計装値を一致させる。"""
         try:
             probability = evaluate_exchange_event(event, self.models)
+            if source == 'S3_provisional' and getattr(self, 'hidden_row_belief', None) is not None:
+                from src.exchange_hidden_row_probability import weighted_s3
+                probability = weighted_s3(self.hidden_row_belief, self, event)
         except (ValueError, TypeError, FloatingPointError) as error:
             self.missing_input("evaluation: " + str(error), t_sec, source)
             return False
@@ -608,7 +618,14 @@ class ExchangeEventTracker:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as stream:
             for record in self.records:
-                stream.write(json.dumps(asdict(record), ensure_ascii=False, allow_nan=False) + "\n")
+                value = asdict(record)
+                if hasattr(self, "layer_rows"):
+                    value["layers"] = [r for r in self.layer_rows if r["exchange_id"] == record.exchange_id]
+                stream.write(json.dumps(value, ensure_ascii=False, allow_nan=False) + "\n")
+        if hasattr(self, "layer_rows"):
+            with path.with_suffix(".layers.jsonl").open("w", encoding="utf-8") as stream:
+                for row in self.layer_rows:
+                    stream.write(json.dumps(row, ensure_ascii=False, allow_nan=False)+"\n")
         counts = {reason: sum(row["reason"] == reason for row in self.diagnostics)
                   for reason in {row["reason"] for row in self.diagnostics}}
         path.with_suffix(".diagnostics.json").write_text(json.dumps(

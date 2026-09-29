@@ -1,0 +1,9 @@
+{
+  "candidate": false,
+  "video_created": false,
+  "reason": "q_log_loss_and_scene_deadline_failed",
+  "accepted_candidate": "E22 / 541b44a",
+  "planned_review_dir": "logs/review_zenchi_g41_43_e25/",
+  "planned_mobile_video": "D:/puyo_analyzer/videos/review/zenchi_g41-43_e25_mobile.mp4",
+  "production_config_changed": false
+}

@@ -12,6 +12,7 @@ import numpy as np
 from src.exchange_event_evaluator import FileExchangeModels, StaticInput
 from src.exchange_event_overlay import ExchangeEventOverlay
 from src.exchange_event_record import read_records, static_key
+from src.exchange_event_cli import parse_exchange_event_args
 
 
 def static_builder(record: Path) -> Any:
@@ -48,7 +49,21 @@ def display_row(overlay: ExchangeEventOverlay, inputs: tuple, context: dict,
         score1=scores[0], score2=scores[1])
 
 
-def replay(record: Path, out: Path, model_dir: Path | None = None) -> dict:
+def replay(record: Path, out: Path, model_dir: Path | None = None,
+           live_count: bool = False, observer: Any = None, e16: bool = False,
+           count_sync: bool = False, death_guard: bool = False,
+           evaluation_layers: bool = False, completion_check: bool = False,
+           landing_counter_response: bool = False, confirmed_death_hold: bool = False,
+           landing_counter_prob: bool = False, landing_hands_spec: bool = False,
+           death_candidate_guard: bool = False, death_formula_guard: bool = False,
+           multi_landing_death: bool = False, landing_state_safety: bool = False,
+           pending_ledger: bool = False, color_score_safety: bool = False,
+           completion_recovery: bool = False, midchain_completion: bool = False,
+           death_pending_ledger: bool = False, hidden_row_death: bool = False,
+           midchain_single_observation: bool = False, prefire_candidates: bool = False,
+           prefire_snapshot: bool = False, hidden_row_belief: bool = False,
+           prefire_stage_timeout: bool = False, prefire_stage_timeout_only: bool = False,
+           prefire_origin_guard: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -57,16 +72,41 @@ def replay(record: Path, out: Path, model_dir: Path | None = None) -> dict:
     start = time.perf_counter()
     stream = read_records(record)
     header = next(stream)
-    directory = model_dir or Path(header["model_dir"])
+    match_gate = None
+    if prefire_origin_guard:
+        from src.exchange_prefire_origin import recorded_match_gate
+        match_gate = recorded_match_gate(header, Path(__file__).resolve().parents[1])
+    experimental = count_sync or death_guard or evaluation_layers or completion_check
+    default_model = ("models/exchange_event_v4" if e16 or count_sync else
+                     "models/exchange_event_v3" if experimental else header["model_dir"])
+    directory = model_dir or Path(default_model)
     overlay = ExchangeEventOverlay(FileExchangeModels.load(directory, lightweight=True),
         static_builder(record), _ExchangeEventEndSignals, FileM0Predictor(directory / "M0"),
-        per_side_settled=header["per_side_settled"])
+        per_side_settled=header["per_side_settled"], live_count=live_count, e16=e16,
+        count_sync=count_sync, death_guard=death_guard, evaluation_layers=evaluation_layers,
+        completion_check=completion_check, landing_counter_response=landing_counter_response,
+        confirmed_death_hold=confirmed_death_hold, landing_counter_prob=landing_counter_prob,
+        landing_hands_spec=landing_hands_spec, death_candidate_guard=death_candidate_guard,
+        death_formula_guard=death_formula_guard, multi_landing_death=multi_landing_death,
+        landing_state_safety=landing_state_safety, pending_ledger=pending_ledger,
+        color_score_safety=color_score_safety, completion_recovery=completion_recovery,
+        midchain_completion=midchain_completion,
+        death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death,
+        midchain_single_observation=midchain_single_observation, prefire_candidates=prefire_candidates,
+        prefire_snapshot=prefire_snapshot, hidden_row_belief=hidden_row_belief,
+        prefire_stage_timeout=prefire_stage_timeout, prefire_stage_timeout_only=prefire_stage_timeout_only,
+        prefire_origin_guard=prefire_origin_guard, prefire_match_gate=match_gate)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     for item in stream:
         if item["kind"] == "update":
             inputs = item["args"]
+            if (e16 or death_guard or evaluation_layers or completion_check or confirmed_death_hold) and not getattr(
+                    inputs[0], "terminal_evidence_available", False):
+                raise ValueError("E16/E17再生には元映像の死亡確認信号を補完した記録が必要")
             overlay.update(*inputs)
+            if observer is not None:
+                observer(overlay, inputs)
             _exchange_display(overlay, 0.0, 0.5, smoothing, inputs[3])
             frames += 1
         elif item["kind"] == "display":
@@ -77,8 +117,21 @@ def replay(record: Path, out: Path, model_dir: Path | None = None) -> dict:
             raise ValueError("記録フレーム数が不一致")
     save_display_timeline(out / "display.npz", header["video_id"], rows)
     overlay.tracker.save(out / "events.jsonl")
+    if overlay._origin_guard is not None:
+        from scripts.run_e3_exchange_eval_20260926 import save_json
+        save_json(out / 'origin_guard_audit.json', overlay._origin_guard.summary())
+    if overlay._midchain is not None:
+        from scripts.run_e3_exchange_eval_20260926 import save_json
+        save_json(out / 'midchain_audit.json', overlay._midchain.summary())
+    if overlay._hidden_death is not None:
+        from scripts.run_e3_exchange_eval_20260926 import save_json
+        save_json(out / 'hidden_death_audit.json', overlay._hidden_death.summary())
+    if overlay._prefire is not None:
+        from scripts.run_e3_exchange_eval_20260926 import save_json
+        save_json(out / 'prefire_audit.json', overlay._prefire.summary())
     status = dict(state="completed", frames=frames, display_frames=len(rows),
-                  elapsed_seconds=time.perf_counter() - start, record_bytes=record.stat().st_size)
+                  elapsed_seconds=time.perf_counter() - start, record_bytes=record.stat().st_size,
+                  live_count=live_count, model_dir=str(directory))
     (out / "status.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
     return status
 
@@ -109,10 +162,50 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("record", type=Path)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--model-dir", type=Path)
+    parser.add_argument("--model-dir", "--exchange-event-model-dir", type=Path)
+    parser.add_argument("--exchange-event-update", action="store_true",
+                        help="描画と共通の指定（再生では常に撃ち合い評価を実行）")
+    parser.add_argument("--exchange-event-live-count", action="store_true", default=False)
+    parser.add_argument("--exchange-event-e16", action="store_true", default=False)
+    parser.add_argument("--landing-counter-response", action="store_true", default=False)
+    parser.add_argument("--landing-hands-spec", action="store_true", default=False)
+    parser.add_argument("--death-candidate-guard", action="store_true", default=False)
+    parser.add_argument("--death-formula-guard", action="store_true", default=False)
+    parser.add_argument("--multi-landing-death", action="store_true", default=False)
+    parser.add_argument("--prefire-origin-guard", action="store_true", default=False)
+    parser.add_argument("--landing-state-safety", action="store_true", default=False)
+    for name in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
+                 "death-pending-ledger", "hidden-row-death", "midchain-single-observation", "prefire-candidates", "prefire-snapshot", "hidden-row-belief", "prefire-stage-timeout", "prefire-stage-timeout-only"):
+        parser.add_argument("--" + name, action="store_true", default=False)
+    parser.add_argument("--confirmed-death-hold", action="store_true", default=False)
+    parser.add_argument("--landing-counter-prob", action="store_true", default=False)
+    for name in ("count-sync", "death-guard", "evaluation-layers", "completion-check"):
+        parser.add_argument("--exchange-event-" + name, action="store_true", default=False)
     parser.add_argument("--compare", type=Path)
-    options = parser.parse_args()
-    result = replay(options.record, options.out, options.model_dir)
+    options = parse_exchange_event_args(parser)
+    result = replay(options.record, options.out, options.model_dir, options.exchange_event_live_count,
+                    e16=options.exchange_event_e16, count_sync=options.exchange_event_count_sync,
+                    death_guard=options.exchange_event_death_guard,
+                    evaluation_layers=options.exchange_event_evaluation_layers,
+                    completion_check=options.exchange_event_completion_check,
+                    landing_counter_response=options.landing_counter_response,
+                    confirmed_death_hold=options.confirmed_death_hold,
+                    landing_counter_prob=options.landing_counter_prob,
+                    landing_hands_spec=options.landing_hands_spec,
+                    death_candidate_guard=options.death_candidate_guard,
+                    death_formula_guard=options.death_formula_guard,
+                    multi_landing_death=options.multi_landing_death,
+                    landing_state_safety=options.landing_state_safety,
+                    pending_ledger=options.pending_ledger, color_score_safety=options.color_score_safety,
+                    completion_recovery=options.completion_recovery,
+                    midchain_completion=options.midchain_completion,
+                    death_pending_ledger=options.death_pending_ledger, hidden_row_death=options.hidden_row_death,
+                    midchain_single_observation=options.midchain_single_observation,
+                    prefire_candidates=options.prefire_candidates, prefire_snapshot=options.prefire_snapshot,
+                    hidden_row_belief=options.hidden_row_belief,
+                    prefire_stage_timeout=options.prefire_stage_timeout,
+                    prefire_stage_timeout_only=options.prefire_stage_timeout_only,
+                    prefire_origin_guard=options.prefire_origin_guard)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

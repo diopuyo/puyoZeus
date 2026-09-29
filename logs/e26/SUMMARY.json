@@ -1,0 +1,67 @@
+{
+  "q_worsened": [
+    "ledger",
+    "safety",
+    "recovery"
+  ],
+  "selected": [
+    "color",
+    "multi"
+  ],
+  "midchain": {
+    "candidates": 15,
+    "accepted": 8,
+    "accepted_chains": 7,
+    "next_mismatch": 1,
+    "final_mismatch": 0,
+    "final_unresolved": 1
+  },
+  "metrics": {
+    "variant": "on",
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5107778391393154,
+      "auc": 0.7624758285957381
+    },
+    "zenchi": {
+      "hits": 7079,
+      "frames": 8333,
+      "agreement": 0.8495139805592223
+    },
+    "deaths": {
+      "false": 3,
+      "total": 37,
+      "unlabelled": 0
+    },
+    "scenes": {
+      "prefire_frames": 62,
+      "prefire_mean": 0.2702919012720453,
+      "margin_sign_flips": 3,
+      "terminal_frames": 45,
+      "terminal_min": 1.0
+    },
+    "gates": {
+      "q": true,
+      "zenchi": true,
+      "deaths": false,
+      "scene": false
+    },
+    "candidate": false,
+    "scene": {
+      "first_sec": 2771.25,
+      "deadline_sec": 2766.0,
+      "scenes": 1,
+      "baseline_first_sec": 2771.25
+    },
+    "midchain_three_videos": {
+      "candidates": 15,
+      "accepted": 8,
+      "accepted_chains": 7,
+      "next_mismatch": 1,
+      "final_mismatch": 0,
+      "final_unresolved": 1
+    }
+  },
+  "video_requested_if_pass": true
+}

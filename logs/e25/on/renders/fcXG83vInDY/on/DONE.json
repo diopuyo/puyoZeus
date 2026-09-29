@@ -1,0 +1,17 @@
+{
+  "options": {
+    "death_guard": true,
+    "confirmed_death_hold": true,
+    "death_formula_guard": true,
+    "multi_landing_death": true,
+    "landing_state_safety": true
+  },
+  "model": "v3",
+  "state": "completed",
+  "frames": 27000,
+  "display_frames": 27000,
+  "elapsed_seconds": 321.9853797949618,
+  "record_bytes": 1149419,
+  "live_count": true,
+  "model_dir": "models/exchange_event_v3"
+}

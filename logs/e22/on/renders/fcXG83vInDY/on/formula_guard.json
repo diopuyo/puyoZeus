@@ -1,0 +1,38 @@
+[
+  {
+    "game": 0,
+    "side": "2P",
+    "trigger_sec": 159.96666666666667,
+    "held_sec": 160.0,
+    "deadline_sec": 160.46666666666667,
+    "score_before": null,
+    "board_sec": 159.96666666666667,
+    "outcome": "discarded_timeout",
+    "resolved_sec": 160.5,
+    "wait_sec": 0.5
+  },
+  {
+    "game": 0,
+    "side": "1P",
+    "trigger_sec": 160.13333333333333,
+    "held_sec": 160.16666666666666,
+    "deadline_sec": 160.63333333333333,
+    "score_before": null,
+    "board_sec": 160.13333333333333,
+    "outcome": "discarded_timeout",
+    "resolved_sec": 160.66666666666666,
+    "wait_sec": 0.5
+  },
+  {
+    "game": 0,
+    "side": "1P",
+    "trigger_sec": 166.13333333333333,
+    "held_sec": 166.16666666666666,
+    "deadline_sec": 166.63333333333333,
+    "score_before": null,
+    "board_sec": 166.13333333333333,
+    "outcome": "discarded_timeout",
+    "resolved_sec": 166.66666666666666,
+    "wait_sec": 0.5
+  }
+]

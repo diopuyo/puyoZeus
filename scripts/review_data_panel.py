@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 from src.board import BOARD_COLS
 from src.exchange_event_features import D_COLUMNS, SIDE_COLUMNS
 from src.exchange_event_landing import logit_mean
+from src.exchange_event_layers import LAYER_COLUMNS
 from src.scoring import score_to_ojama
 
 REFERENCE_WIDTH = 1280
@@ -44,6 +45,8 @@ PANEL_D_COLUMNS = (
 PROJECTION_FIELDS = (
     "incoming", "hands", "near_future_send", "required_cancel", "resolving_send",
     "overflow_rows", "verified_attack", "optimistic_send",
+    "response_send", "response_incoming", "response_surplus", "response_board_sec",
+    "counter_probability", "counter_probability_reasons",
 )
 SIDE_FIELDS = (
     "state", "confirmed_sec", "chain_id", "exchange_step", "chain_count",
@@ -58,6 +61,10 @@ COMMON_FIELDS = (
     *(f"p1_{name}" for name in PROBABILITY_SOURCES), "p1_landing_gfe",
     "p1_combined", "p1_selected", "p1_display", "display_adv",
     "projection_sec", "death_evidence_sec", "prefire_sec",
+    *LAYER_COLUMNS,
+    "p1_landing_no_response", "p1_landing_response", "landing_response_selected",
+    "landing_response_layer",
+    "p1_landing_weighted",
 )
 CSV_FIELDS = (*COMMON_FIELDS, *(f"{side}_{name}" for side in SIDE_LABELS for name in SIDE_FIELDS))
 
@@ -197,6 +204,7 @@ def build_review_row(overlay: Any, result: Any, snapshot: Any, frame_index: int,
     projection = landing.last if record and landing.identity == (game_idx, record.exchange_id) else None
     projection = projection or {}
     row = dict.fromkeys(CSV_FIELDS)
+    row.update({name: getattr(tracker, "layer_eval", {}).get(name) for name in LAYER_COLUMNS})
     row.update(frame_index=frame_index, t_sec=t_sec, game_idx=game_idx, source=tracker.source,
                exchange_id=record.exchange_id if record else None,
                exchange_step=len(record.chains) if record else 0,
@@ -205,10 +213,16 @@ def build_review_row(overlay: Any, result: Any, snapshot: Any, frame_index: int,
                projection_sec=projection.get("t_sec"),
                death_evidence_sec=(landing.death or {}).get("t_sec"),
                prefire_sec=record.trigger_sec if record else None)
+    row['source'] += _prediction_label(overlay, record, game_idx)
     for value in record.values if record else ():
         if value["source"] in PROBABILITY_SOURCES:
             row[f"p1_{value['source']}"] = value["p1"]
     row["p1_landing_gfe"] = projection.get("gfe_p1")
+    row["p1_landing_weighted"] = projection.get("gfe_weighted_p1")
+    row.update(p1_landing_no_response=projection.get("gfe_no_response_p1"),
+               p1_landing_response=projection.get("gfe_response_p1"),
+               landing_response_selected=projection.get("response_selected"),
+               landing_response_layer=projection.get("response_layer"))
     row["p1_combined"] = (logit_mean(projection["base_p1"], projection["gfe_p1"])
                           if projection else tracker.probability)
     sides = [_side_data(overlay, result, snapshot, record, projection, idx) for idx in range(2)]
@@ -217,6 +231,20 @@ def build_review_row(overlay: Any, result: Any, snapshot: Any, frame_index: int,
     for label, values in zip(SIDE_LABELS, sides):
         row.update({f"{label}_{key}": value for key, value in values.items()})
     return row
+
+
+def _prediction_label(overlay: Any, record: Any, game_idx: int) -> str:
+    """現在層・死亡観測と区別し、候補に基づく予測を画面とCSVへ明示する。"""
+    if record is None or overlay.tracker.source in ('G_fe', 'confirmed_death', 'E16_current'):
+        return ''
+    prefire = getattr(overlay, '_prefire', None)
+    if prefire is not None and prefire.provenance(record.chains):
+        if prefire.provenance(record.chains)[0].get('method') == 'prefire_snapshot':
+            return '（発火前盤面から予測）'
+        return '（発火候補予測込み）'
+    midchain = getattr(overlay, '_midchain', None)
+    return ('（途中完走予測込み）' if midchain is not None
+            and midchain.provenance(game_idx, record.chains) else '')
 
 
 def _add_design_features(sides: list[dict], overlay: Any, snapshot: Any,

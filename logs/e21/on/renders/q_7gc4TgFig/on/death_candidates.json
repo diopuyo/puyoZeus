@@ -1,0 +1,235 @@
+[
+  {
+    "game": 0,
+    "side": "1P",
+    "start_sec": 66.43333333333334,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 70.83333333333333
+  },
+  {
+    "game": 0,
+    "side": "2P",
+    "start_sec": 66.43333333333334,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 84.73333333333333
+  },
+  {
+    "game": 0,
+    "side": "1P",
+    "start_sec": 71.4,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 72.0
+  },
+  {
+    "game": 0,
+    "side": "1P",
+    "start_sec": 72.9,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 78.96666666666667
+  },
+  {
+    "game": 0,
+    "side": "1P",
+    "start_sec": 79.33333333333333,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 85.36666666666666
+  },
+  {
+    "game": 0,
+    "side": "1P",
+    "start_sec": 85.8,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 124.66666666666667
+  },
+  {
+    "game": 0,
+    "side": "2P",
+    "start_sec": 86.03333333333333,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 108.76666666666667
+  },
+  {
+    "game": 0,
+    "side": "1P",
+    "start_sec": 125.13333333333334,
+    "outcome": "cleared",
+    "held": [
+      {
+        "t_sec": 127.76666666666667,
+        "trigger_sec": 127.73333333333333,
+        "mechanism": "baseline"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 128.9
+  },
+  {
+    "game": 0,
+    "side": "2P",
+    "start_sec": 126.93333333333334,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 127.8
+  },
+  {
+    "game": 1,
+    "side": "1P",
+    "start_sec": 173.5,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 175.0
+  },
+  {
+    "game": 2,
+    "side": "1P",
+    "start_sec": 232.76666666666668,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 236.03333333333333
+  },
+  {
+    "game": 4,
+    "side": "2P",
+    "start_sec": 342.26666666666665,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 344.26666666666665
+  },
+  {
+    "game": 5,
+    "side": "2P",
+    "start_sec": 385.53333333333336,
+    "outcome": "cleared",
+    "held": [
+      {
+        "t_sec": 386.43333333333334,
+        "trigger_sec": 386.43333333333334,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 386.73333333333335,
+        "trigger_sec": 386.73333333333335,
+        "mechanism": "formula_read"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 388.1
+  },
+  {
+    "game": 5,
+    "side": "2P",
+    "start_sec": 391.06666666666666,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 396.06666666666666
+  },
+  {
+    "game": 6,
+    "side": "1P",
+    "start_sec": 441.06666666666666,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 443.23333333333335
+  },
+  {
+    "game": 7,
+    "side": "1P",
+    "start_sec": 495.8,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 497.96666666666664
+  },
+  {
+    "game": 7,
+    "side": "1P",
+    "start_sec": 513.4333333333333,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 515.0
+  },
+  {
+    "game": 8,
+    "side": "2P",
+    "start_sec": 581.8666666666667,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 583.7
+  },
+  {
+    "game": 9,
+    "side": "1P",
+    "start_sec": 660.6,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 661.2666666666667
+  },
+  {
+    "game": 10,
+    "side": "1P",
+    "start_sec": 692.8666666666667,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 694.2666666666667
+  },
+  {
+    "game": 11,
+    "side": "1P",
+    "start_sec": 743.7333333333333,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 745.2666666666667
+  },
+  {
+    "game": 12,
+    "side": "2P",
+    "start_sec": 785.2333333333333,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 786.8
+  },
+  {
+    "game": 13,
+    "side": "1P",
+    "start_sec": 850.9333333333333,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 851.5666666666667
+  },
+  {
+    "game": 14,
+    "side": "2P",
+    "start_sec": 896.8,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 898.7
+  }
+]

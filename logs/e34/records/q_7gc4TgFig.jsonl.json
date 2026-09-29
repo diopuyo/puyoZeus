@@ -1,0 +1,8 @@
+{
+  "source": "logs/e31/records/q_7gc4TgFig.jsonl.gz",
+  "source_sha256": "3e47e7a3ca7eb9e2b4c9f19e961eea4f47b94fce6cb1826cd7cadf62dea6a79b",
+  "video": "/mnt/d/puyo_analyzer/videos/source/q_7gc4TgFig_first_0_900_20260925_v1.mp4",
+  "state": "blocked",
+  "frames_verified": 54,
+  "error": "1.800000000秒 1P: 認識再生不一致 ['confirmed_board']"
+}

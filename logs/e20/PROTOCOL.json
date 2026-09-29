@@ -1,0 +1,23 @@
+{
+  "options": {
+    "death_guard": true,
+    "confirmed_death_hold": true,
+    "landing_counter_response": true,
+    "landing_hands_spec": true
+  },
+  "q_max": 0.5131,
+  "zenchi_min": 0.8235,
+  "max_false": 1,
+  "death_denominator": 28,
+  "scene_min": 0.2703,
+  "scene_rise": "前半31行 < 後半31行",
+  "prefire": [
+    2612.0,
+    2614.08
+  ],
+  "recent_intervals": 5,
+  "animation": "過去の同連鎖数の発火→NEXT立上り中央値",
+  "next_confirmation": "NEXT2→NEXT1の繰り上がりを2観測確認。生ROI移動だけでは確定しない",
+  "missing": "未観測時は保証できる1手だけ。固定秒数で補完しない",
+  "baseline": "E15+②+死亡確定表示 / ba614f7"
+}

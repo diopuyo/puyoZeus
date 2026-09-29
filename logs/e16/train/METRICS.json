@@ -1,0 +1,21 @@
+{
+  "metrics": {
+    "S3_prime": {
+      "auc": 0.6870180914621511,
+      "log_loss": 0.6344153428106803,
+      "weighted_auc": 0.6942483544330469,
+      "weighted_log_loss": 0.6277079337503294
+    },
+    "S3_prime_light": {
+      "auc": 0.685126602615542,
+      "log_loss": 0.635147763088931,
+      "weighted_auc": 0.693706522695158,
+      "weighted_log_loss": 0.6278498578355192
+    }
+  },
+  "rows": 84445,
+  "folds": 15,
+  "predictions": 253335,
+  "threshold": 0.702,
+  "passed": false
+}

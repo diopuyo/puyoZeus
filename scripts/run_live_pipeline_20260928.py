@@ -20,7 +20,7 @@ from urllib.request import urlopen
 
 import numpy as np
 
-from scripts.measure_realtime_breakdown_20260928 import DEFAULT_STATUS, DEFAULT_VIDEO, build_command
+from scripts.measure_realtime_breakdown_20260928 import DEFAULT_STATUS, DEFAULT_VIDEO, build_command as legacy_command
 from src.phase_j.live_bridge import RecognitionBridge, RecognitionNotice, build_live_generate, notice_digest, QUEUE_CAPACITY
 from src.phase_j.live_publish import LivePublisher
 from src.phase_j.live_layers import evaluation_layers
@@ -36,6 +36,11 @@ PROBE_READY_SEC = 10
 PROBE_JOIN_SEC = 2
 
 
+def build_command(options: argparse.Namespace) -> list[str]:
+    """ライブは描画CLIと共通の実行時取得関数から本番構成を適用する。"""
+    return [*legacy_command(options), '--production-exchange-event']
+
+
 def save_json(path: Path, data: Any) -> None:
     from src.phase_j.live_spool import json_default
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -45,6 +50,10 @@ def save_json(path: Path, data: Any) -> None:
 
 def asset_hashes() -> dict[str, str]:
     """実行設定とモデル資産をDTOの再現用IDへ固定する。"""
+    import shlex
+    from src import production_config
+    flags = shlex.split(production_config.exchange_event_flags())
+    model = flags[flags.index('--exchange-event-model-dir')+1]
     groups = dict(app_build_id=['scripts/run_live_pipeline_20260928.py',
         'scripts/visualize_advantage_overlay.py', 'src/phase_j/live_bridge.py',
         'src/phase_j/live_counter.py', 'src/phase_j/live_process.py', 'src/phase_j/live_publish.py',
@@ -62,7 +71,7 @@ def asset_hashes() -> dict[str, str]:
         recognition_model_hash=['models/cnn_phase_b_large_v2.pt', 'models/cnn_global_best.pt',
                                 'models/cnn_best.pt'],
         recognition_config_hash=['src/production_config.py'],
-        prediction_model_hash=['models/exchange_event_v2/manifest.json',
+        prediction_model_hash=[str(Path(model)/'manifest.json'),
                                'models/exchange_event_v1/manifest.json',
                                'models/exchange_event_v1/M0/manifest.json'],
         calibration_hash=['models/calibration_video01.json'])

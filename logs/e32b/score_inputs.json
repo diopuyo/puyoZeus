@@ -1,0 +1,3746 @@
+{
+  "zenchi": [
+    {
+      "t": 3089.016666666667,
+      "formula_total": 420,
+      "score": 688,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3089.2166666666667,
+      "formula_total": 420,
+      "score": 688,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3089.25,
+      "formula_total": 420,
+      "score": 689,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3089.35,
+      "formula_total": 420,
+      "score": 689,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3089.6833333333334,
+      "formula_total": 420,
+      "score": 689,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3089.9166666666665,
+      "formula_total": null,
+      "score": null,
+      "visible": true,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3089.95,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3089.95,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3090.483333333333,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3090.516666666667,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3090.516666666667,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3090.8166666666666,
+      "formula_total": 40,
+      "score": 729,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3090.516666666667,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3090.9166666666665,
+      "formula_total": 40,
+      "score": 729,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3091.0833333333335,
+      "formula_total": 40,
+      "score": 729,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3091.116666666667,
+      "formula_total": 40,
+      "score": 729,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3091.25,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3091.2833333333333,
+      "formula_total": 540,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3091.2833333333333,
+        "chain_count": 2,
+        "total_score": 540,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3091.75,
+      "formula_total": 540,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3091.7833333333333,
+      "formula_total": 540,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3091.7833333333333,
+        "chain_count": 2,
+        "total_score": 540,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3091.95,
+      "formula_total": 540,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3091.983333333333,
+      "formula_total": 540,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3091.983333333333,
+        "chain_count": 2,
+        "total_score": 540,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3092.15,
+      "formula_total": 540,
+      "score": 1229,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3091.983333333333,
+        "chain_count": 2,
+        "total_score": 540,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3092.1833333333334,
+      "formula_total": 540,
+      "score": 1229,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3092.5833333333335,
+      "formula_total": 540,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3092.616666666667,
+      "formula_total": 1680,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3092.616666666667,
+        "chain_count": 3,
+        "total_score": 1680,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3093.1833333333334,
+      "formula_total": 1680,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3093.2166666666667,
+      "formula_total": 1680,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3093.2166666666667,
+        "chain_count": 3,
+        "total_score": 1680,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3093.483333333333,
+      "formula_total": 1680,
+      "score": 2369,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3093.2166666666667,
+        "chain_count": 3,
+        "total_score": 1680,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3093.983333333333,
+      "formula_total": 1680,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3093.2166666666667,
+        "chain_count": 3,
+        "total_score": 1680,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3094.016666666667,
+      "formula_total": 3380,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3093.2166666666667,
+        "chain_count": 4,
+        "total_score": 3380,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3094.616666666667,
+      "formula_total": 3380,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3094.65,
+      "formula_total": 3380,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3094.65,
+        "chain_count": 4,
+        "total_score": 3380,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3094.883333333333,
+      "formula_total": 3380,
+      "score": 4069,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3094.65,
+        "chain_count": 4,
+        "total_score": 3380,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3095.3166666666666,
+      "formula_total": 3380,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3094.65,
+        "chain_count": 4,
+        "total_score": 3380,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3095.35,
+      "formula_total": 6680,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3094.65,
+        "chain_count": 5,
+        "total_score": 6680,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3096.016666666667,
+      "formula_total": 6680,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3096.05,
+      "formula_total": 6680,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3096.05,
+        "chain_count": 5,
+        "total_score": 6680,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3096.2166666666667,
+      "formula_total": 6680,
+      "score": 7369,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3096.05,
+        "chain_count": 5,
+        "total_score": 6680,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3096.65,
+      "formula_total": 6680,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3096.05,
+        "chain_count": 5,
+        "total_score": 6680,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3096.6833333333334,
+      "formula_total": 10520,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3096.05,
+        "chain_count": 6,
+        "total_score": 10520,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3097.4166666666665,
+      "formula_total": 10520,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3097.45,
+      "formula_total": 10520,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3097.45,
+        "chain_count": 6,
+        "total_score": 10520,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3097.55,
+      "formula_total": 10520,
+      "score": 11209,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3097.45,
+        "chain_count": 6,
+        "total_score": 10520,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3098.016666666667,
+      "formula_total": 10520,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3097.45,
+        "chain_count": 6,
+        "total_score": 10520,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3098.05,
+      "formula_total": 17020,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3097.45,
+        "chain_count": 7,
+        "total_score": 17020,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3098.75,
+      "formula_total": 17020,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3098.7833333333333,
+      "formula_total": 17020,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3098.7833333333333,
+        "chain_count": 7,
+        "total_score": 17020,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3098.9166666666665,
+      "formula_total": 17020,
+      "score": 17709,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3098.7833333333333,
+        "chain_count": 7,
+        "total_score": 17020,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3099.383333333333,
+      "formula_total": 17020,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3098.7833333333333,
+        "chain_count": 7,
+        "total_score": 17020,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3099.4166666666665,
+      "formula_total": 25120,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3098.7833333333333,
+        "chain_count": 8,
+        "total_score": 25120,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3100.0833333333335,
+      "formula_total": 25120,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3100.116666666667,
+      "formula_total": 25120,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3100.116666666667,
+        "chain_count": 8,
+        "total_score": 25120,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3100.2833333333333,
+      "formula_total": 25120,
+      "score": 25809,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3100.116666666667,
+        "chain_count": 8,
+        "total_score": 25120,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3100.75,
+      "formula_total": 25120,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3100.116666666667,
+        "chain_count": 8,
+        "total_score": 25120,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3100.7833333333333,
+      "formula_total": 34820,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3100.116666666667,
+        "chain_count": 9,
+        "total_score": 34820,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3101.516666666667,
+      "formula_total": 34820,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3101.55,
+      "formula_total": 34820,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3101.55,
+        "chain_count": 9,
+        "total_score": 34820,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3101.65,
+      "formula_total": 34820,
+      "score": 35509,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3101.55,
+        "chain_count": 9,
+        "total_score": 34820,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3102.1833333333334,
+      "formula_total": 34820,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3101.55,
+        "chain_count": 9,
+        "total_score": 34820,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3102.2166666666667,
+      "formula_total": 43780,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3101.55,
+        "chain_count": 10,
+        "total_score": 43780,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3102.75,
+      "formula_total": 43780,
+      "score": null,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3101.55,
+        "chain_count": 10,
+        "total_score": 43780,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 3102.85,
+      "formula_total": 43780,
+      "score": null,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3102.883333333333,
+      "formula_total": 43780,
+      "score": null,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3102.95,
+      "formula_total": 43780,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3103.0833333333335,
+      "formula_total": 43780,
+      "score": 44469,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3103.6833333333334,
+      "formula_total": 43780,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3103.7166666666667,
+      "formula_total": 61980,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 11,
+        "total_score": 61980,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3104.5833333333335,
+      "formula_total": 61980,
+      "score": 62669,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 11,
+        "total_score": 61980,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3105.05,
+      "formula_total": 61980,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 11,
+        "total_score": 61980,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3105.0833333333335,
+      "formula_total": 73500,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 12,
+        "total_score": 73500,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3105.95,
+      "formula_total": 73500,
+      "score": 74189,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 12,
+        "total_score": 73500,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3106.4166666666665,
+      "formula_total": 73500,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 12,
+        "total_score": 73500,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3106.45,
+      "formula_total": 86300,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 13,
+        "total_score": 86300,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3107.35,
+      "formula_total": 86300,
+      "score": 86989,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 13,
+        "total_score": 86300,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3107.7833333333333,
+      "formula_total": 86300,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 13,
+        "total_score": 86300,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3107.8166666666666,
+      "formula_total": 100380,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3102.883333333333,
+        "chain_count": 14,
+        "total_score": 100380,
+        "mechanism": "formula"
+      }
+    },
+    {
+      "t": 3108.7166666666667,
+      "formula_total": 100380,
+      "score": 101069,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3108.75,
+      "formula_total": 100380,
+      "score": 101069,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3108.7833333333333,
+      "formula_total": 100380,
+      "score": 101069,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3108.95,
+      "formula_total": 100380,
+      "score": 101069,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3109.016666666667,
+      "formula_total": 100380,
+      "score": 101069,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3109.0833333333335,
+      "formula_total": 100380,
+      "score": 101069,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3109.15,
+      "formula_total": 100380,
+      "score": null,
+      "visible": true,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3109.1833333333334,
+      "formula_total": 115740,
+      "score": null,
+      "visible": true,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3109.2833333333333,
+      "formula_total": 115740,
+      "score": null,
+      "visible": true,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 2,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 427,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3109.383333333333,
+      "formula_total": 115740,
+      "score": null,
+      "visible": true,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3109.6833333333334,
+      "formula_total": 115740,
+      "score": null,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3109.95,
+      "formula_total": 115740,
+      "score": null,
+      "visible": true,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3110.0833333333335,
+      "formula_total": 115740,
+      "score": 116429,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 3108.75,
+        "chain_count": 2,
+        "total_score": 920,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 3110.116666666667,
+      "formula_total": 115740,
+      "score": 116429,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 3110.2166666666667,
+      "formula_total": 115740,
+      "score": 116429,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.2833333333333,
+      "formula_total": 115740,
+      "score": 116430,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.3166666666666,
+      "formula_total": 115740,
+      "score": 116431,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.35,
+      "formula_total": 115740,
+      "score": 116432,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.383333333333,
+      "formula_total": 115740,
+      "score": 116433,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.4166666666665,
+      "formula_total": 115740,
+      "score": 116434,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.45,
+      "formula_total": 115740,
+      "score": 116435,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.483333333333,
+      "formula_total": 115740,
+      "score": 116436,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.516666666667,
+      "formula_total": 115740,
+      "score": 116437,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.55,
+      "formula_total": 115740,
+      "score": 116438,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.5833333333335,
+      "formula_total": 115740,
+      "score": 116439,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.616666666667,
+      "formula_total": 115740,
+      "score": 116440,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.65,
+      "formula_total": 115740,
+      "score": 116442,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.8166666666666,
+      "formula_total": 115740,
+      "score": 116442,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3110.883333333333,
+      "formula_total": 115740,
+      "score": 116442,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.116666666667,
+      "formula_total": 115740,
+      "score": 116442,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.15,
+      "formula_total": 115740,
+      "score": 116443,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.1833333333334,
+      "formula_total": 115740,
+      "score": 116444,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.2166666666667,
+      "formula_total": 115740,
+      "score": 116445,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.25,
+      "formula_total": 115740,
+      "score": 116446,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.2833333333333,
+      "formula_total": 115740,
+      "score": 116447,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.3166666666666,
+      "formula_total": 115740,
+      "score": 116448,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.35,
+      "formula_total": 115740,
+      "score": 116449,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.383333333333,
+      "formula_total": 115740,
+      "score": 116450,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.4166666666665,
+      "formula_total": 115740,
+      "score": 116451,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.45,
+      "formula_total": 115740,
+      "score": 116452,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.516666666667,
+      "formula_total": 115740,
+      "score": 116453,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.9166666666665,
+      "formula_total": 115740,
+      "score": 116453,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.95,
+      "formula_total": 115740,
+      "score": 116454,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    },
+    {
+      "t": 3111.983333333333,
+      "formula_total": 115740,
+      "score": 116455,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 3,
+        "finalized_count_p2": 1,
+        "chain_total_score_p1": 100380,
+        "chain_total_score_p2": 100693
+      },
+      "event": null
+    }
+  ],
+  "q_7gc4TgFig": [
+    {
+      "t": 878.0,
+      "formula_total": null,
+      "score": 183,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.1666666666666,
+      "formula_total": null,
+      "score": 183,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.2,
+      "formula_total": null,
+      "score": 183,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.2666666666667,
+      "formula_total": null,
+      "score": 183,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.3333333333334,
+      "formula_total": null,
+      "score": 184,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.3666666666667,
+      "formula_total": null,
+      "score": 185,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.4,
+      "formula_total": null,
+      "score": 186,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.4333333333333,
+      "formula_total": null,
+      "score": 187,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.4666666666667,
+      "formula_total": null,
+      "score": 188,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.5,
+      "formula_total": null,
+      "score": 190,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.5666666666667,
+      "formula_total": null,
+      "score": 190,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.7666666666667,
+      "formula_total": null,
+      "score": null,
+      "visible": true,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 878.8,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 878.8,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 879.2666666666667,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 879.3,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 879.3,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 879.7,
+      "formula_total": 40,
+      "score": 230,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 880.0333333333333,
+      "formula_total": 40,
+      "score": 230,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 880.0666666666667,
+      "formula_total": 40,
+      "score": 230,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 880.0333333333333,
+        "chain_count": 2,
+        "total_score": 880,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 880.1,
+      "formula_total": 40,
+      "score": 230,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 880.0333333333333,
+        "chain_count": 2,
+        "total_score": 880,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 880.1333333333333,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 880.0333333333333,
+        "chain_count": 2,
+        "total_score": 880,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 880.1666666666666,
+      "formula_total": 880,
+      "score": null,
+      "visible": true,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 880.0333333333333,
+        "chain_count": 2,
+        "total_score": 880,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 880.7,
+      "formula_total": 880,
+      "score": null,
+      "visible": true,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 880.0333333333333,
+        "chain_count": 2,
+        "total_score": 880,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 880.7333333333333,
+      "formula_total": 880,
+      "score": null,
+      "visible": true,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 880.7666666666667,
+      "formula_total": 880,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 880.7666666666667,
+        "chain_count": 2,
+        "total_score": 880,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 881.0666666666667,
+      "formula_total": 880,
+      "score": 1070,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 880.7666666666667,
+        "chain_count": 2,
+        "total_score": 880,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 881.6,
+      "formula_total": 880,
+      "score": 1070,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 881.7666666666667,
+      "formula_total": 880,
+      "score": 1071,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 881.8,
+      "formula_total": 880,
+      "score": 1072,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 881.8333333333334,
+      "formula_total": 880,
+      "score": 1073,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 881.8666666666667,
+      "formula_total": 880,
+      "score": 1074,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 881.9,
+      "formula_total": 880,
+      "score": 1075,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 881.9333333333333,
+      "formula_total": 880,
+      "score": 1076,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 881.9666666666667,
+      "formula_total": 880,
+      "score": 1077,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 882.0,
+      "formula_total": 880,
+      "score": 1079,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 882.3333333333334,
+      "formula_total": 880,
+      "score": 1079,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 882.5,
+      "formula_total": 880,
+      "score": 1080,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 882.5333333333333,
+      "formula_total": 880,
+      "score": 1081,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 882.5666666666667,
+      "formula_total": 880,
+      "score": 1082,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 882.6,
+      "formula_total": 880,
+      "score": 1083,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 882.6333333333333,
+      "formula_total": 880,
+      "score": 1084,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 882.6666666666666,
+      "formula_total": 880,
+      "score": 1086,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.0,
+      "formula_total": 880,
+      "score": 1086,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.1333333333333,
+      "formula_total": 880,
+      "score": 1087,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.1666666666666,
+      "formula_total": 880,
+      "score": 1088,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.2,
+      "formula_total": 880,
+      "score": 1089,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.2333333333333,
+      "formula_total": 880,
+      "score": 1090,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.2666666666667,
+      "formula_total": 880,
+      "score": 1092,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.3,
+      "formula_total": 880,
+      "score": 1092,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.4,
+      "formula_total": 880,
+      "score": 1092,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.6,
+      "formula_total": 880,
+      "score": 1092,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.8333333333334,
+      "formula_total": 880,
+      "score": 1093,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.8666666666667,
+      "formula_total": 880,
+      "score": 1094,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 883.9,
+      "formula_total": 880,
+      "score": 1096,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 1,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 40,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    }
+  ],
+  "fcXG83vInDY": [
+    {
+      "t": 267.0,
+      "formula_total": null,
+      "score": 216,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 267.3,
+      "formula_total": null,
+      "score": 216,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 267.3333333333333,
+      "formula_total": null,
+      "score": 217,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 267.43333333333334,
+      "formula_total": null,
+      "score": 217,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 267.5,
+      "formula_total": null,
+      "score": 217,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 267.56666666666666,
+      "formula_total": null,
+      "score": 217,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 267.9,
+      "formula_total": null,
+      "score": null,
+      "visible": true,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 267.93333333333334,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 267.93333333333334,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 268.46666666666664,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 268.6333333333333,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 268.6333333333333,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 268.8333333333333,
+      "formula_total": 40,
+      "score": 257,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 268.6333333333333,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 269.3,
+      "formula_total": 40,
+      "score": 257,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 269.46666666666664,
+      "formula_total": 40,
+      "score": 258,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 269.5,
+      "formula_total": 40,
+      "score": 259,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 269.53333333333336,
+      "formula_total": 40,
+      "score": 260,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 269.56666666666666,
+      "formula_total": 40,
+      "score": 261,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 269.6,
+      "formula_total": 40,
+      "score": 262,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 269.6333333333333,
+      "formula_total": 40,
+      "score": 263,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 269.6,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 269.6666666666667,
+      "formula_total": 40,
+      "score": 265,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 269.6,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 269.8333333333333,
+      "formula_total": 40,
+      "score": 265,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 269.9,
+      "formula_total": 40,
+      "score": 265,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 269.93333333333334,
+      "formula_total": 40,
+      "score": null,
+      "visible": true,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 269.96666666666664,
+      "formula_total": 80,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 269.96666666666664,
+        "chain_count": 2,
+        "total_score": 80,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 270.8,
+      "formula_total": 80,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 270.8333333333333,
+      "formula_total": 80,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 270.8333333333333,
+        "chain_count": 2,
+        "total_score": 80,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 270.8666666666667,
+      "formula_total": 80,
+      "score": 305,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 271.03333333333336,
+      "formula_total": 80,
+      "score": 305,
+      "visible": false,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 271.3333333333333,
+      "formula_total": 80,
+      "score": null,
+      "visible": true,
+      "state": "OJAMA_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 271.3666666666667,
+      "formula_total": 400,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 271.3666666666667,
+        "chain_count": 3,
+        "total_score": 400,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 272.3666666666667,
+      "formula_total": 400,
+      "score": 625,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 271.3666666666667,
+        "chain_count": 3,
+        "total_score": 400,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 272.76666666666665,
+      "formula_total": 400,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 271.3666666666667,
+        "chain_count": 3,
+        "total_score": 400,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 272.8,
+      "formula_total": 2920,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 271.3666666666667,
+        "chain_count": 4,
+        "total_score": 2920,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 273.3,
+      "formula_total": 2920,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 273.3333333333333,
+      "formula_total": 2920,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 273.3333333333333,
+        "chain_count": 4,
+        "total_score": 2920,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 273.7,
+      "formula_total": 2920,
+      "score": 3145,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 273.3333333333333,
+        "chain_count": 4,
+        "total_score": 2920,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 273.73333333333335,
+      "formula_total": 2920,
+      "score": 3145,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 274.06666666666666,
+      "formula_total": 2920,
+      "score": 3145,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 274.1333333333333,
+      "formula_total": 2920,
+      "score": null,
+      "visible": true,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 274.1666666666667,
+      "formula_total": 4200,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 274.1666666666667,
+        "chain_count": 5,
+        "total_score": 4200,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 274.73333333333335,
+      "formula_total": 4200,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 274.76666666666665,
+      "formula_total": 4200,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 274.76666666666665,
+        "chain_count": 5,
+        "total_score": 4200,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 275.06666666666666,
+      "formula_total": 4200,
+      "score": 4425,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 274.76666666666665,
+        "chain_count": 5,
+        "total_score": 4200,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 275.56666666666666,
+      "formula_total": 4200,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 274.76666666666665,
+        "chain_count": 5,
+        "total_score": 4200,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 275.6,
+      "formula_total": 6760,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 274.76666666666665,
+        "chain_count": 6,
+        "total_score": 6760,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 276.2,
+      "formula_total": 6760,
+      "score": null,
+      "visible": true,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 276.23333333333335,
+      "formula_total": 6760,
+      "score": null,
+      "visible": true,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 276.23333333333335,
+        "chain_count": 6,
+        "total_score": 6760,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 276.5,
+      "formula_total": 6760,
+      "score": 6985,
+      "visible": false,
+      "state": "CHAIN",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 276.23333333333335,
+        "chain_count": 6,
+        "total_score": 6760,
+        "mechanism": "formula_read"
+      }
+    },
+    {
+      "t": 276.96666666666664,
+      "formula_total": 6760,
+      "score": 6985,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 277.1,
+      "formula_total": 6760,
+      "score": 6986,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 277.2,
+      "formula_total": 6760,
+      "score": 6987,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 277.26666666666665,
+      "formula_total": 6760,
+      "score": 6989,
+      "visible": false,
+      "state": "GRAVITY_SETTLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 277.3,
+      "formula_total": 6760,
+      "score": 6990,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 277.3333333333333,
+      "formula_total": 6760,
+      "score": 6991,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 277.3,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 277.3666666666667,
+      "formula_total": 6760,
+      "score": 6992,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 277.3,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 277.4,
+      "formula_total": 6760,
+      "score": 6993,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 277.3,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 277.43333333333334,
+      "formula_total": 6760,
+      "score": 6995,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 277.3,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 277.6,
+      "formula_total": 6760,
+      "score": 6995,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 277.56666666666666,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 277.6333333333333,
+      "formula_total": 6760,
+      "score": 6995,
+      "visible": false,
+      "state": "TSUMO_FALL",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 277.56666666666666,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 277.7,
+      "formula_total": 6760,
+      "score": 6995,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": {
+        "trigger_sec": 277.56666666666666,
+        "chain_count": 1,
+        "total_score": 40,
+        "mechanism": "baseline"
+      }
+    },
+    {
+      "t": 277.73333333333335,
+      "formula_total": 6760,
+      "score": 6995,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    },
+    {
+      "t": 278.0,
+      "formula_total": 6760,
+      "score": 6996,
+      "visible": false,
+      "state": "STABLE",
+      "finalization": {
+        "finalized_count_p1": 0,
+        "finalized_count_p2": 0,
+        "chain_total_score_p1": 0,
+        "chain_total_score_p2": 0
+      },
+      "event": null
+    }
+  ]
+}

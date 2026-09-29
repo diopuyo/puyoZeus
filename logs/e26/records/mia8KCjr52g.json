@@ -1,0 +1,12 @@
+{
+  "source": "logs/e16/records/mia8KCjr52g.jsonl.gz",
+  "source_sha256": "dd33fb7c43b5d4ff8032bb0c7d46767cc408697b41adad572cd8624dd55a02f0",
+  "video": "/mnt/d/puyo_analyzer/videos/source/mia8KCjr52g_first_0_900_20260925_v1.mp4",
+  "fps": 30.0,
+  "model": "models/cnn_phase_b_large_v2.pt",
+  "model_sha256": "e68f9409c521f1e464e0e9bed0c2054a0501ec7c5e3121a36bc8fc25c0a0a403",
+  "frames": 27000,
+  "recognized": 1203,
+  "resize_interpolation": "INTER_AREA",
+  "sha256": "aac342c853ce01fda6cafb7dc57d42d77ce8640454e0974f7f62a81e29e753d0"
+}
