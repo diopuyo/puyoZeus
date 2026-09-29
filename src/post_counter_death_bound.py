@@ -9,9 +9,9 @@ import math
 
 import numpy as np
 
-from src.board import Board, BOARD_COLS, BOARD_ROWS, COLOR_UNKNOWN, HIDDEN_ROWS
+from src.board import Board, BOARD_COLS, BOARD_ROWS, COLOR_UNKNOWN
 from src.chain import ChainSimulator, MIN_ERASE_COUNT
-from src.indicators_v2 import _place_pair_to_board
+from src.post_counter_geometry import BoundSimulator, usable_colors, all_landings_dead, place_pair
 from src.scoring import OJAMA_MAX_DROP_PER_TURN, ALL_CLEAR_BONUS, compute_effective_rate
 from src.scoring import BASE_SCORE_PER_PUYO, MAX_BONUS_MULTIPLIER, chain_power, color_bonus, connection_bonus
 
@@ -47,40 +47,6 @@ def score_upper(count: int) -> int:
     return best(count, 1)
 
 
-def usable_colors(board: Board, supply: Counter) -> int:
-    """列高で到達可能な空きマスを連結し、初消去が可能なら後続色を全て許す。"""
-    grid = board._grid
-    free = grid == 0
-    for col in range(BOARD_COLS):
-        filled = np.flatnonzero(grid[:, col])
-        if len(filled):
-            free[filled[0]:, col] = False
-    free[:HIDDEN_ROWS] = False
-    for color in COLORS:
-        mask = (grid == color) | free
-        mask[:HIDDEN_ROWS] = False
-        seen: set[tuple[int, int]] = set()
-        for row, col in np.argwhere(grid[HIDDEN_ROWS:] == color) + (HIDDEN_ROWS, 0):
-            cell = (int(row), int(col))
-            if cell in seen:
-                continue
-            pending, existing, vacant = [cell], 0, 0
-            seen.add(cell)
-            while pending:
-                r, c = pending.pop()
-                existing += int(grid[r, c] == color)
-                vacant += int(free[r, c])
-                for nr, nc in ((r-1,c), (r+1,c), (r,c-1), (r,c+1)):
-                    if (HIDDEN_ROWS <= nr < BOARD_ROWS and 0 <= nc < BOARD_COLS
-                            and mask[nr,nc] and (nr,nc) not in seen):
-                        seen.add((nr,nc))
-                        pending.append((nr,nc))
-            if existing + min(vacant, supply[color]) >= MIN_ERASE_COUNT:
-                # 一消去で下の色が開くため、初期の露出色だけには絞らない。
-                return int(np.count_nonzero(np.isin(grid, COLORS)))
-    return 0
-
-
 class Undecided(Exception):
     """証明不能を死亡と混同しない。"""
 
@@ -92,7 +58,7 @@ class Bound:
     palette: tuple[int, ...]
     rate: int
     limit: int
-    simulator: ChainSimulator = field(default_factory=lambda: ChainSimulator(exclude_hidden_row_from_pop=True))
+    simulator: ChainSimulator = field(default_factory=lambda: BoundSimulator(exclude_hidden_row_from_pop=True))
     nodes: int = 0
     pruned: int = 0
     cache: dict = field(default_factory=dict)
@@ -120,15 +86,14 @@ class Bound:
         pairs = self.pairs(turn)
         supply = Counter({c: max(pair.count(c) for pair in pairs) for c in self.palette})
         usable = usable_colors(board, supply)
-        power = score_upper(usable + PAIR_SIZE) if usable else 0
         # 非連鎖手にも落下点と端数の即時相殺を無償付与し、死ににくくする。
         sent = math.ceil(DROP_SCORE_UPPER / self.rate)
         left = max(0, pending-sent)
         if left == 0:
             return False
-        if not usable and grace == 0 and all(b.is_dead() for b in self.land(board, left)):
+        if not usable and grace == 0 and all_landings_dead(board, min(left, OJAMA_MAX_DROP_PER_TURN)):
             self.pruned += 1
-            self.bounds.append(dict(turn=turn, usable=usable, score_upper=power, incoming=pending,
+            self.bounds.append(dict(turn=turn, usable=usable, score_upper=0, incoming=pending,
                                     cancel_upper=sent, drop=min(left, OJAMA_MAX_DROP_PER_TURN)))
             self.cache[key] = True
             return True
@@ -146,13 +111,14 @@ class Bound:
                pairs: list[tuple[int, int]]) -> bool:
         """連鎖手は着弾を延期し、非連鎖手だけ30個ずつ降らせる。"""
         seen: set[tuple] = set()
+        simulate = getattr(self.simulator, 'simulate_reply', self.simulator.simulate)
         for pair in pairs:
             for rotation in range(ROTATIONS):
                 for col in range(BOARD_COLS if rotation % PAIR_SIZE == 0 else BOARD_COLS-1):
-                    placed = _place_pair_to_board(board, pair, col, rotation)
+                    placed = place_pair(board, pair, col, rotation)
                     if placed is None:
                         continue
-                    result = self.simulator.simulate(placed)
+                    result = simulate(placed)
                     identity = (result.final_board._grid.tobytes(), bool(result.chain_count))
                     if identity in seen:
                         continue

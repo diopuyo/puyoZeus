@@ -18,6 +18,7 @@ class PostCounterDeathBound:
     def __init__(self) -> None:
         self.colors = [MatchColorEvidence(), MatchColorEvidence()]
         self.cache: dict = {}
+        self.board_cache: dict = {}
         self.audit: list[dict] = []
         self.game: int | None = None
         self.queues: tuple = ((), ())
@@ -29,6 +30,7 @@ class PostCounterDeathBound:
             self.game = game
             self.colors = [MatchColorEvidence(), MatchColorEvidence()]
             self.cache.clear()
+            self.board_cache.clear()
         for evidence, side in zip(self.colors, (result.p1, result.p2)):
             evidence.observe(side)
         queues = tuple(tuple(int(c) for c in (*(getattr(s, 'next_pair', None) or (0, 0)),
@@ -61,7 +63,7 @@ class PostCounterDeathBound:
         if not cached:
             if len(self.cache) >= CACHE_LIMIT:
                 self.cache.pop(next(iter(self.cache)))
-            self.cache[key] = [prove_post_counter(b, queue, incoming, hands, elapsed, palette) for b in boards]
+            self.cache[key] = self.proofs_for(boards, queue, incoming, hands, elapsed, palette)
         proofs = self.cache[key]
         dead = bool(proofs) and all(p['dead'] for p in proofs)
         value = dict(dead=dead, reason='post_counter_upper_bound' if dead else 'fallback_search',
@@ -71,6 +73,20 @@ class PostCounterDeathBound:
             completion_score=hidden['score'] if hidden else chain.predicted_final_score,
             elapsed_sec=perf_counter()-started, cached=cached, **value))
         return value
+
+    def proofs_for(self, boards: list[Board], queue: tuple, incoming: int, hands: int,
+                   elapsed: float, palette: tuple) -> list[dict]:
+        """候補一覧の変化を跨いで同一入力の全証明を共有する（試合内・有限）。"""
+        inputs = (queue, incoming, hands, compute_effective_rate(elapsed), palette)
+        proofs = []
+        for board in boards:
+            key = (board._grid.tobytes(), *inputs)
+            if key not in self.board_cache:
+                if len(self.board_cache) >= CACHE_LIMIT:
+                    self.board_cache.pop(next(iter(self.board_cache)))
+                self.board_cache[key] = prove_post_counter(board, queue, incoming, hands, elapsed, palette)
+            proofs.append(self.board_cache[key])
+        return proofs
 
     def evaluate(self, projection: Any, overlay: Any, latest: tuple, hands: tuple,
                  stamp: float, value: dict, context: dict | None) -> None:

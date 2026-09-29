@@ -30,6 +30,10 @@ def setup() -> tuple:
 def test_every_candidate_must_die(monkeypatch: pytest.MonkeyPatch, results: list[bool]) -> None:
     import src.exchange_post_counter_bound as module
     engine, projection, overlay, context = setup()
+    # 異なる入力の候補を使う。同一盤面なら証明は純粋関数として共有される。
+    other = Board()
+    other._grid[-1, 0] = 1
+    context['hidden'][0]['options'] = [dict(board=b._grid.tolist()) for b in (Board(), other)]
     calls = []
     def prove(*args: object) -> dict:
         calls.append(args)
@@ -49,7 +53,7 @@ def test_live_next_is_used_instead_of_prefire_history(monkeypatch: pytest.Monkey
         return dict(dead=False)
     monkeypatch.setattr(module, 'prove_post_counter', prove)
     engine.prove(projection, overlay, 0, (NS(queue=(1, 1, 2, 2)),), 171, 1, context, 2.)
-    assert queues == [(3, 4, 1, 2)]*2
+    assert queues == [(3, 4, 1, 2)]
 
 
 def test_no_proof_keeps_original_death_list(monkeypatch: pytest.MonkeyPatch) -> None:
