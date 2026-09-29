@@ -1,0 +1,860 @@
+[
+  {
+    "exchange_id": 1,
+    "game_idx": 0,
+    "trigger_sec": 128.9,
+    "closed_sec": 131.93333333333334,
+    "excluded": "missing_end"
+  },
+  {
+    "exchange_id": 2,
+    "game_idx": 0,
+    "trigger_sec": 132.93333333333334,
+    "closed_sec": 133.76666666666668,
+    "excluded": "missing_end"
+  },
+  {
+    "exchange_id": 3,
+    "game_idx": 1,
+    "trigger_sec": 135.7,
+    "closed_sec": 138.2,
+    "end_sec": 137.63333333333333,
+    "cutoff_sec": 150.7,
+    "target": -1.8702580770236388,
+    "target_sec": 138.2,
+    "modes": {
+      "off": {
+        "base": -1.2694120655406338,
+        "change": -0.600846011483005,
+        "base_sec": 135.66666666666666,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": -2.9830012516795885,
+        "change": 1.1127431746559497,
+        "base_sec": 135.66666666666666,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 4,
+    "game_idx": 1,
+    "trigger_sec": 150.7,
+    "closed_sec": 152.1,
+    "end_sec": 151.73333333333332,
+    "cutoff_sec": 153.5,
+    "target": 2.9602155618300734,
+    "target_sec": 152.1,
+    "modes": {
+      "off": {
+        "base": 2.0312757288667385,
+        "change": 0.9289398329633349,
+        "base_sec": 150.66666666666666,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": 0.04098461759578166,
+        "change": 2.919230944234292,
+        "base_sec": 150.66666666666666,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 5,
+    "game_idx": 1,
+    "trigger_sec": 153.5,
+    "closed_sec": 169.33333333333334,
+    "end_sec": 168.96666666666667,
+    "cutoff_sec": 180.2,
+    "target": -8.060758563222699,
+    "target_sec": 169.33333333333334,
+    "modes": {
+      "off": {
+        "base": -4.57136123015881,
+        "change": -3.4893973330638888,
+        "base_sec": 153.46666666666667,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": 5.672673597854807,
+        "change": -13.733432161077506,
+        "base_sec": 153.46666666666667,
+        "midpoint": -1.1940424826839457,
+        "seconds": 0.0
+      }
+    }
+  },
+  {
+    "exchange_id": 6,
+    "game_idx": 2,
+    "trigger_sec": 205.83333333333334,
+    "closed_sec": 232.7,
+    "end_sec": 232.3,
+    "cutoff_sec": 240.6,
+    "target": -72.51720635666352,
+    "target_sec": 232.7,
+    "modes": {
+      "off": {
+        "base": -14.733217335690076,
+        "change": -57.78398902097344,
+        "base_sec": 205.8,
+        "midpoint": -43.625211846176796,
+        "seconds": 2.5999999999999943
+      },
+      "on": {
+        "base": -5.562386034976588,
+        "change": -66.95482032168694,
+        "base_sec": 205.8,
+        "midpoint": -39.03979619582006,
+        "seconds": 0.03333333333333144
+      }
+    }
+  },
+  {
+    "exchange_id": 7,
+    "game_idx": 3,
+    "trigger_sec": 262.3333333333333,
+    "closed_sec": 281.6333333333333,
+    "excluded": "missing_end"
+  },
+  {
+    "exchange_id": 8,
+    "game_idx": 4,
+    "trigger_sec": 304.03333333333336,
+    "closed_sec": 305.6,
+    "end_sec": 305.06666666666666,
+    "cutoff_sec": 308.5,
+    "target": -4.765509319169908,
+    "target_sec": 305.6,
+    "modes": {
+      "off": {
+        "base": -13.938431046379229,
+        "change": 9.17292172720932,
+        "base_sec": 304.0,
+        "midpoint": -9.351970182774568,
+        "seconds": 1.0
+      },
+      "on": {
+        "base": -6.374260102739827,
+        "change": 1.6087507835699189,
+        "base_sec": 304.0,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 9,
+    "game_idx": 4,
+    "trigger_sec": 308.5,
+    "closed_sec": 309.93333333333334,
+    "end_sec": 309.56666666666666,
+    "cutoff_sec": 313.1666666666667,
+    "target": -4.629582645762569,
+    "target_sec": 309.93333333333334,
+    "modes": {
+      "off": {
+        "base": 1.6584380645334977,
+        "change": -6.288020710296067,
+        "base_sec": 308.46666666666664,
+        "midpoint": -1.4855722906145357,
+        "seconds": 0.7666666666666515
+      },
+      "on": {
+        "base": -2.737786513852072,
+        "change": -1.891796131910497,
+        "base_sec": 308.46666666666664,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 10,
+    "game_idx": 4,
+    "trigger_sec": 313.1666666666667,
+    "closed_sec": 315.1666666666667,
+    "end_sec": 314.8,
+    "cutoff_sec": 316.6333333333333,
+    "target": -5.3932786016832654,
+    "target_sec": 315.1666666666667,
+    "modes": {
+      "off": {
+        "base": -0.8668829880316068,
+        "change": -4.526395613651658,
+        "base_sec": 313.1333333333333,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": -4.152008135582674,
+        "change": -1.241270466100591,
+        "base_sec": 313.1333333333333,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 11,
+    "game_idx": 4,
+    "trigger_sec": 316.6333333333333,
+    "closed_sec": 341.1666666666667,
+    "end_sec": 340.1666666666667,
+    "cutoff_sec": 350.43333333333334,
+    "target": 51.22042474552577,
+    "target_sec": 341.1666666666667,
+    "modes": {
+      "off": {
+        "base": 0.38962335143155113,
+        "change": 50.830801394094216,
+        "base_sec": 316.6,
+        "midpoint": 25.80502404847866,
+        "seconds": 0.0
+      },
+      "on": {
+        "base": 14.867094162972725,
+        "change": 36.35333058255304,
+        "base_sec": 316.6,
+        "midpoint": 33.04375945424925,
+        "seconds": 0.0
+      }
+    }
+  },
+  {
+    "exchange_id": 12,
+    "game_idx": 5,
+    "trigger_sec": 377.93333333333334,
+    "closed_sec": 402.2,
+    "excluded": "missing_end"
+  },
+  {
+    "exchange_id": 13,
+    "game_idx": 6,
+    "trigger_sec": 426.8,
+    "closed_sec": 428.3,
+    "end_sec": 427.8333333333333,
+    "cutoff_sec": 431.9,
+    "target": -1.7945121585665997,
+    "target_sec": 428.3,
+    "modes": {
+      "off": {
+        "base": 1.60965257616457,
+        "change": -3.40416473473117,
+        "base_sec": 426.76666666666665,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": -0.10507494500711495,
+        "change": -1.6894372135594848,
+        "base_sec": 426.76666666666665,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 14,
+    "game_idx": 6,
+    "trigger_sec": 431.9,
+    "closed_sec": 436.1333333333333,
+    "end_sec": 435.73333333333335,
+    "cutoff_sec": 436.3666666666667,
+    "target": -13.825937969651255,
+    "target_sec": 436.1333333333333,
+    "modes": {
+      "off": {
+        "base": 1.73174569595457,
+        "change": -15.557683665605825,
+        "base_sec": 431.8666666666667,
+        "midpoint": -6.047096136848342,
+        "seconds": 0.5
+      },
+      "on": {
+        "base": 4.668059089647461,
+        "change": -18.493997059298717,
+        "base_sec": 431.8666666666667,
+        "midpoint": -4.578939440001897,
+        "seconds": 0.2666666666666515
+      }
+    }
+  },
+  {
+    "exchange_id": 15,
+    "game_idx": 6,
+    "trigger_sec": 436.3666666666667,
+    "closed_sec": 438.0,
+    "end_sec": 437.43333333333334,
+    "cutoff_sec": 438.46666666666664,
+    "target": -10.617096329699358,
+    "target_sec": 438.0,
+    "modes": {
+      "off": {
+        "base": -6.687612152851129,
+        "change": -3.929484176848229,
+        "base_sec": 436.3333333333333,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": -12.799830775875755,
+        "change": 2.182734446176397,
+        "base_sec": 436.3333333333333,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 16,
+    "game_idx": 6,
+    "trigger_sec": 438.46666666666664,
+    "closed_sec": 440.3666666666667,
+    "end_sec": 439.96666666666664,
+    "cutoff_sec": 441.3333333333333,
+    "target": -23.873276192088916,
+    "target_sec": 440.3666666666667,
+    "modes": {
+      "off": {
+        "base": -5.135517694882252,
+        "change": -18.737758497206663,
+        "base_sec": 438.43333333333334,
+        "midpoint": -14.504396943485585,
+        "seconds": "Infinity"
+      },
+      "on": {
+        "base": -10.990095772937913,
+        "change": -12.883180419151003,
+        "base_sec": 438.43333333333334,
+        "midpoint": -17.431685982513415,
+        "seconds": 0.4333333333333371
+      }
+    }
+  },
+  {
+    "exchange_id": 17,
+    "game_idx": 6,
+    "trigger_sec": 441.3333333333333,
+    "closed_sec": 448.73333333333335,
+    "excluded": "missing_end"
+  },
+  {
+    "exchange_id": 18,
+    "game_idx": 7,
+    "trigger_sec": 474.3,
+    "closed_sec": 478.1666666666667,
+    "end_sec": 477.8,
+    "cutoff_sec": 478.9,
+    "target": -2.7383481686250137,
+    "target_sec": 478.1666666666667,
+    "modes": {
+      "off": {
+        "base": -2.52547463211921,
+        "change": -0.21287353650580387,
+        "base_sec": 474.26666666666665,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": -6.776095886842786,
+        "change": 4.037747718217772,
+        "base_sec": 474.26666666666665,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 19,
+    "game_idx": 7,
+    "trigger_sec": 478.9,
+    "closed_sec": 483.1,
+    "end_sec": 482.5,
+    "cutoff_sec": 483.1666666666667,
+    "target": 4.366952446856661,
+    "target_sec": 483.1,
+    "modes": {
+      "off": {
+        "base": 1.19326884032077,
+        "change": 3.1736836065358913,
+        "base_sec": 478.8666666666667,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": -2.020934555170547,
+        "change": 6.387887002027208,
+        "base_sec": 478.8666666666667,
+        "midpoint": 1.173008945843057,
+        "seconds": "Infinity"
+      }
+    }
+  },
+  {
+    "exchange_id": 20,
+    "game_idx": 7,
+    "trigger_sec": 483.1666666666667,
+    "closed_sec": 512.2666666666667,
+    "end_sec": 511.9,
+    "cutoff_sec": 520.3,
+    "target": 15.251184289863629,
+    "target_sec": 512.2666666666667,
+    "modes": {
+      "off": {
+        "base": -11.438425820817578,
+        "change": 26.68961011068121,
+        "base_sec": 483.1333333333333,
+        "midpoint": 1.9063792345230262,
+        "seconds": 8.033333333333303
+      },
+      "on": {
+        "base": 0.05793287053388352,
+        "change": 15.193251419329744,
+        "base_sec": 483.1333333333333,
+        "midpoint": 7.6545585801987555,
+        "seconds": "Infinity"
+      }
+    }
+  },
+  {
+    "exchange_id": 21,
+    "game_idx": 8,
+    "trigger_sec": 546.3666666666667,
+    "closed_sec": 547.8,
+    "end_sec": 547.4,
+    "cutoff_sec": 548.8,
+    "target": -1.3057749842407271,
+    "target_sec": 547.8,
+    "modes": {
+      "off": {
+        "base": 5.772991088564081,
+        "change": -7.078766072804807,
+        "base_sec": 546.3333333333334,
+        "midpoint": 2.233608052161677,
+        "seconds": 0.7000000000000455
+      },
+      "on": {
+        "base": -2.0131825729109805,
+        "change": 0.7074075886702533,
+        "base_sec": 546.3333333333334,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 22,
+    "game_idx": 8,
+    "trigger_sec": 548.8,
+    "closed_sec": 553.7333333333333,
+    "end_sec": 553.0666666666667,
+    "cutoff_sec": 554.4333333333333,
+    "target": -15.483951032832005,
+    "target_sec": 553.7333333333333,
+    "modes": {
+      "off": {
+        "base": -4.926082907541822,
+        "change": -10.557868125290183,
+        "base_sec": 548.7666666666667,
+        "midpoint": -10.205016970186914,
+        "seconds": 0.0
+      },
+      "on": {
+        "base": 4.676815117085743,
+        "change": -20.160766149917748,
+        "base_sec": 548.7666666666667,
+        "midpoint": -5.403567957873131,
+        "seconds": 0.6666666666666288
+      }
+    }
+  },
+  {
+    "exchange_id": 23,
+    "game_idx": 8,
+    "trigger_sec": 554.4333333333333,
+    "closed_sec": 557.8,
+    "end_sec": 557.2,
+    "cutoff_sec": 558.2333333333333,
+    "target": -14.756988414646177,
+    "target_sec": 557.8,
+    "modes": {
+      "off": {
+        "base": -3.113831706248444,
+        "change": -11.643156708397733,
+        "base_sec": 554.4,
+        "midpoint": -8.93541006044731,
+        "seconds": 0.8999999999999773
+      },
+      "on": {
+        "base": -13.102806116359469,
+        "change": -1.6541822982867078,
+        "base_sec": 554.4,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 24,
+    "game_idx": 8,
+    "trigger_sec": 558.2333333333333,
+    "closed_sec": 589.8666666666667,
+    "excluded": "missing_end"
+  },
+  {
+    "exchange_id": 25,
+    "game_idx": 9,
+    "trigger_sec": 615.8,
+    "closed_sec": 618.9333333333333,
+    "end_sec": 618.4333333333333,
+    "cutoff_sec": 620.5666666666667,
+    "target": 3.2674932648506454,
+    "target_sec": 618.9333333333333,
+    "modes": {
+      "off": {
+        "base": -14.37420997489105,
+        "change": 17.641703239741695,
+        "base_sec": 615.7666666666667,
+        "midpoint": -5.553358355020203,
+        "seconds": 0.0
+      },
+      "on": {
+        "base": -6.1908841293161565,
+        "change": 9.458377394166803,
+        "base_sec": 615.7666666666667,
+        "midpoint": -1.461695432232755,
+        "seconds": 0.5333333333334167
+      }
+    }
+  },
+  {
+    "exchange_id": 26,
+    "game_idx": 9,
+    "trigger_sec": 620.5666666666667,
+    "closed_sec": 622.4333333333333,
+    "end_sec": 622.0666666666667,
+    "cutoff_sec": 622.4666666666667,
+    "target": 6.738105010954022,
+    "target_sec": 622.4333333333333,
+    "modes": {
+      "off": {
+        "base": 3.3031636327552323,
+        "change": 3.4349413781987894,
+        "base_sec": 620.5333333333333,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": 8.804255160958188,
+        "change": -2.066150150004167,
+        "base_sec": 620.5333333333333,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 27,
+    "game_idx": 9,
+    "trigger_sec": 622.4666666666667,
+    "closed_sec": 626.6666666666666,
+    "end_sec": 626.2666666666667,
+    "cutoff_sec": 627.5,
+    "target": 7.262395933695724,
+    "target_sec": 626.6666666666666,
+    "modes": {
+      "off": {
+        "base": -0.8890285969850285,
+        "change": 8.151424530680753,
+        "base_sec": 622.4333333333333,
+        "midpoint": 3.1866836683553483,
+        "seconds": 0.0
+      },
+      "on": {
+        "base": 6.220105992782196,
+        "change": 1.0422899409135278,
+        "base_sec": 622.4333333333333,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 28,
+    "game_idx": 9,
+    "trigger_sec": 627.5,
+    "closed_sec": 633.4333333333333,
+    "end_sec": 632.9666666666667,
+    "cutoff_sec": 636.2666666666667,
+    "target": -4.666063254340902,
+    "target_sec": 633.4333333333333,
+    "modes": {
+      "off": {
+        "base": 4.393197741908744,
+        "change": -9.059260996249646,
+        "base_sec": 627.4666666666667,
+        "midpoint": -0.1364327562160792,
+        "seconds": "Infinity"
+      },
+      "on": {
+        "base": 7.445078204244508,
+        "change": -12.111141458585411,
+        "base_sec": 627.4666666666667,
+        "midpoint": 1.3895074749518024,
+        "seconds": 0.5
+      }
+    }
+  },
+  {
+    "exchange_id": 29,
+    "game_idx": 9,
+    "trigger_sec": 636.2666666666667,
+    "closed_sec": 657.9,
+    "end_sec": 657.5333333333333,
+    "cutoff_sec": 661.9666666666667,
+    "target": -7.821798519599953,
+    "target_sec": 657.9,
+    "modes": {
+      "off": {
+        "base": 9.206936084117974,
+        "change": -17.028734603717925,
+        "base_sec": 636.2333333333333,
+        "midpoint": 0.692568782259011,
+        "seconds": 0.0
+      },
+      "on": {
+        "base": 0.9837324599727554,
+        "change": -8.805530979572708,
+        "base_sec": 636.2333333333333,
+        "midpoint": -3.419033029813599,
+        "seconds": 0.0
+      }
+    }
+  },
+  {
+    "exchange_id": 30,
+    "game_idx": 9,
+    "trigger_sec": 661.9666666666667,
+    "closed_sec": 667.5333333333333,
+    "excluded": "missing_end"
+  },
+  {
+    "exchange_id": 31,
+    "game_idx": 10,
+    "trigger_sec": 688.8,
+    "closed_sec": 693.0,
+    "end_sec": 692.0333333333333,
+    "cutoff_sec": 694.2666666666667,
+    "target": -27.309338610144938,
+    "target_sec": 693.0,
+    "modes": {
+      "off": {
+        "base": 0.034850050587036455,
+        "change": -27.344188660731973,
+        "base_sec": 688.7666666666667,
+        "midpoint": -13.63724427977895,
+        "seconds": 1.1000000000000227
+      },
+      "on": {
+        "base": 4.08519387325375,
+        "change": -31.394532483398688,
+        "base_sec": 688.7666666666667,
+        "midpoint": -11.612072368445595,
+        "seconds": 0.0
+      }
+    }
+  },
+  {
+    "exchange_id": 32,
+    "game_idx": 10,
+    "trigger_sec": 694.2666666666667,
+    "closed_sec": 699.7,
+    "excluded": "missing_end"
+  },
+  {
+    "exchange_id": 33,
+    "game_idx": 11,
+    "trigger_sec": 717.6666666666666,
+    "closed_sec": 719.5333333333333,
+    "end_sec": 719.1333333333333,
+    "cutoff_sec": 723.5,
+    "target": 1.3923561169724101,
+    "target_sec": 719.5333333333333,
+    "modes": {
+      "off": {
+        "base": 1.3327188957870764,
+        "change": 0.059637221185333766,
+        "base_sec": 717.6333333333333,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": 0.834459552588865,
+        "change": 0.5578965643835452,
+        "base_sec": 717.6333333333333,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 34,
+    "game_idx": 11,
+    "trigger_sec": 723.5,
+    "closed_sec": 742.6666666666666,
+    "end_sec": 742.3,
+    "cutoff_sec": 750.6,
+    "target": -28.28448317066867,
+    "target_sec": 742.6666666666666,
+    "modes": {
+      "off": {
+        "base": 9.446697126614561,
+        "change": -37.73118029728323,
+        "base_sec": 723.4666666666667,
+        "midpoint": -9.418893022027055,
+        "seconds": 0.0
+      },
+      "on": {
+        "base": 7.488697262394394,
+        "change": -35.77318043306306,
+        "base_sec": 723.4666666666667,
+        "midpoint": -10.397892954137136,
+        "seconds": 0.0
+      }
+    }
+  },
+  {
+    "exchange_id": 35,
+    "game_idx": 12,
+    "trigger_sec": 769.1333333333333,
+    "closed_sec": 770.6,
+    "end_sec": 770.1666666666666,
+    "cutoff_sec": 774.9,
+    "target": 1.9039869224103059,
+    "target_sec": 770.6,
+    "modes": {
+      "off": {
+        "base": 7.7380053369825985,
+        "change": -5.834018414572292,
+        "base_sec": 769.1,
+        "midpoint": 4.820996129696452,
+        "seconds": 3.6666666666667425
+      },
+      "on": {
+        "base": 0.8536900487346644,
+        "change": 1.0502968736756415,
+        "base_sec": 769.1,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 36,
+    "game_idx": 12,
+    "trigger_sec": 774.9,
+    "closed_sec": 777.6333333333333,
+    "end_sec": 777.2666666666667,
+    "cutoff_sec": 779.9333333333333,
+    "target": 0.16971348239258643,
+    "target_sec": 777.6333333333333,
+    "modes": {
+      "off": {
+        "base": 4.367190181412276,
+        "change": -4.19747669901969,
+        "base_sec": 774.8666666666667,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": 0.16947164053905192,
+        "change": 0.00024184185353451348,
+        "base_sec": 774.8666666666667,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 37,
+    "game_idx": 12,
+    "trigger_sec": 779.9333333333333,
+    "closed_sec": 782.8,
+    "end_sec": 782.4333333333333,
+    "cutoff_sec": 792.9,
+    "target": 11.743212874002511,
+    "target_sec": 782.8,
+    "modes": {
+      "off": {
+        "base": 16.053856279361913,
+        "change": -4.310643405359402,
+        "base_sec": 779.9,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": 13.53027967548791,
+        "change": -1.7870668014853983,
+        "base_sec": 779.9,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 38,
+    "game_idx": 13,
+    "trigger_sec": 815.9333333333333,
+    "closed_sec": 848.4666666666667,
+    "end_sec": 848.1,
+    "cutoff_sec": 857.8,
+    "target": -16.27704682691149,
+    "target_sec": 848.4666666666667,
+    "modes": {
+      "off": {
+        "base": 6.8846067074552675,
+        "change": -23.161653534366756,
+        "base_sec": 815.9,
+        "midpoint": -4.696220059728111,
+        "seconds": 2.6333333333333258
+      },
+      "on": {
+        "base": 3.866757946319811,
+        "change": -20.143804773231302,
+        "base_sec": 815.9,
+        "midpoint": -6.20514444029584,
+        "seconds": 0.0
+      }
+    }
+  },
+  {
+    "exchange_id": 39,
+    "game_idx": 14,
+    "trigger_sec": 873.5333333333333,
+    "closed_sec": 876.7666666666667,
+    "end_sec": 876.4,
+    "cutoff_sec": 878.6,
+    "target": -1.3584605216266137,
+    "target_sec": 876.7666666666667,
+    "modes": {
+      "off": {
+        "base": -2.2768204067529973,
+        "change": 0.9183598851263837,
+        "base_sec": 873.5,
+        "excluded": "small_change"
+      },
+      "on": {
+        "base": -3.110260413740306,
+        "change": 1.7517998921136921,
+        "base_sec": 873.5,
+        "excluded": "small_change"
+      }
+    }
+  },
+  {
+    "exchange_id": 40,
+    "game_idx": 14,
+    "trigger_sec": 878.6,
+    "closed_sec": 895.2666666666667,
+    "end_sec": 894.9,
+    "cutoff_sec": 900.0,
+    "target": 16.507616163522147,
+    "target_sec": 895.2666666666667,
+    "modes": {
+      "off": {
+        "base": -14.780974630584385,
+        "change": 31.288590794106533,
+        "base_sec": 878.5666666666667,
+        "midpoint": 0.8633207664688811,
+        "seconds": 0.0
+      },
+      "on": {
+        "base": -33.348894480739865,
+        "change": 49.856510644262016,
+        "base_sec": 878.5666666666667,
+        "midpoint": -8.420639158608857,
+        "seconds": 0.0
+      }
+    }
+  }
+]

@@ -1,0 +1,52 @@
+{
+  "records": {
+    "update": {
+      "old": 6848,
+      "new": 6848,
+      "matching": 6848,
+      "first": null,
+      "passed": true
+    },
+    "display": {
+      "old": 5948,
+      "new": 5948,
+      "matching": 5948,
+      "first": null,
+      "passed": true
+    },
+    "static": {
+      "old": 666,
+      "new": 666,
+      "matching": 666,
+      "first": null,
+      "passed": true
+    },
+    "static_call": {
+      "old": 4105,
+      "new": 4105,
+      "matching": 4105,
+      "first": null,
+      "passed": true
+    },
+    "complete": {
+      "old": 1,
+      "new": 1,
+      "matching": 1,
+      "first": null,
+      "passed": true
+    }
+  },
+  "feature_cache": {
+    "common": 666,
+    "matching": 666,
+    "changed": [],
+    "old_only": 0,
+    "new_only": 0,
+    "passed": true
+  },
+  "sha256": {
+    "logs/e31/records/review.jsonl.gz": "f721524ad94f03f0a28f272f9e2085dfdf712b269e99cfa97c92094eb850e410",
+    "logs/e34c/records/review.jsonl.gz": "d13947561975b53db34a8d94687484e8d42f0eb22a21bd0e9da7162b28438756",
+    "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/scripts/compare_e34c_records.py": "85c9e126c2368adf150d57c8d75180275599677357bd16953bd6044d075c1ae3"
+  }
+}

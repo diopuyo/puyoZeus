@@ -1,4 +1,4 @@
-"""E34bの全条件合格時だけ、E34条件の音声付きレビューを生成する。"""
+"""指定したE34検証の全条件合格時だけ、音声付きレビューを生成する。"""
 from __future__ import annotations
 
 import json
@@ -11,9 +11,9 @@ import imageio_ffmpeg
 from scripts import render_e18_review_20260928 as video
 
 
-def main() -> None:
+def main(summary: Path = Path('logs/e34b/SUMMARY.json')) -> None:
     """既存E27コマンドにE32と起点ガードを追加し、既存の音声・圧縮検収を使う。"""
-    assert json.loads(Path('logs/e34b/SUMMARY.json').read_text())['passed']
+    assert json.loads(summary.read_text())['passed']
     prior = video.prior
     baseline = prior.ROOT/'logs/review_zenchi_g41_43_e27'
     dest = prior.ROOT/'logs/review_zenchi_g41_43_e34'
@@ -41,4 +41,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--summary', type=Path, default=Path('logs/e34b/SUMMARY.json'))
+    main(parser.parse_args().summary)

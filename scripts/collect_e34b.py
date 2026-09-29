@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+from functools import wraps
 import json
 from pathlib import Path
 import subprocess
@@ -76,6 +77,7 @@ def boundaries(video: Path) -> Any:
 def install_capture(gate: Any) -> None:
     """保持印は認識時点で記録し、試合範囲をヘッダーに固定保存する。"""
     load, update, write = RecognitionPipeline.load_default, ExchangeEventRecorder.update, ExchangeEventRecorder.write
+    @wraps(load)
     def configured(**kwargs: Any) -> RecognitionPipeline:
         return load(**dict(kwargs, enable_landing_chain_record_hold=True,
                            enable_chain_active_record_hold=True))
