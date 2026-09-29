@@ -148,6 +148,8 @@ def cached_proof(projection: Any, board: Board, queue: tuple, incoming: int,
 def evaluate_multilanding(projection: Any, overlay: Any, latest: tuple, incoming: list,
                           hands: tuple, t_sec: float, value: dict, context: dict | None = None) -> dict:
     """E22の死亡を維持し、確実な入力でのみ複数着弾の証明を追加する。"""
+    if getattr(projection, 'post_counter_bound', None) is not None:
+        projection.post_counter_bound.evaluate(projection, overlay, latest, hands, t_sec, value, context)
     replies, credit = projection._receivers(overlay.tracker, latest, incoming)
     boards, replies, certain = projection._death_boards(
         overlay.tracker, tuple(s.board for s in latest), replies, credit)

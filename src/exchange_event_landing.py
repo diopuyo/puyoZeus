@@ -169,6 +169,8 @@ class ExchangeLandingProjection:
         evidence = tuple(self._verified_attack(tracker, i) for i in range(2))
         completion = tuple(self._completion_board(tracker, i) is not None for i in range(2))
         key = (amount_key, hands, active, boards, evidence, completion)
+        if getattr(self, 'post_counter_bound', None) is not None:
+            key += (self.post_counter_bound.revision,)
         if self.safety is not None and self.safety.guard_enabled:
             key += (self.safety.signature(self, tracker, t_sec),)
             reassess = reassess or self.key != key

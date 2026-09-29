@@ -63,7 +63,8 @@ class ExchangeEventOverlay:
                  prefire_candidates: bool = False, prefire_snapshot: bool = False,
                  hidden_row_belief: bool = False, prefire_stage_timeout: bool = False,
                  prefire_stage_timeout_only: bool = False,
-                 prefire_origin_guard: bool = False, prefire_match_gate: Any = None) -> None:
+                 prefire_origin_guard: bool = False, prefire_match_gate: Any = None,
+                 post_counter_death_bound: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -95,6 +96,12 @@ class ExchangeEventOverlay:
             landing_state_safety=landing_state_safety, pending_ledger=pending_ledger,
             color_score_safety=color_score_safety, completion_recovery=completion_recovery,
             death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death)
+        self._landing_projection.post_counter_bound = None
+        if post_counter_death_bound:
+            if not (multi_landing_death and death_pending_ledger and confirmed_death_hold):
+                raise ValueError('E35には複数着弾・死亡台帳・死亡保持（本番構成）が必要')
+            from src.exchange_post_counter_bound import PostCounterDeathBound
+            self._landing_projection.post_counter_bound = PostCounterDeathBound()
         self._initialize_prediction_guards(death_candidate_guard, death_formula_guard,
             midchain_completion, hidden_row_death, midchain_single_observation)
         self._initialize_prefire(prefire_candidates, prefire_snapshot, hidden_row_belief,
@@ -168,6 +175,8 @@ class ExchangeEventOverlay:
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
+        if self._landing_projection.post_counter_bound is not None:
+            self._landing_projection.post_counter_bound.observe(result, game_idx)
         if self._origin_guard is not None:
             self._origin_guard.observe(sides, t_sec)
         self._observe_prefire(sides, t_sec, game_idx)
