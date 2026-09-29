@@ -6469,6 +6469,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              prefire_origin_guard: bool = False,
              placement_signal_reconcile: bool = False,
              placement_signal_reconcile_ojama: bool = False,
+             next_recolor_pair_guard: bool = False,
              post_counter_death_bound: bool = False,
              single_death_proof_guard: bool = False,
              single_death_proof_negative_only: bool = False,
@@ -7219,6 +7220,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     pipe = RecognitionPipeline.load_default(
         enable_placement_signal_reconcile=placement_signal_reconcile,
         enable_placement_signal_ojama=placement_signal_reconcile_ojama,
+        enable_next_recolor_pair_guard=next_recolor_pair_guard,
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
         # 未指定 (None) はライブラリ既定に解決する = 本番と同じ挙動を描画する
@@ -8345,6 +8347,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         print(f"[done] {written} frames -> {out}")
     else:
         print(f"[done] {written} frames (no-render)")
+    if next_recolor_pair_guard:
+        # cycle65 対整合ガードの監査 (accepted/substituted/kept_observed + 事象一覧)
+        (out.parent / 'next_recolor_pair_guard.json').write_text(json.dumps(dict(
+            counts=pipe.next_recolor_guard_counts,
+            events=pipe.next_recolor_guard_log), ensure_ascii=False))
     if event_overlay is not None and dump_exchange_event_path is not None:
         event_overlay.tracker.save(dump_exchange_event_path)
         if event_overlay._origin_guard is not None:
@@ -9059,6 +9066,8 @@ def main() -> None:
     )
     ap.add_argument('--placement-signal-reconcile', action='store_true',
                     help='置き完了合図で可視セルを一度だけ照合・修正する（既定OFF）')
+    ap.add_argument('--next-recolor-pair-guard', action='store_true',
+                    help='cycle65のNEXT履歴色補正を、観測色と整合する対だけに限定する（既定OFF）')
     ap.add_argument('--placement-signal-reconcile-ojama', action='store_true',
                     help='照合合図におじゃまを追加して旧R1の3合図を再現する（既定OFF）')
     from src.exchange_event_cli import parse_exchange_event_args
@@ -9109,6 +9118,7 @@ def main() -> None:
               prefire_origin_guard=a.prefire_origin_guard,
               placement_signal_reconcile=a.placement_signal_reconcile,
               placement_signal_reconcile_ojama=a.placement_signal_reconcile_ojama,
+              next_recolor_pair_guard=a.next_recolor_pair_guard,
               post_counter_death_bound=a.post_counter_death_bound,
               single_death_proof_guard=a.single_death_proof_guard,
               single_death_proof_negative_only=a.single_death_proof_negative_only,

@@ -32,6 +32,7 @@ from src.board import (
     BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN,
     HIDDEN_ROWS, Board,
 )
+from src import next_recolor_pair_guard
 from src.hidden_row_inferrer import infer_hidden_row
 from src.probabilistic_board import ProbabilisticBoard
 from src.board_state_machine import (
@@ -1854,6 +1855,10 @@ class RecognitionPipeline:
         enable_chain_active_record_hold: bool = False,
         enable_placement_signal_reconcile: bool = False,
         enable_placement_signal_ojama: bool = False,
+        # 2026-09-30: cycle65 NEXT履歴の色補正の対整合ガード。観測した新規2セルの色と
+        # 整合しない対では上書きしない (q第14試合1P 884秒の誤確定の根因A)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_next_recolor_pair_guard: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2779,6 +2784,12 @@ class RecognitionPipeline:
         # 非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容 (= 物理的に自然)。
         # デフォルト False = 従来挙動維持 (backwards compat)。
         self._enable_infer_empty_guard: bool = bool(enable_infer_empty_guard)
+        # cycle65 対整合ガード (既定OFF)。監査カウンタと事象ログを持つ。
+        self._enable_next_recolor_pair_guard: bool = bool(
+            enable_next_recolor_pair_guard)
+        self.next_recolor_guard_counts: dict[str, int] = {
+            k: 0 for k in next_recolor_pair_guard.OUTCOMES}
+        self.next_recolor_guard_log: list[dict] = []
         # game-event ベース連鎖終了 (C-1/C-2 plan, 2026-06-01)。
         # True で次ツモ変化 / お邪魔出現をトリガーとして CHAIN 終了する。
         # False = 従来 timing hold のみ (backwards compat)。
@@ -3638,6 +3649,10 @@ class RecognitionPipeline:
         enable_chain_active_record_hold: bool = False,
         enable_placement_signal_reconcile: bool = False,
         enable_placement_signal_ojama: bool = False,
+        # 2026-09-30: cycle65 NEXT履歴の色補正の対整合ガード。観測した新規2セルの色と
+        # 整合しない対では上書きしない (q第14試合1P 884秒の誤確定の根因A)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_next_recolor_pair_guard: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3913,6 +3928,7 @@ class RecognitionPipeline:
             ),
             enable_placement_signal_reconcile=enable_placement_signal_reconcile,
             enable_placement_signal_ojama=enable_placement_signal_ojama,
+            enable_next_recolor_pair_guard=enable_next_recolor_pair_guard,
         )
 
     # ------------------------------------------------------------------
@@ -4292,6 +4308,23 @@ class RecognitionPipeline:
                 self._online_hsv = type(self._online_hsv)()
             self._online_hsv_injected = False
             self._online_hsv_injected_colors.clear()
+
+    def _guard_recolor_pair(
+        self, side: str, time_sec: float,
+        diffs: "list[tuple[int, int, int]]",
+        queue: "list[tuple[int, int]]",
+        used_pair: "tuple[int, int]",
+    ) -> "tuple[int, int] | None":
+        """cycle65 の補正対を観測色と照合する。None なら補正しない (観測色維持)。"""
+        observed = [color for _, _, color in diffs]
+        pair, outcome = next_recolor_pair_guard.select_recolor_pair(
+            observed, queue)
+        self.next_recolor_guard_counts[outcome] += 1
+        self.next_recolor_guard_log.append(dict(
+            side=side, t=round(time_sec, 3), outcome=outcome,
+            cells=[(r, c) for r, c, _ in diffs], observed=observed,
+            used=list(used_pair), chosen=None if pair is None else list(pair)))
+        return pair
 
     def observe_placement_frame(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -8022,6 +8055,13 @@ class RecognitionPipeline:
                         falling_pair_b = prev_next_queue[-2]
                     elif prev_next_queue:
                         falling_pair_b = prev_next_queue[-1]
+                    if (
+                        self._enable_next_recolor_pair_guard
+                        and next_recolor_pair_guard.is_usable_pair(falling_pair_b)
+                    ):
+                        falling_pair_b = self._guard_recolor_pair(
+                            side, ctx.time_sec, diffs, prev_next_queue,
+                            falling_pair_b)
                     if (
                         falling_pair_b is not None
                         and falling_pair_b[0] not in (
