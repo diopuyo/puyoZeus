@@ -15,7 +15,7 @@ BGR_CHANNELS = 3
 
 
 class SnapshotQuality:
-    """直前画像は所有権を受け取ったcapture画像のviewで保持する。"""
+    """入力画像は借用し、次回の差分判定に使う盤面領域だけ所有する。"""
 
     def __init__(self) -> None:
         self.geometry: tuple | None = None
@@ -44,7 +44,7 @@ class SnapshotQuality:
         difference = (cv2.norm(self.previous, crop, cv2.NORM_L1)/crop.size
                       if self.previous is not None and self.previous.shape == crop.shape else 0.)
         quality = difference >= DEFAULT_FRAME_DIFF_THRESHOLD or any(d >= t for d, t in zip(deltas, thresholds))
-        self.previous, self.stats = crop, current
+        self.previous, self.stats = crop.copy(), current
         return quality, self.glow(value, region) if check_glow else False
 
     def value(self, crop: np.ndarray, hsv: np.ndarray | None) -> np.ndarray:

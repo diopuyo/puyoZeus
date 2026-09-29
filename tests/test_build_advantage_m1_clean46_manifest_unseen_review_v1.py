@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +9,17 @@ import numpy as np
 import pytest
 
 from scripts import build_advantage_m1_clean46_manifest_unseen_review_v1 as review
+
+
+@pytest.fixture
+def source_video(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """境界判定の単体試験は、削除済みの実動画へ依存させない。"""
+    path = tmp_path / 'source.mp4'
+    content = b'boundary-test-source'
+    path.write_bytes(content)
+    monkeypatch.setattr(review, 'SOURCE', path)
+    monkeypatch.setattr(review, 'SOURCE_SHA256', hashlib.sha256(content).hexdigest())
+    return path
 
 
 def test_log_loss_rewards_correct_probability() -> None:
@@ -64,7 +76,7 @@ def test_builder_uses_new_v3_roots_and_keeps_prior_attempts() -> None:
     assert [str(path)[-3:] for path in review.SUPERSEDED_DELIVERIES] == ["_v1", "_v2"]
 
 
-def test_validate_render_fails_on_wrong_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_validate_render_fails_on_wrong_boundary(monkeypatch: pytest.MonkeyPatch, source_video: Path) -> None:
     monkeypatch.setattr(
         review.media, "_video_properties",
         lambda _path: {"width": 1920, "height": 1080, "fps": 30.0, "frame_count": 891},
@@ -93,7 +105,7 @@ def test_validate_render_fails_on_wrong_boundary(monkeypatch: pytest.MonkeyPatch
 
 
 def test_validate_render_accepts_exact_891_source_frames(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, source_video: Path,
 ) -> None:
     monkeypatch.setattr(
         review.media, "_video_properties",

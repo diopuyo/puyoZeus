@@ -14,6 +14,7 @@ from typing import Any
 
 from .live_eval_worker import AUDIT_ENGINES, worker
 from .live_spool import DiskRows
+from .live_eval_recovery import commit_history, failure_kind
 
 FAILURE_LIMIT = 3
 REPLY_TIMEOUT_SEC = 30.0
@@ -62,6 +63,8 @@ class SupervisedOverlay:
         self.journal = DiskRows(directory/'evaluation-journal.pickle')
         self.pending: list[bytes] = []
         self.game: int | None = None
+        self.request_id, self.boundary_next_id = 0, 1
+        self.discarded_replies: list[dict] = []
         self.t_sec = 0.0
         self.display, self.smoothing, self.boundary_smoothing = None, (0., .5, None), (0., .5, None)
         self.failures, self.restarts, self.error_count = 0, 0, 0
@@ -86,36 +89,43 @@ class SupervisedOverlay:
             self.stop_worker()
             raise
 
-    def receive(self, timeout: float = REPLY_TIMEOUT_SEC) -> dict:
+    def receive(self, timeout: float = REPLY_TIMEOUT_SEC, request_id: int | None = None,
+                operation: str | None = None) -> dict:
         deadline = time.monotonic()+timeout
         while True:
             if not self.connection.poll(max(0.0, deadline-time.monotonic())):
                 raise TimeoutError('イベント評価応答なし')
             reply = self.connection.recv()
+            if reply.get('request_id') != request_id:
+                if reply['kind'] == 'static':
+                    self.connection.send(dict(kind='error', message='期限切れの評価要求',
+                                              request_id=reply.get('request_id')))
+                self.discarded_replies.append(dict(kind='stale_evaluation_reply',
+                    expected=request_id, received=reply.get('request_id'), op=reply.get('op')))
+                continue
             if reply['kind'] != 'static':
+                if operation is not None and reply.get('op') != operation:
+                    raise OSError('イベント評価応答の操作不一致')
                 return reply
             try:
                 value = self.build_static(*reply['args'])
-                self.connection.send(dict(kind='ok', value=value))
+                self.connection.send(dict(kind='ok', value=value, request_id=request_id))
             except Exception as error:
-                self.connection.send(dict(kind='error', message=str(error)))
+                self.connection.send(dict(kind='error', message=str(error), request_id=request_id))
                 self.static_error = dict(exception_type=type(error).__name__,
                                         message=str(error), stack=traceback.format_exc())
 
     def update(self, *args: Any) -> None:
         self.t_sec, game = args[3:5]
-        if game != self.game:
-            self.boundary_smoothing = self.smoothing
-            self.journal.close()
-            self.journal = DiskRows(self.directory/'evaluation-journal.pickle')
-            self.game = game
+        self.game = game
         blob = pickle.dumps(('update', args), protocol=pickle.HIGHEST_PROTOCOL)
         self.journal.append(blob)
         self.pending.append(blob)
         # 物理更新を公開周期まで貯めず、最新通知の到着時に完了させる。
         commands = list(self.journal) if self.dirty else self.pending
         reply = self.request(dict(op='advance', commands=commands, reset=self.dirty,
-                                  smoothing=self.boundary_smoothing))
+                                  smoothing=self.boundary_smoothing, next_id=self.boundary_next_id))
+        commit_history(self, reply, commands)
         self.smoothing = reply['smoothing']
         self.pending.clear()
         self.dirty = False
@@ -123,12 +133,21 @@ class SupervisedOverlay:
     def request(self, request: dict) -> dict:
         """物理更新と公開計算の両方を同じ障害隔離境界で処理する。"""
         self.static_error = None
+        self.discarded_replies = []
+        self.request_id += 1
+        request = dict(request, request_id=self.request_id)
         try:
             self.connection.send(request)
-            reply = self.receive()
+            reply = self.receive(request_id=self.request_id, operation=request['op'])
         except (OSError, EOFError, TimeoutError) as error:
             reply = dict(kind='error', exception_type=type(error).__name__, message=str(error),
                          stack=traceback.format_exc(), pid=self.process.pid)
+        try:
+            for discarded in self.discarded_replies:
+                log_event(self.directory, discarded)
+        except Exception:
+            self.dirty = True
+            raise
         if reply['kind'] == 'error':
             self.failed(dict(reply, **(self.static_error or {})))
             raise EvaluationError(reply['message'])
@@ -137,9 +156,10 @@ class SupervisedOverlay:
     def calculate(self) -> None:
         commands = list(self.journal) if self.dirty else self.pending
         request = dict(op='batch', commands=commands, reset=self.dirty, fault=self.fault,
-                       smoothing=self.boundary_smoothing)
+                       smoothing=self.boundary_smoothing, next_id=self.boundary_next_id)
         self.fault = None
         reply = self.request(request)
+        commit_history(self, reply, commands)
         self.pending.clear()
         self.journal.append(pickle.dumps(('calculate', ())))
         self.dirty = False
@@ -150,8 +170,6 @@ class SupervisedOverlay:
         self.smoothing = reply['smoothing']
         self.tracker._static_probability = reply['static_probability']
         self.tracker.prediction_discard_reason = reply['prediction_discard_reason']
-        self.archive.extend(reply['sealed'])
-        self.diagnostics.extend(reply['diagnostics'])
         for key, value in reply['tracker_view'].items():
             setattr(self.tracker, key, value)
         self._landing_projection, self._history = reply['landing_view'], reply['history']
@@ -181,17 +199,9 @@ class SupervisedOverlay:
                 replay_from='match_boundary', notifications=len(self.journal)))
 
     def save(self, path: Path) -> None:
-        if self.pending and not self.dirty:
-            self.connection.send(dict(op='updates', commands=self.pending))
-            flushed = self.receive()
-            if flushed['kind'] == 'error':
-                self.failed(flushed)
-            else:
-                self.archive.extend(flushed['sealed'])
-                self.diagnostics.extend(flushed['diagnostics'])
-                self.pending.clear()
-        self.connection.send(dict(op='records'))
-        current = self.receive()
+        if self.pending or self.dirty:
+            self.calculate()
+        current = self.request(dict(op='records'))
         for name, value in current['audits'].items():
             setattr(self, name, AuditView(value) if value is not None else None)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -255,9 +265,7 @@ def evaluation_failure(bridge: Any, notice: Any, local: dict, error: Exception) 
     if not isinstance(error, EvaluationError):
         row = dict(exception_type=type(error).__name__, message=str(error),
                    stack=traceback.format_exc(), pid=os.getpid())
-        if evaluator is not None:
-            evaluator.failed(row)
-        else:
-            log_event(bridge.evaluation_directory, dict(row, kind='evaluation_error', t_sec=notice.t_sec))
-    if evaluator is None or evaluator.on_error is None:
+        directory = evaluator.directory if evaluator is not None else bridge.evaluation_directory
+        log_event(directory, dict(row, kind=failure_kind(error), t_sec=notice.t_sec))
+    if not isinstance(error, EvaluationError) or evaluator is None or evaluator.on_error is None:
         bridge.evaluation_hold(notice, local.get('game_idx', 0))

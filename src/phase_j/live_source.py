@@ -29,7 +29,7 @@ class CapturedFrame:
 
 
 class FrameSource(ABC):
-    """キャプチャ方式に依存しない単一のフレーム供給契約。"""
+    """画像は次の取得まで借用可能。継続保持する利用側が必要領域をコピーする。"""
 
     dropped: int = 0
 

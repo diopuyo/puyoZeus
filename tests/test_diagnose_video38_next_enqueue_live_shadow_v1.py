@@ -58,9 +58,13 @@ def helper() -> Any:
 
 
 def receipt_fixture() -> dict[str, Any]:
+    from scripts import match_start_epoch_shadow_v1 as start_epoch
     guards = subject.base.read_json(subject.initial.REFERENCE / "PLAN.json")["input_and_code_sha256"]
     guards.update(subject.fixed_guards())
     guards.update({str(subject.base.ROOT / path): digest for path, digest in subject.runner.START_EVIDENCE.items()})
+    # 保存時の絶対パスだけでなく、検収するworktreeの固定依存をguardへ結ぶ。
+    guards.update({str(Path(path).resolve()): digest
+                   for path, digest in start_epoch.REQUIRED_INPUT_SHA256.items()})
     return {"input_and_code_sha256": guards, "boundary_repair": {"mode": "start_epoch",
         "module": str(subject.base.ROOT / "scripts/match_start_epoch_shadow_v1.py"),
         "module_sha256": subject.initial.FIXED_SHA["scripts/match_start_epoch_shadow_v1.py"]}}

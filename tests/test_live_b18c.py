@@ -16,7 +16,7 @@ VISIBLE_ROWS = frozenset(range(1, 13))
 
 
 @pytest.mark.parametrize('region', [DEFAULT_P1_REGION, DEFAULT_P2_REGION])
-def test_quality_matches_original_pixels_without_copy(region: object) -> None:
+def test_quality_matches_original_pixels_with_owned_crop(region: object) -> None:
     old, new = AnimationFilter(), SnapshotQuality()
     rng = np.random.default_rng(18)
     for tick in range(12):
@@ -26,7 +26,8 @@ def test_quality_matches_original_pixels_without_copy(region: object) -> None:
         actual, glow = new.observe(image, region)
         assert actual == expected
         assert glow == is_effect_glow_active(image, region, VISIBLE_ROWS)
-        assert np.shares_memory(new.previous, image)
+        assert not np.shares_memory(new.previous, image)
+        assert new.previous.nbytes == crop.nbytes
         if tick == 6:
             old.reset()
             new.reset()

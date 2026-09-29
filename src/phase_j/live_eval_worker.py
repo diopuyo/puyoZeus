@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from collections import deque
 import os
 import pickle
 import traceback
@@ -37,13 +38,14 @@ def boundary_tracker(models: Any, original: Any = None) -> Any:
     return tracker
 
 
-def make_overlay(connection: Any, config: tuple) -> NotificationExchangeOverlay:
+def make_overlay(connection: Any, config: tuple, pending: deque | None = None) -> NotificationExchangeOverlay:
     models, signals, m0, settled = config[:4]
     options = config[4] if len(config) > 4 else {}
+    pending = pending if pending is not None else deque()
 
     def build(*args: Any) -> Any:
-        connection.send(dict(kind='static', args=args))
-        reply = connection.recv()
+        connection.send(dict(kind='static', args=args, request_id=overlay.request_id))
+        reply = static_reply(connection, overlay.request_id, pending)
         if reply['kind'] == 'error':
             raise RuntimeError(reply['message'])
         return reply['value']
@@ -51,6 +53,16 @@ def make_overlay(connection: Any, config: tuple) -> NotificationExchangeOverlay:
     overlay = NotificationExchangeOverlay(models, build, signals, m0, per_side_settled=settled, **options)
     overlay.tracker = boundary_tracker(models, overlay.tracker)
     return overlay
+
+
+def static_reply(connection: Any, request_id: int, pending: deque) -> dict:
+    """タイムアウト後の次要求を、static応答と取り違えず主ループへ戻す。"""
+    while True:
+        reply = connection.recv()
+        if 'op' in reply:
+            pending.append(reply)
+        elif reply.get('request_id') == request_id:
+            return reply
 
 
 def state(overlay: Any) -> dict:
@@ -70,21 +82,29 @@ def state(overlay: Any) -> dict:
 
 
 def execute(overlay: Any, request: dict) -> dict:
-    for blob in request['commands']:
+    checkpoint = None
+    for index, blob in enumerate(request['commands']):
         operation, args = pickle.loads(blob)
         if operation == 'update':
             overlay.failure_sec = args[3]
+            if overlay.tracker._game_idx != args[4]:
+                checkpoint = dict(index=index, next_id=overlay.tracker._next_exchange_id,
+                    smoothing=(overlay.smoothing.adv, overlay.smoothing.probability,
+                               overlay.smoothing.last_sec))
         overlay.failure_stage = operation
         getattr(overlay, operation)(*args)
     overlay.failure_stage = 'calculate'
     if request.get('fault'):
         raise RuntimeError('B16故障注入: '+request['fault'])
     if request['op'] == 'advance':
-        return dict(kind='ok', smoothing=(overlay.smoothing.adv,
-            overlay.smoothing.probability, overlay.smoothing.last_sec))
+        reply = dict(kind='ok', smoothing=(overlay.smoothing.adv,
+            overlay.smoothing.probability, overlay.smoothing.last_sec), checkpoint=checkpoint,
+            sealed=overlay.tracker.sealed, diagnostics=overlay.tracker.sealed_diagnostics)
+        overlay.tracker.sealed, overlay.tracker.sealed_diagnostics = [], []
+        return reply
     if request['op'] != 'updates':
         overlay.calculate()
-    return state(overlay)
+    return dict(state(overlay), checkpoint=checkpoint)
 
 
 def worker(connection: Any, config: tuple, parent_pid: int) -> None:
@@ -93,16 +113,18 @@ def worker(connection: Any, config: tuple, parent_pid: int) -> None:
     from .live_lifetime import protect_parent
     protect_parent(parent_pid)
     runtime = apply_runtime('event-evaluation')
-    overlay = make_overlay(connection, config)
+    pending: deque = deque()
+    overlay = make_overlay(connection, config, pending)
     connection.send(dict(kind='ready', pid=os.getpid(), runtime=runtime))
     with bounded_chain_caches():
-        serve(connection, config, overlay)
+        serve(connection, config, overlay, pending)
 
 
-def serve(connection: Any, config: tuple, overlay: Any) -> None:
+def serve(connection: Any, config: tuple, overlay: Any, pending: deque | None = None) -> None:
+    pending = pending if pending is not None else deque()
     try:
         while True:
-            request = connection.recv()
+            request = pending.popleft() if pending else connection.recv()
             if request['op'] == 'close':
                 return
             try:
@@ -115,16 +137,18 @@ def serve(connection: Any, config: tuple, overlay: Any) -> None:
                                          for engine in (getattr(overlay, name),)})
                 else:
                     if request.get('reset'):
-                        overlay = make_overlay(connection, config)
+                        overlay = make_overlay(connection, config, pending)
+                        overlay.tracker._next_exchange_id = request.get('next_id', 1)
                         if request.get('smoothing') is not None:
                             overlay.restore_smoothing(request['smoothing'])
+                    overlay.request_id = request.get('request_id')
                     reply = execute(overlay, request)
             except Exception as error:
                 reply = dict(kind='error', exception_type=type(error).__name__,
                     message=str(error), stack=traceback.format_exc(), pid=os.getpid(),
                     t_sec=getattr(overlay, 'failure_sec', None),
                     stage=getattr(overlay, 'failure_stage', None))
-            connection.send(reply)
+            connection.send(dict(reply, request_id=request.get('request_id'), op=request['op']))
     except (EOFError, BrokenPipeError):
         return
     finally:
