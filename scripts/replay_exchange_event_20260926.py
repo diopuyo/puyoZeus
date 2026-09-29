@@ -12,6 +12,7 @@ import numpy as np
 from src.exchange_event_evaluator import FileExchangeModels, StaticInput
 from src.exchange_event_overlay import ExchangeEventOverlay
 from src.exchange_event_record import read_records, static_key
+from src.exchange_event_cli import parse_exchange_event_args
 
 
 def static_builder(record: Path) -> Any:
@@ -161,7 +162,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("record", type=Path)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--model-dir", type=Path)
+    parser.add_argument("--model-dir", "--exchange-event-model-dir", type=Path)
+    parser.add_argument("--exchange-event-update", action="store_true",
+                        help="描画と共通の指定（再生では常に撃ち合い評価を実行）")
     parser.add_argument("--exchange-event-live-count", action="store_true", default=False)
     parser.add_argument("--exchange-event-e16", action="store_true", default=False)
     parser.add_argument("--landing-counter-response", action="store_true", default=False)
@@ -179,7 +182,7 @@ def main() -> None:
     for name in ("count-sync", "death-guard", "evaluation-layers", "completion-check"):
         parser.add_argument("--exchange-event-" + name, action="store_true", default=False)
     parser.add_argument("--compare", type=Path)
-    options = parser.parse_args()
+    options = parse_exchange_event_args(parser)
     result = replay(options.record, options.out, options.model_dir, options.exchange_event_live_count,
                     e16=options.exchange_event_e16, count_sync=options.exchange_event_count_sync,
                     death_guard=options.exchange_event_death_guard,

@@ -9035,7 +9035,8 @@ def main() -> None:
             "構成の再現・A/B比較用)。"
         ),
     )
-    a = ap.parse_args()
+    from src.exchange_event_cli import parse_exchange_event_args
+    a = parse_exchange_event_args(ap)
     if a.exchange_event_e16 and a.exchange_event_model_dir == Path("models/exchange_event_v1"):
         a.exchange_event_model_dir = Path("models/exchange_event_v4")
     # 既定値解決 (collect_boards_lean.py と同じ方式): 明示 --no-normalize-fps-30 が
