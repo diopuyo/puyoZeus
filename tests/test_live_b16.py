@@ -10,7 +10,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.phase_j.live_evaluation import DeferredTracker, SplitExchangeOverlay
+from src.phase_j.live_evaluation import DeferredTracker
+from src.phase_j.live_notification_eval import NotificationExchangeOverlay
 from src.phase_j.live_eval_supervisor import SupervisedOverlay, EvaluationError, FAILURE_LIMIT
 from tests.test_exchange_event_tracker import Models, fire
 from tests.test_exchange_event_overlay import build_static, result, Signals
@@ -92,7 +93,7 @@ def remote(tmp_path: Path) -> Iterator[SupervisedOverlay]:
 
 
 def test_remote_outputs_equal_direct_and_boundary_archive(remote: SupervisedOverlay, tmp_path: Path) -> None:
-    direct = SplitExchangeOverlay(Models(), build_static, Signals, m0, per_side_settled=True)
+    direct = NotificationExchangeOverlay(Models(), build_static, Signals, m0, per_side_settled=True)
     for frame in range(120):
         args = inputs(frame/30, 1 if frame < 100 else 2)
         for overlay in (direct, remote):
@@ -126,7 +127,7 @@ def test_single_failure_recovers_next_update(remote: SupervisedOverlay, tmp_path
 
 
 def test_consecutive_failure_restarts_and_replays_match(remote: SupervisedOverlay, tmp_path: Path) -> None:
-    direct = SplitExchangeOverlay(Models(), build_static, Signals, m0, per_side_settled=True)
+    direct = NotificationExchangeOverlay(Models(), build_static, Signals, m0, per_side_settled=True)
     previous = remote.process.pid
     hold_pids = []
     remote.on_error = lambda: hold_pids.append(remote.process.pid)

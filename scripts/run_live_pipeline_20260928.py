@@ -60,6 +60,8 @@ def asset_hashes() -> dict[str, str]:
         'src/phase_j/live_device.py', 'src/phase_j/live_device_session.py', 'src/phase_j/live_calibration.py',
         'src/phase_j/live_side_counter.py', 'src/phase_j/live_config.py',
         'src/phase_j/live_evaluation.py',
+        'src/phase_j/live_notification_eval.py', 'src/phase_j/live_snapshot.py', 'src/image_reader.py',
+        'src/phase_j/live_eval_worker.py', 'src/phase_j/live_eval_supervisor.py',
         'src/phase_j/live_cpu.py', 'src/phase_j/live_audit.py',
         'src/phase_j/live_load.py', 'src/phase_j/live_degrade.py', 'src/phase_j/live_source.py',
         'src/phase_j/live_capture_buffer.py',
@@ -332,13 +334,12 @@ def install_live_instrumentation(stack: ExitStack, overlay: Any, bridge: Recogni
     stack.enter_context(patch.object(review, 'build_review_row',
         bridge.meter.wrap(review.build_review_row, 'review')))
     if bridge.split_evaluation:
-        from src.phase_j.live_evaluation import SplitExchangeOverlay, sampled_ema
+        from src.phase_j.live_notification_eval import NotificationExchangeOverlay, latest_display
         from src.phase_j.live_eval_supervisor import factory
         evaluator = (factory(bridge, bridge.evaluation_directory)
-                     if getattr(bridge, 'isolate_evaluation', False) else SplitExchangeOverlay)
+                     if getattr(bridge, 'isolate_evaluation', False) else NotificationExchangeOverlay)
         stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay', evaluator))
-        stack.enter_context(patch.object(overlay, '_ExchangeDisplayEMA',
-                                        sampled_ema(overlay._ExchangeDisplayEMA, bridge)))
+        stack.enter_context(patch.object(overlay, '_exchange_display', latest_display))
     elif isinstance(bridge, ProcessRecognitionBridge):
         stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay',
             coalescing_overlay(overlay.ExchangeEventOverlay, bridge)))

@@ -1613,6 +1613,7 @@ class ImageReader:
             for row, col in covered:
                 board.set(row, col, COLOR_UNKNOWN)
 
+        self._remember_live_observation(board, region)
         # Phase T サイクル 5: 推論強化
         # 浮遊ぷよ (UI オーバーレイ・連鎖アニメ・落下中ぷよの誤検出) を除去
         if self._apply_inference:
@@ -1630,6 +1631,20 @@ class ImageReader:
         if _sat_saved is not None:
             _sat_target.set_s_min_scale(_sat_saved)
         return board
+
+    def _remember_live_observation(self, board: Board, region: BoardRegion) -> None:
+        """ライブ窓に限り、浮遊除去前の既存読取結果を複製する。再推論はしない。"""
+        observations = getattr(self, '_live_raw_boards', None)
+        if observations is None:
+            return
+        from time import perf_counter
+        started = perf_counter()
+        idx = int(abs(region.x-self._p2_region.x) < abs(region.x-self._p1_region.x))
+        if idx not in observations:
+            raw = board.copy()
+            self._infer_hidden_rows(raw)
+            observations[idx] = raw
+        self._live_raw_board_sec += perf_counter()-started
 
     def _apply_profile_filter(
         self,
@@ -1861,7 +1876,20 @@ class ImageReader:
                 board.set(row, col, int(hsv_clf.classify(patch)))
         # 隠し段を物理推論で確定 or UNKNOWN にする
         self._infer_hidden_rows(board)
+        self._remember_live_hsv(board, region)
         return board
+
+    def _remember_live_hsv(self, board: Board, region: BoardRegion) -> None:
+        """既存のHSV単独読取もライブ窓へ流用し、同じフレームを再読しない。"""
+        observations = getattr(self, '_live_hsv_boards', None)
+        if observations is None:
+            return
+        from time import perf_counter
+        started = perf_counter()
+        idx = int(abs(region.x-self._p2_region.x) < abs(region.x-self._p1_region.x))
+        if idx not in observations:
+            observations[idx] = board.copy()
+        self._live_raw_board_sec += perf_counter()-started
 
     def read_both_boards_hsv(
         self,

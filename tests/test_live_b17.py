@@ -102,11 +102,11 @@ def test_journal_retains_only_current_match(remote: SupervisedOverlay) -> None:
 
 def test_save_keeps_boundary_records_before_next_publication(remote: SupervisedOverlay,
                                                             tmp_path: Path) -> None:
-    from src.phase_j.live_evaluation import SplitExchangeOverlay
+    from src.phase_j.live_notification_eval import NotificationExchangeOverlay
     from tests.test_exchange_event_tracker import Models
     from tests.test_exchange_event_overlay import build_static, Signals
     from tests.test_live_b16 import m0
-    direct = SplitExchangeOverlay(Models(), build_static, Signals, m0, per_side_settled=True)
+    direct = NotificationExchangeOverlay(Models(), build_static, Signals, m0, per_side_settled=True)
     for tick in range(120):
         args = inputs(tick/30, game=1 if tick < 100 else 2)
         for overlay in (direct, remote):

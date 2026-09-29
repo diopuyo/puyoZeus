@@ -54,7 +54,10 @@ def recognize(pipe: Any, frame: CapturedFrame) -> RecognitionNotice:
     """OCRの実読と段累積も認識所有スレッド内で同時点に確定する。"""
     from src.exchange_event_m0 import formula_totals_from_pipeline
     from src.exchange_event_overlay import displayed_scores_from_pipeline, formula_visible_from_pipeline
+    from .live_snapshot import enrich_recognition, prepare_recognition
+    prepare_recognition(pipe)
     result = pipe.update(frame.index, frame.media_sec, frame.image)
+    result = enrich_recognition(pipe, frame.image, result, frame.media_sec)
     view = PipelineView(tuple(pipe.tsumo_count(side) for side in ('1P', '2P')),
                         formula_totals_from_pipeline(pipe),
                         displayed_scores_from_pipeline(pipe, frame.image),
@@ -320,7 +323,7 @@ def build_live_generate(module: Any, bridge: RecognitionBridge) -> Callable[...,
     """新経路に限り既存generateを接続。旧CLI・既存ファイルには変更なし。"""
     tree = ast.parse(inspect.getsource(module.generate))
     function = tree.body[0]
-    # 画像読取器の生成も認識側の責務。未配線の観測用CNNを評価processへロードしない。
+    # 画像由来の観測は認識通知で取得済み。評価processには読取器を生成しない。
     readers = {'terminal_detector', 'midchain_reader', 'snapshot_reader'}
     for node in function.body:
         if isinstance(node, ast.If) and any(isinstance(child, ast.Assign)

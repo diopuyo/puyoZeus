@@ -63,6 +63,7 @@ class SupervisedOverlay:
         self.pending: list[bytes] = []
         self.game: int | None = None
         self.t_sec = 0.0
+        self.display, self.smoothing, self.boundary_smoothing = None, (0., .5, None), (0., .5, None)
         self.failures, self.restarts, self.error_count = 0, 0, 0
         self.dirty, self.closed = False, False
         self.fault: str | None = None
@@ -104,6 +105,7 @@ class SupervisedOverlay:
     def update(self, *args: Any) -> None:
         self.t_sec, game = args[3:5]
         if game != self.game:
+            self.boundary_smoothing = self.smoothing
             self.journal.close()
             self.journal = DiskRows(self.directory/'evaluation-journal.pickle')
             self.game = game
@@ -112,7 +114,9 @@ class SupervisedOverlay:
         self.pending.append(blob)
         # 物理更新を公開周期まで貯めず、最新通知の到着時に完了させる。
         commands = list(self.journal) if self.dirty else self.pending
-        self.request(dict(op='advance', commands=commands, reset=self.dirty))
+        reply = self.request(dict(op='advance', commands=commands, reset=self.dirty,
+                                  smoothing=self.boundary_smoothing))
+        self.smoothing = reply['smoothing']
         self.pending.clear()
         self.dirty = False
 
@@ -132,7 +136,8 @@ class SupervisedOverlay:
 
     def calculate(self) -> None:
         commands = list(self.journal) if self.dirty else self.pending
-        request = dict(op='batch', commands=commands, reset=self.dirty, fault=self.fault)
+        request = dict(op='batch', commands=commands, reset=self.dirty, fault=self.fault,
+                       smoothing=self.boundary_smoothing)
         self.fault = None
         reply = self.request(request)
         self.pending.clear()
@@ -141,6 +146,8 @@ class SupervisedOverlay:
         if self.auto_acknowledge:
             self.succeeded()
         self.tracker.probability, self.tracker.source = reply['probability'], reply['source']
+        self.display = reply['display']
+        self.smoothing = reply['smoothing']
         self.tracker._static_probability = reply['static_probability']
         self.tracker.prediction_discard_reason = reply['prediction_discard_reason']
         self.archive.extend(reply['sealed'])

@@ -8,13 +8,14 @@ import traceback
 from types import SimpleNamespace
 from typing import Any
 
-from .live_evaluation import DeferredTracker, SplitExchangeOverlay
+from src.exchange_event_tracker import ExchangeEventTracker
+from .live_notification_eval import NotificationExchangeOverlay
 
 AUDIT_ENGINES = ('_origin_guard', '_midchain', '_hidden_death', '_prefire')
 
 
 def boundary_tracker(models: Any, original: Any = None) -> Any:
-    class Tracker(DeferredTracker):
+    class Tracker(ExchangeEventTracker):
         def __init__(self, models: Any) -> None:
             super().__init__(models)
             self.sealed: list = []
@@ -36,7 +37,7 @@ def boundary_tracker(models: Any, original: Any = None) -> Any:
     return tracker
 
 
-def make_overlay(connection: Any, config: tuple) -> SplitExchangeOverlay:
+def make_overlay(connection: Any, config: tuple) -> NotificationExchangeOverlay:
     models, signals, m0, settled = config[:4]
     options = config[4] if len(config) > 4 else {}
 
@@ -47,14 +48,15 @@ def make_overlay(connection: Any, config: tuple) -> SplitExchangeOverlay:
             raise RuntimeError(reply['message'])
         return reply['value']
 
-    overlay = SplitExchangeOverlay(models, build, signals, m0, per_side_settled=settled, **options)
+    overlay = NotificationExchangeOverlay(models, build, signals, m0, per_side_settled=settled, **options)
     overlay.tracker = boundary_tracker(models, overlay.tracker)
     return overlay
 
 
 def state(overlay: Any) -> dict:
     tracker = overlay.tracker
-    result = dict(kind='ok', probability=tracker.probability, source=tracker.source,
+    result = dict(kind='ok', probability=tracker.probability, source=tracker.source, display=overlay.display,
+        smoothing=(overlay.smoothing.adv, overlay.smoothing.probability, overlay.smoothing.last_sec),
         static_probability=tracker._static_probability,
         prediction_discard_reason=getattr(tracker, 'prediction_discard_reason', None),
         sealed=tracker.sealed, diagnostics=tracker.sealed_diagnostics,
@@ -78,7 +80,8 @@ def execute(overlay: Any, request: dict) -> dict:
     if request.get('fault'):
         raise RuntimeError('B16故障注入: '+request['fault'])
     if request['op'] == 'advance':
-        return dict(kind='ok')  # 境界の退避記録は公開応答まで子が保持する。
+        return dict(kind='ok', smoothing=(overlay.smoothing.adv,
+            overlay.smoothing.probability, overlay.smoothing.last_sec))
     if request['op'] != 'updates':
         overlay.calculate()
     return state(overlay)
@@ -113,6 +116,8 @@ def serve(connection: Any, config: tuple, overlay: Any) -> None:
                 else:
                     if request.get('reset'):
                         overlay = make_overlay(connection, config)
+                        if request.get('smoothing') is not None:
+                            overlay.restore_smoothing(request['smoothing'])
                     reply = execute(overlay, request)
             except Exception as error:
                 reply = dict(kind='error', exception_type=type(error).__name__,
