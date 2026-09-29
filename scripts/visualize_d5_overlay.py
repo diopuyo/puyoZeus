@@ -12,9 +12,11 @@ def main() -> None:
     from scripts import visualize_e35_overlay as e35
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--single-death-proof-guard', action='store_true', default=False)
+    parser.add_argument('--single-death-proof-negative-only', action='store_true', default=False)
     options, remaining = parser.parse_known_args()
     if options.single_death_proof_guard:
-        render.ExchangeEventOverlay = partial(render.ExchangeEventOverlay, single_death_proof_guard=True)
+        render.ExchangeEventOverlay = partial(render.ExchangeEventOverlay, single_death_proof_guard=True,
+            single_death_proof_negative_only=options.single_death_proof_negative_only)
     sys.argv = [sys.argv[0], *remaining]
     e35.main()
 

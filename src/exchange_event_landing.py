@@ -75,12 +75,15 @@ class ExchangeLandingProjection:
                  landing_state_safety: bool = False, pending_ledger: bool = False,
                  color_score_safety: bool = False, completion_recovery: bool = False,
                  death_pending_ledger: bool = False, hidden_row_death: bool = False,
-                 single_death_proof_guard: bool = False) -> None:
+                 single_death_proof_guard: bool = False,
+                 single_death_proof_negative_only: bool = False) -> None:
         self.counter_response = counter_response
         self.death_pending_ledger = death_pending_ledger
         self.death_only_inputs = death_pending_ledger or hidden_row_death
         self.multi_landing_death = multi_landing_death
         self.single_death_proof_guard = single_death_proof_guard
+        # D5b: D5併用時のみ有効。生存枝・相殺可能の証明があるときだけ取り消す。
+        self.single_death_proof_negative_only = single_death_proof_guard and single_death_proof_negative_only
         from src.exchange_landing_safety import LandingStateSafety
         self.safety = LandingStateSafety(landing_state_safety or pending_ledger,
             landing_state_safety or color_score_safety or single_death_proof_guard,
@@ -441,7 +444,7 @@ class ExchangeLandingProjection:
             if candidate and self.single_death_proof_guard:
                 from src.exchange_single_death_proof import prove_single_candidate
                 proofs[i] = prove_single_candidate(self, overlay, latest[i], responses[i],
-                    incoming[i], hands[i], credit[i], i, t_sec)
+                    incoming[i], hands[i], credit[i], i, t_sec, self.single_death_proof_negative_only)
                 candidate = proofs[i]['dead']
             if candidate:
                 dead.append(SIDE_LABELS[i])
