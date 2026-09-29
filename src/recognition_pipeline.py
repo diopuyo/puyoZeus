@@ -1853,6 +1853,7 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical。
         enable_chain_active_record_hold: bool = False,
         enable_placement_signal_reconcile: bool = False,
+        enable_placement_signal_ojama: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2144,6 +2145,7 @@ class RecognitionPipeline:
             ocr = score_ocr if score_ocr is not None else ScoreOcr.load_default()
             self._placement_reconcile = PlacementSignalRuntime(
                 getattr(classifier, '_cnn', classifier), ocr._mult_template_gray,
+                enable_ojama=enable_placement_signal_ojama,
             )
         self._score_tracker_1p: ScoreTracker | None = (
             ScoreTracker("1P", score_ocr) if score_ocr else None
@@ -3635,6 +3637,7 @@ class RecognitionPipeline:
         # W48b (2026-09-18): 連鎖が動いている間は記録しない。詳細は __init__ 側。
         enable_chain_active_record_hold: bool = False,
         enable_placement_signal_reconcile: bool = False,
+        enable_placement_signal_ojama: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3909,6 +3912,7 @@ class RecognitionPipeline:
                 enable_chain_active_record_hold
             ),
             enable_placement_signal_reconcile=enable_placement_signal_reconcile,
+            enable_placement_signal_ojama=enable_placement_signal_ojama,
         )
 
     # ------------------------------------------------------------------

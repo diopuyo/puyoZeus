@@ -6468,6 +6468,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              prefire_stage_timeout_only: bool = False,
              prefire_origin_guard: bool = False,
              placement_signal_reconcile: bool = False,
+             placement_signal_reconcile_ojama: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7209,6 +7210,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             enable_pseudo_chain_score_fill)
     pipe = RecognitionPipeline.load_default(
         enable_placement_signal_reconcile=placement_signal_reconcile,
+        enable_placement_signal_ojama=placement_signal_reconcile_ojama,
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
         # 未指定 (None) はライブラリ既定に解決する = 本番と同じ挙動を描画する
@@ -9043,6 +9045,8 @@ def main() -> None:
     )
     ap.add_argument('--placement-signal-reconcile', action='store_true',
                     help='置き完了合図で可視セルを一度だけ照合・修正する（既定OFF）')
+    ap.add_argument('--placement-signal-reconcile-ojama', action='store_true',
+                    help='照合合図におじゃまを追加して旧R1の3合図を再現する（既定OFF）')
     from src.exchange_event_cli import parse_exchange_event_args
     a = parse_exchange_event_args(ap)
     if a.exchange_event_e16 and a.exchange_event_model_dir == Path("models/exchange_event_v1"):
@@ -9090,6 +9094,7 @@ def main() -> None:
               prefire_stage_timeout_only=a.prefire_stage_timeout_only,
               prefire_origin_guard=a.prefire_origin_guard,
               placement_signal_reconcile=a.placement_signal_reconcile,
+              placement_signal_reconcile_ojama=a.placement_signal_reconcile_ojama,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

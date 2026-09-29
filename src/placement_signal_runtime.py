@@ -21,13 +21,16 @@ FRAME_SIZE = (1920, 1080)
 HISTORY_SIZE = FORMULA_LOOKBACK_FRAMES + 2
 VISIBLE = frozenset(range(HIDDEN_ROWS, BOARD_ROWS))
 ERASURE_GROUP_SIZE = 4
+DEFAULT_RECONCILE_SIGNALS = ('next', 'formula')
+LEGACY_RECONCILE_SIGNALS = (*DEFAULT_RECONCILE_SIGNALS, 'ojama')
 
 
 class PlacementSignalRuntime:
     """NEXT周期の最初の合図だけを消費し、採否と全差分を記録する。"""
 
-    def __init__(self, cnn: Any, template: np.ndarray) -> None:
+    def __init__(self, cnn: Any, template: np.ndarray, enable_ojama: bool = False) -> None:
         self.cnn, self.template, self.hsv = cnn, template, ColorClassifier()
+        self.enabled_signals = LEGACY_RECONCILE_SIGNALS if enable_ojama else DEFAULT_RECONCILE_SIGNALS
         self.audit: list[dict] = []
         self.sink: Callable[[dict], None] | None = None
         self.reset()
@@ -136,10 +139,12 @@ class PlacementSignalRuntime:
             new = obs.agreement() & (obs.cnn == COLOR_OJAMA) & (previous.cnn != COLOR_OJAMA)
             if new[HIDDEN_ROWS:HIDDEN_ROWS+OJAMA_ROI_HEIGHT].any():
                 signals.append('ojama')
-        return signals
+        return [signal for signal in signals if signal in self.enabled_signals]
 
     def apply(self, pipe: Any, side: int, signal: str, latest: Observation) -> None:
         """最初の合図を消費し、品質不良も再試行せず記録だけ残す。"""
+        if signal not in self.enabled_signals:
+            return
         consumed = self.consumed[side]
         self.consumed[side] = True
         history = list(self.history[side])

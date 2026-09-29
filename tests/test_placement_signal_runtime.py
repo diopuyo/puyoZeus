@@ -23,6 +23,7 @@ def setup_runtime() -> tuple:
 
 def test_first_signal_only_even_when_rejected() -> None:
     runtime, pipe = setup_runtime()
+    runtime.enabled_signals = (*runtime.enabled_signals, 'ojama')
     pipe._sm_1p.context.state = BoardState.CHAIN
     runtime.apply(pipe, 0, 'formula', observation(10))
     pipe._sm_1p.context.state = BoardState.STABLE
@@ -84,6 +85,7 @@ def test_commit_discards_only_corrected_cell_history() -> None:
 def test_pipeline_default_off_has_no_reader_side_effect() -> None:
     for function in (RecognitionPipeline.__init__, RecognitionPipeline.load_default):
         assert inspect.signature(function).parameters['enable_placement_signal_reconcile'].default is False
+        assert inspect.signature(function).parameters['enable_placement_signal_ojama'].default is False
     pipe = RecognitionPipeline.__new__(RecognitionPipeline)
     pipe._placement_reconcile = None
     pipe.observe_placement_frame(1, 0., None)
@@ -110,3 +112,24 @@ def test_other_guards_preserve_hidden_and_unmodified_cells() -> None:
     assert pipe._glow_guard_1p.frozen_board.get(12, 0) == 1
     runtime.commit(pipe, 0, Board(), [dict(row=12, col=0)])
     assert pipe._piece_persistence_1p._protected == {(0, 0): 5, (12, 1): 3}
+
+
+def test_disabled_ojama_does_not_consume_next_formula() -> None:
+    runtime, pipe = setup_runtime()
+    runtime.apply(pipe, 0, 'ojama', observation(10))
+    assert not runtime.consumed[0] and not runtime.audit
+    assert pipe._sm_1p.context.confirmed_board.get(12, 0) == 0
+    runtime.apply(pipe, 0, 'formula', observation(10))
+    assert runtime.audit[-1]['reason'] == 'corrected'
+
+
+def test_signal_selection_preserves_formula_on_ojama_frame() -> None:
+    runtime, _ = setup_runtime()
+    obs = observation(11)
+    obs.cnn[1, 0] = obs.hsv[1, 0] = 9
+    assert runtime.signals(0, obs, np.zeros((2, 2), np.uint8), 1.) == ['formula']
+    runtime = PlacementSignalRuntime(None, np.zeros((2, 2), np.uint8), enable_ojama=True)
+    runtime.history[0].append(observation(10))
+    assert runtime.signals(0, obs, np.zeros((2, 2), np.uint8), 1.) == ['formula', 'ojama']
+    runtime.reset()
+    assert runtime.enabled_signals == ('next', 'formula', 'ojama')

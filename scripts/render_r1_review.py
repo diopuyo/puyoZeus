@@ -33,9 +33,9 @@ def mux(cmd: list[str], log: TextIO) -> None:
         stdout=log, stderr=subprocess.STDOUT, check=True)
 
 
-def main() -> None:
+def main(root: Path = Path('logs/r1')) -> None:
     """合否、再生との一致、音声、1280幅・CRF28・1Mbps・30MB上限を検収する。"""
-    assert json.loads(Path('logs/r1/SUMMARY.json').read_text())['passed']
+    assert json.loads((root/'SUMMARY.json').read_text())['passed']
     prior = video.prior
     prior.DEST = video.DEST = DEST
     video.MOBILE = MOBILE
@@ -44,7 +44,7 @@ def main() -> None:
     prior.save('status.json', state)
     with (DEST/'render.log').open('a') as log:
         subprocess.run(cmd, cwd=prior.ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)
-        parity = compare(Path('logs/r1/on/review'), DEST)
+        parity = compare(root/'on/review', DEST)
         mux(cmd, log)
         prior.save('complete.json', dict(full=prior.verify(DEST/'overlay.mp4'),
             mobile=video.mobile(log), replay_equivalence=parity,
