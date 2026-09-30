@@ -186,6 +186,8 @@ def main() -> None:
     parser.add_argument("--death-formula-guard", action="store_true", default=False)
     parser.add_argument("--multi-landing-death", action="store_true", default=False)
     parser.add_argument("--post-counter-death-bound", action="store_true", default=False)
+    parser.add_argument("--post-counter-early-exit", action="store_true", default=False)
+    parser.add_argument("--hidden-scenario-cap", type=int, default=None)
     parser.add_argument("--single-death-proof-guard", action="store_true", default=False)
     parser.add_argument("--single-death-proof-negative-only", action="store_true", default=False)
     parser.add_argument("--prefire-origin-guard", action="store_true", default=False)
@@ -224,7 +226,9 @@ def main() -> None:
                     prefire_origin_guard=options.prefire_origin_guard,
                     post_counter_death_bound=options.post_counter_death_bound,
                     single_death_proof_guard=options.single_death_proof_guard,
-                    single_death_proof_negative_only=options.single_death_proof_negative_only)
+                    single_death_proof_negative_only=options.single_death_proof_negative_only,
+                    post_counter_early_exit=options.post_counter_early_exit,
+                    hidden_scenario_cap=options.hidden_scenario_cap)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

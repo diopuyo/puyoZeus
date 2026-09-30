@@ -125,3 +125,9 @@ B18 の 5984.6 秒 (6.4 秒) は、保存入力の再生 (変更前) では 12 m
 - 出力一致: `scripts/compare_replay_outputs.py <基準> <比較> [--ignore-proof-detail]`。有界化の影響: `scripts/compare_bounded_effect.py`。
 - ゲート: `logs/multilanding_speed/run_gate.sh exact|bounded|bounded2` → `gate_*/SUMMARY.json`。
 - 変更前コードの固定: `../snap_base` (git archive HEAD)。変更後コードの固定: `../snap_after2`。
+
+## 7. B2 の本番配線と配線検査 (2026-09-30、座長判定で B2 採用)
+
+- 配線: `--post-counter-early-exit` と `--hidden-scenario-cap N` を描画 (`scripts/visualize_advantage_overlay.py`) と再生 (`scripts/replay_exchange_event_20260926.py`) の CLI に追加し、`src/production_config.py` の `EXCHANGE_EVENT_ADOPTED` へ登録 (`--post-counter-early-exit`、`--hidden-scenario-cap 256`、採用日 2026-09-30)。`--production-exchange-event` で両方 ON。ノード上限 (`multilanding_node_limit`) は不採用 (CLI なし)。
+- 検査 (取り違え・配線漏れ): `--production-exchange-event` だけで再生し、B2 を明示指定した既存の門 run (gate_bounded2) と `--compare` (display.npz・events.jsonl バイト一致 + diagnostics 一致) で照合。**保存記録 5 本 5/5 一致、出力 35/35 ファイル一致** (`wiring_check/`)。上限が発動しない 5 本では上限の配線漏れを検出できないため、上限が発動する b20 (43 通知で発動) でも B2 明示指定の再生 (live_bounded2) と **バイト一致**を確認 (`wiring_check/b20.log`)。
+- テスト: `tests/test_exchange_event_production.py` を更新 (採用旗の集合・根拠・両 CLI の実効引数一致・render で ON)。関連 253 passed。

@@ -6474,6 +6474,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              post_counter_death_bound: bool = False,
              single_death_proof_guard: bool = False,
              single_death_proof_negative_only: bool = False,
+             post_counter_early_exit: bool = False,
+             hidden_scenario_cap: int | None = None,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7097,7 +7099,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             **{name: True for name, on in (
                 ('post_counter_death_bound', post_counter_death_bound),
                 ('single_death_proof_guard', single_death_proof_guard),
-                ('single_death_proof_negative_only', single_death_proof_negative_only)) if on})
+                ('single_death_proof_negative_only', single_death_proof_negative_only),
+                ('post_counter_early_exit', post_counter_early_exit)) if on},
+            **({} if hidden_scenario_cap is None else {'hidden_scenario_cap': hidden_scenario_cap}))
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
         if dump_exchange_event_path is None:
@@ -8424,6 +8428,10 @@ def main() -> None:
                     help="E34: 収集側の連鎖保持・試合範囲を予測起点保存へ適用（既定OFF）")
     ap.add_argument("--post-counter-death-bound", action="store_true", default=False,
                     help="E35: 打ち返し後の死亡上限（既定OFF、本番は--production-exchange-event）")
+    ap.add_argument("--post-counter-early-exit", action="store_true", default=False,
+                    help="E35: 最初に死なない候補で残りの証明を省く（判定同一、本番は--production-exchange-event）")
+    ap.add_argument("--hidden-scenario-cap", type=int, default=None,
+                    help="隠し段の得点候補の上限（重み上位を残す、既定なし、本番は--production-exchange-event）")
     ap.add_argument("--single-death-proof-guard", action="store_true", default=False,
                     help="D5: 単発死亡候補を全応手の消去後盤面で証明（既定OFF）")
     ap.add_argument("--single-death-proof-negative-only", action="store_true", default=False,
@@ -9130,6 +9138,8 @@ def main() -> None:
               post_counter_death_bound=a.post_counter_death_bound,
               single_death_proof_guard=a.single_death_proof_guard,
               single_death_proof_negative_only=a.single_death_proof_negative_only,
+              post_counter_early_exit=a.post_counter_early_exit,
+              hidden_scenario_cap=a.hidden_scenario_cap,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

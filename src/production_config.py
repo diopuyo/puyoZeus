@@ -1433,6 +1433,14 @@ EXCHANGE_EVENT_ADOPTED: tuple[AdoptedFlag, ...] = (
         '--single-death-proof-negative-only', "2026-09-30",
         'D5b 取消を生存枝・相殺可能の証明だけに限定 (0b8a76b)。 e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
     ),
+    AdoptedFlag(
+        '--post-counter-early-exit', "2026-09-30",
+        'E35で最初に死なない候補が見つかった時点で残りの候補証明を省く (判定は同一、監査のproofsだけ短くなる)。 評価遅延対策B2 (6f370c8/92d5460): 保存記録5本の再生で現本番と出力一致 (内訳proofsを除く51/51ファイル)・門通過 (q .507567 / zenchi 7,671/8,333 / 誤発火0/37 / 3:00場面 2760.38秒 / 第14試合0)。rt由来のb20窓 (4,196通知) で最大 18.9秒→0.62秒・1秒超 66→0件。ノード上限(B1)は実在の死亡確定を1件失うため不採用 (座長判定、DECISIONS.md 2026-09-30)。抽出元: logs/multilanding_speed/RESULT.md、logs/multilanding_speed/gate_bounded2/SUMMARY.json。',
+    ),
+    AdoptedFlag(
+        '--hidden-scenario-cap 256', "2026-09-30",
+        '隠し段の得点候補が256通りを超えるとき重み上位256通りに絞る (合計重み保存、保存記録5本では発動せず、b20窓の43通知で発動し評価値8,234件中62件が最大3.4ポイント動く・判定変化0)。 評価遅延対策B2 (6f370c8/92d5460): 保存記録5本の再生で現本番と出力一致 (内訳proofsを除く51/51ファイル)・門通過 (q .507567 / zenchi 7,671/8,333 / 誤発火0/37 / 3:00場面 2760.38秒 / 第14試合0)。rt由来のb20窓 (4,196通知) で最大 18.9秒→0.62秒・1秒超 66→0件。ノード上限(B1)は実在の死亡確定を1件失うため不採用 (座長判定、DECISIONS.md 2026-09-30)。抽出元: logs/multilanding_speed/RESULT.md、logs/multilanding_speed/gate_bounded2/SUMMARY.json。',
+    ),
 )
 
 # R1b 認識側の置き完了合図照合 (NEXT移動+掛け算式の2合図)。撃ち合い評価の再生CLIは
