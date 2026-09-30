@@ -1,0 +1,101 @@
+[
+ {
+  "source": "live_b18_run5",
+  "old_sec": 2.292190079926513,
+  "new_sec": 0.021975587937049568,
+  "nodes": 20001,
+  "reason": "node_limit",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_run5",
+  "old_sec": 2.6526217330247164,
+  "new_sec": 0.036961450008675456,
+  "nodes": 20001,
+  "reason": "node_limit",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_run5",
+  "old_sec": 1.9854479499626905,
+  "new_sec": 0.26128480792976916,
+  "nodes": 12088,
+  "reason": "all_responses_dead",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_run5",
+  "old_sec": 2.2649984799791127,
+  "new_sec": 0.028946324018761516,
+  "nodes": 20001,
+  "reason": "node_limit",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_run5",
+  "old_sec": 0.31006504595279694,
+  "new_sec": 0.03047993395011872,
+  "nodes": 0,
+  "reason": "optimistic_cancel",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 0.1836108600255102,
+  "new_sec": 0.038259073975495994,
+  "nodes": 123,
+  "reason": "all_responses_dead",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 1.3204776130151004,
+  "new_sec": 0.10544654808472842,
+  "nodes": 852,
+  "reason": "all_responses_dead",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 1.3735093499999493,
+  "new_sec": 0.09520495496690273,
+  "nodes": 852,
+  "reason": "all_responses_dead",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 0.41865085100289434,
+  "new_sec": 0.0421793139539659,
+  "nodes": 0,
+  "reason": "optimistic_cancel",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 2.2864102609455585,
+  "new_sec": 0.023281823028810322,
+  "nodes": 20001,
+  "reason": "node_limit",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 2.469395892927423,
+  "new_sec": 0.6018299199640751,
+  "nodes": 20001,
+  "reason": "node_limit",
+  "match": true,
+  "sha_checked": false
+ }
+]

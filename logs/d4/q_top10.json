@@ -1,0 +1,1817 @@
+[
+  {
+    "match": 1,
+    "bin": 44,
+    "n": 150,
+    "start": 220.0,
+    "end": 224.96666666666667,
+    "delta_sum": 132.68429996151454,
+    "contribution": 0.020331642654231465,
+    "delta_mean": 0.8845619997434303,
+    "off": 0.12212893747915464,
+    "on": 1.006690937222584,
+    "peak": {
+      "i": 6606,
+      "t": 220.2,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.10717651181013693,
+        "loss": 0.11336637924476402,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 0.6816900666190909,
+        "loss": 1.1447297375752907,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "delta": 1.0313633583305266,
+      "bin": 44
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 1.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 1.9666666666666686,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 45,
+    "n": 150,
+    "start": 225.0,
+    "end": 229.96666666666667,
+    "delta_sum": 58.60653605296738,
+    "contribution": 0.008980468288839622,
+    "delta_mean": 0.39071024035311586,
+    "off": 0.11995998774407722,
+    "on": 0.510670228097193,
+    "peak": {
+      "i": 6773,
+      "t": 225.76666666666668,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.10624097967163791,
+        "loss": 0.11231909234975991,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 0.6550412038940251,
+        "loss": 1.0643303006601803,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "delta": 0.9520112083104204,
+      "bin": 45
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 6.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 7.53333333333336,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 43,
+    "n": 150,
+    "start": 215.0,
+    "end": 219.96666666666667,
+    "delta_sum": 33.151518604787896,
+    "contribution": 0.005079913975603417,
+    "delta_mean": 0.2210101240319193,
+    "off": 1.0656360762582966,
+    "on": 1.286646200290216,
+    "peak": {
+      "i": 6596,
+      "t": 219.86666666666667,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.11993835630154193,
+        "loss": 0.12776332430590887,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 0.6585466322805602,
+        "loss": 1.0745441606292723,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "delta": 0.9467808363233634,
+      "bin": 43
+    },
+    "preceding": {
+      "t": 209.46666666666667,
+      "age": 5.533333333333331,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 2,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 2,
+          "before": 5,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 3,
+          "before": 2,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 4,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 5,
+          "col": 3,
+          "before": 1,
+          "after": 2
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 1.6333333333333542,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 1,
+            "col": 0,
+            "before": 0,
+            "after": 2
+          },
+          {
+            "row": 2,
+            "col": 0,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 2,
+            "col": 4,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 3,
+            "col": 4,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "corrections": [
+          {
+            "row": 1,
+            "col": 0,
+            "before": 0,
+            "after": 2
+          },
+          {
+            "row": 2,
+            "col": 0,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 2,
+            "col": 4,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 3,
+            "col": 4,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 1,
+            "col": 0,
+            "before": 0,
+            "after": 2,
+            "reason": "corrected"
+          },
+          {
+            "row": 2,
+            "col": 0,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          },
+          {
+            "row": 2,
+            "col": 4,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          },
+          {
+            "row": 3,
+            "col": 4,
+            "before": 0,
+            "after": 1,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "ojama",
+        "frame": 6464,
+        "t_sec": 215.46666666666667,
+        "observed_frame": 6463,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            5,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            5,
+            2,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            4,
+            2,
+            0,
+            0,
+            1,
+            5
+          ],
+          [
+            4,
+            5,
+            5,
+            1,
+            5,
+            5
+          ],
+          [
+            2,
+            2,
+            5,
+            1,
+            4,
+            1
+          ],
+          [
+            2,
+            4,
+            4,
+            5,
+            4,
+            4
+          ],
+          [
+            5,
+            5,
+            4,
+            5,
+            2,
+            2
+          ],
+          [
+            5,
+            2,
+            1,
+            2,
+            5,
+            2
+          ],
+          [
+            4,
+            4,
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            1,
+            5,
+            5,
+            5
+          ]
+        ]
+      },
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 2,
+            "col": 1,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "corrections": [
+          {
+            "row": 2,
+            "col": 1,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 2,
+            "col": 1,
+            "before": 0,
+            "after": 1,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "ojama",
+        "frame": 6547,
+        "t_sec": 218.23333333333332,
+        "observed_frame": 6546,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            4,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            0,
+            1,
+            4,
+            0
+          ],
+          [
+            4,
+            5,
+            0,
+            4,
+            1,
+            0
+          ],
+          [
+            5,
+            2,
+            0,
+            4,
+            1,
+            0
+          ],
+          [
+            4,
+            2,
+            0,
+            2,
+            1,
+            5
+          ],
+          [
+            4,
+            5,
+            5,
+            1,
+            5,
+            5
+          ],
+          [
+            2,
+            2,
+            5,
+            1,
+            4,
+            1
+          ],
+          [
+            2,
+            4,
+            4,
+            5,
+            4,
+            4
+          ],
+          [
+            5,
+            5,
+            4,
+            5,
+            2,
+            2
+          ],
+          [
+            5,
+            2,
+            1,
+            2,
+            5,
+            2
+          ],
+          [
+            4,
+            4,
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            1,
+            5,
+            5,
+            5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 1,
+    "bin": 41,
+    "n": 150,
+    "start": 205.0,
+    "end": 209.96666666666667,
+    "delta_sum": 0.6740017632703333,
+    "contribution": 0.00010327946112018592,
+    "delta_mean": 0.004493345088468889,
+    "off": 0.5326529261150027,
+    "on": 0.5371462712034716,
+    "peak": {
+      "i": 6284,
+      "t": 209.46666666666667,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.36293435688699555,
+        "loss": 0.45088257830642303,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3
+        ]
+      },
+      "on": {
+        "p": 0.4003525679379642,
+        "loss": 0.5114134097082471,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3
+        ]
+      },
+      "delta": 0.06053083140182408,
+      "bin": 41
+    },
+    "preceding": {
+      "t": 201.4,
+      "age": 3.5999999999999943,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 4,
+          "col": 1,
+          "before": 0,
+          "after": 2
+        },
+        {
+          "row": 6,
+          "col": 2,
+          "before": 0,
+          "after": 5
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 209.46666666666667,
+      "age": 0.0,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 2,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 2,
+          "before": 5,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 3,
+          "before": 2,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 4,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 5,
+          "col": 3,
+          "before": 1,
+          "after": 2
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 2,
+            "col": 2,
+            "before": 1,
+            "after": 0
+          },
+          {
+            "row": 3,
+            "col": 2,
+            "before": 5,
+            "after": 0
+          },
+          {
+            "row": 3,
+            "col": 3,
+            "before": 2,
+            "after": 0
+          },
+          {
+            "row": 4,
+            "col": 2,
+            "before": 1,
+            "after": 0
+          },
+          {
+            "row": 4,
+            "col": 4,
+            "before": 0,
+            "after": 5
+          },
+          {
+            "row": 5,
+            "col": 3,
+            "before": 1,
+            "after": 2
+          }
+        ],
+        "corrections": [
+          {
+            "row": 2,
+            "col": 2,
+            "before": 1,
+            "after": 0
+          },
+          {
+            "row": 3,
+            "col": 2,
+            "before": 5,
+            "after": 0
+          },
+          {
+            "row": 3,
+            "col": 3,
+            "before": 2,
+            "after": 0
+          },
+          {
+            "row": 4,
+            "col": 2,
+            "before": 1,
+            "after": 0
+          },
+          {
+            "row": 4,
+            "col": 4,
+            "before": 0,
+            "after": 5
+          },
+          {
+            "row": 5,
+            "col": 3,
+            "before": 1,
+            "after": 2
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 2,
+            "col": 2,
+            "before": 1,
+            "after": 0,
+            "reason": "corrected"
+          },
+          {
+            "row": 3,
+            "col": 2,
+            "before": 5,
+            "after": 0,
+            "reason": "corrected"
+          },
+          {
+            "row": 3,
+            "col": 3,
+            "before": 2,
+            "after": 0,
+            "reason": "corrected"
+          },
+          {
+            "row": 4,
+            "col": 2,
+            "before": 1,
+            "after": 0,
+            "reason": "corrected"
+          },
+          {
+            "row": 4,
+            "col": 4,
+            "before": 0,
+            "after": 5,
+            "reason": "corrected"
+          },
+          {
+            "row": 5,
+            "col": 3,
+            "before": 1,
+            "after": 2,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 0,
+        "signal": "ojama",
+        "frame": 6284,
+        "t_sec": 209.46666666666667,
+        "observed_frame": 6283,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            0,
+            5,
+            2,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            1,
+            1,
+            0,
+            2
+          ],
+          [
+            4,
+            4,
+            2,
+            1,
+            4,
+            2
+          ],
+          [
+            5,
+            2,
+            5,
+            5,
+            4,
+            4
+          ],
+          [
+            4,
+            4,
+            2,
+            5,
+            2,
+            2
+          ],
+          [
+            4,
+            5,
+            2,
+            2,
+            5,
+            4
+          ],
+          [
+            5,
+            2,
+            1,
+            4,
+            2,
+            4
+          ],
+          [
+            5,
+            4,
+            1,
+            5,
+            4,
+            2
+          ],
+          [
+            2,
+            4,
+            2,
+            1,
+            5,
+            2
+          ],
+          [
+            2,
+            1,
+            1,
+            5,
+            5,
+            2
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 2,
+    "bin": 53,
+    "n": 150,
+    "start": 265.0,
+    "end": 269.96666666666664,
+    "delta_sum": 0.30554835735138847,
+    "contribution": 4.682015895669452e-05,
+    "delta_mean": 0.0020369890490092566,
+    "off": 0.36313138526227284,
+    "on": 0.365168374311282,
+    "peak": {
+      "i": 7961,
+      "t": 265.3666666666667,
+      "match": 2,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.5683650039552728,
+        "loss": 0.8401749644443425,
+        "source": "S3_landing",
+        "exchange": 7,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.5848762594130721,
+        "loss": 0.8791786331063225,
+        "source": "S3_landing",
+        "exchange": 7,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.03900366866198002,
+      "bin": 53
+    },
+    "preceding": {
+      "t": 261.6666666666667,
+      "age": 3.3333333333333144,
+      "signal": "next",
+      "side": 0,
+      "cells": [
+        {
+          "row": 3,
+          "col": 3,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 4,
+          "col": 2,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 265.3666666666667,
+      "age": 0.0,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 1,
+          "before": 4,
+          "after": 0
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 1,
+            "col": 1,
+            "before": 4,
+            "after": 0
+          },
+          {
+            "row": 1,
+            "col": 2,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "corrections": [
+          {
+            "row": 1,
+            "col": 1,
+            "before": 4,
+            "after": 0
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 1,
+            "col": 1,
+            "before": 4,
+            "after": 0,
+            "reason": "corrected"
+          },
+          {
+            "row": 1,
+            "col": 2,
+            "before": 0,
+            "after": 1,
+            "reason": "not_two_frames"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "next",
+        "frame": 7961,
+        "t_sec": 265.3666666666667,
+        "observed_frame": 7961,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            5,
+            3,
+            0,
+            0,
+            5,
+            3
+          ],
+          [
+            1,
+            3,
+            0,
+            0,
+            1,
+            3
+          ],
+          [
+            1,
+            4,
+            4,
+            3,
+            1,
+            1
+          ],
+          [
+            1,
+            4,
+            3,
+            3,
+            5,
+            5
+          ],
+          [
+            3,
+            3,
+            4,
+            1,
+            5,
+            3
+          ],
+          [
+            3,
+            1,
+            5,
+            1,
+            4,
+            3
+          ],
+          [
+            1,
+            4,
+            5,
+            4,
+            1,
+            1
+          ],
+          [
+            5,
+            5,
+            4,
+            5,
+            1,
+            4
+          ],
+          [
+            4,
+            4,
+            5,
+            3,
+            3,
+            4
+          ]
+        ]
+      },
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 8,
+            "col": 4,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 9,
+            "col": 5,
+            "before": 0,
+            "after": 4
+          }
+        ],
+        "corrections": [
+          {
+            "row": 8,
+            "col": 4,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 9,
+            "col": 5,
+            "before": 0,
+            "after": 4
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 8,
+            "col": 4,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          },
+          {
+            "row": 9,
+            "col": 5,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 0,
+        "signal": "ojama",
+        "frame": 8091,
+        "t_sec": 269.7,
+        "observed_frame": 8090,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            5,
+            0,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            5,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            3,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            1,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            3,
+            5,
+            4,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            3,
+            4,
+            0,
+            0
+          ],
+          [
+            1,
+            4,
+            3,
+            5,
+            3,
+            0
+          ],
+          [
+            3,
+            3,
+            5,
+            4,
+            3,
+            4
+          ],
+          [
+            4,
+            3,
+            4,
+            1,
+            4,
+            1
+          ],
+          [
+            4,
+            5,
+            5,
+            5,
+            1,
+            1
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 1,
+    "bin": 42,
+    "n": 150,
+    "start": 210.0,
+    "end": 214.96666666666667,
+    "delta_sum": 0.20380138879098342,
+    "contribution": 3.1229143241033315e-05,
+    "delta_mean": 0.0013586759252732228,
+    "off": 1.4375787147435484,
+    "on": 1.4389373906688219,
+    "peak": {
+      "i": 6314,
+      "t": 210.46666666666667,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.3809845182849899,
+        "loss": 0.47962499576214856,
+        "source": "S3_provisional",
+        "exchange": 6,
+        "chains": [
+          1,
+          3
+        ]
+      },
+      "on": {
+        "p": 0.5202181740840081,
+        "loss": 0.7344238077516573,
+        "source": "S3_provisional",
+        "exchange": 6,
+        "chains": [
+          1,
+          3
+        ]
+      },
+      "delta": 0.2547988119895087,
+      "bin": 42
+    },
+    "preceding": {
+      "t": 209.46666666666667,
+      "age": 0.5333333333333314,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 2,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 2,
+          "before": 5,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 3,
+          "before": 2,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 4,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 5,
+          "col": 3,
+          "before": 1,
+          "after": 2
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 209.46666666666667,
+      "age": 1.0,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 2,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 2,
+          "before": 5,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 3,
+          "before": 2,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 4,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 5,
+          "col": 3,
+          "before": 1,
+          "after": 2
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 63,
+    "n": 150,
+    "start": 315.0,
+    "end": 319.96666666666664,
+    "delta_sum": 0.0014986933604053954,
+    "contribution": 2.296496108497388e-07,
+    "delta_mean": 9.991289069369302e-06,
+    "off": 0.37850340751449174,
+    "on": 0.3785133988035611,
+    "peak": {
+      "i": 9550,
+      "t": 318.3333333333333,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.8002133058150099,
+        "loss": 0.22287695458551343,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5
+        ]
+      },
+      "on": {
+        "p": 0.7998136475280808,
+        "loss": 0.2233765190389819,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5
+        ]
+      },
+      "delta": 0.0004995644534684651,
+      "bin": 63
+    },
+    "preceding": {
+      "t": 309.2,
+      "age": 5.800000000000011,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 3,
+          "col": 5,
+          "before": 5,
+          "after": 3
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 318.3333333333333,
+      "age": 0.0,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 5,
+          "before": 9,
+          "after": 5
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 1,
+            "col": 2,
+            "before": 0,
+            "after": 1
+          },
+          {
+            "row": 1,
+            "col": 5,
+            "before": 9,
+            "after": 5
+          }
+        ],
+        "corrections": [
+          {
+            "row": 1,
+            "col": 5,
+            "before": 9,
+            "after": 5
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 1,
+            "col": 2,
+            "before": 0,
+            "after": 1,
+            "reason": "not_two_frames"
+          },
+          {
+            "row": 1,
+            "col": 5,
+            "before": 9,
+            "after": 5,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "next",
+        "frame": 9550,
+        "t_sec": 318.3333333333333,
+        "observed_frame": 9550,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            9,
+            5,
+            0,
+            0,
+            0,
+            9
+          ],
+          [
+            9,
+            2,
+            0,
+            0,
+            4,
+            9
+          ],
+          [
+            5,
+            9,
+            9,
+            3,
+            3,
+            5
+          ],
+          [
+            5,
+            5,
+            4,
+            3,
+            9,
+            3
+          ],
+          [
+            3,
+            2,
+            3,
+            4,
+            4,
+            4
+          ],
+          [
+            2,
+            4,
+            4,
+            3,
+            2,
+            3
+          ],
+          [
+            2,
+            2,
+            4,
+            3,
+            5,
+            3
+          ],
+          [
+            3,
+            3,
+            3,
+            2,
+            5,
+            4
+          ],
+          [
+            5,
+            2,
+            2,
+            3,
+            3,
+            4
+          ],
+          [
+            2,
+            4,
+            5,
+            3,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            4,
+            5,
+            4,
+            2
+          ],
+          [
+            5,
+            5,
+            4,
+            4,
+            3,
+            4
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 0,
+    "bin": 27,
+    "n": 22,
+    "start": 139.26666666666668,
+    "end": 139.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.6923766995661573,
+    "on": 0.6923766995661573,
+    "peak": {
+      "i": 4178,
+      "t": 139.26666666666668,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.48878655028907964,
+        "loss": 0.6709680661887806,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.48878655028907964,
+        "loss": 0.6709680661887806,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.0,
+      "bin": 27
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 28,
+    "n": 150,
+    "start": 140.0,
+    "end": 144.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7189775975674481,
+    "on": 0.7189775975674481,
+    "peak": {
+      "i": 4200,
+      "t": 140.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.5093855790391567,
+        "loss": 0.7120967530507389,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.5093855790391567,
+        "loss": 0.7120967530507389,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.0,
+      "bin": 28
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 29,
+    "n": 150,
+    "start": 145.0,
+    "end": 149.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.719508770795779,
+    "on": 0.719508770795779,
+    "peak": {
+      "i": 4350,
+      "t": 145.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.4876614461219918,
+        "loss": 0.6687696344211947,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.4876614461219918,
+        "loss": 0.6687696344211947,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.0,
+      "bin": 29
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  }
+]

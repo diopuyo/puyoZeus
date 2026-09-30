@@ -1,0 +1,32 @@
+{
+  "first_sec": 2770.75,
+  "stamp": 2759.05,
+  "p2_display": 0.2760626280901628,
+  "p2_selected": 0.2760689830441895,
+  "source": "S3_landing",
+  "latest": {
+    "source": "S3_provisional",
+    "t_sec": 2758.75,
+    "p1": 0.6528366039546417,
+    "score_totals": [
+      87720.0,
+      9360.0
+    ],
+    "predicted_final_scores": [
+      77910.0,
+      87720.0,
+      0.0
+    ],
+    "prefire_prediction": [
+      {
+        "side": "1P",
+        "chain_id": 8,
+        "candidates": 1.0,
+        "mean_score": 87720.0,
+        "mean_send": 1253.0,
+        "method": "prefire_snapshot",
+        "label": "発火前盤面から予測"
+      }
+    ]
+  }
+}

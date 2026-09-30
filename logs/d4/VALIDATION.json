@@ -1,0 +1,66 @@
+{
+  "passed": true,
+  "rows": 6526,
+  "residual": 379,
+  "equivalent_replays": 4,
+  "scripts": [
+    {
+      "path": "scripts/_d4_ablation_launch.py",
+      "sha256": "7f9f16537be90c2857d16cf1ff71970d422f2aaece63c0dd39058419a9bfac77"
+    },
+    {
+      "path": "scripts/_d4_compare.py",
+      "sha256": "3317d9ab939df4e621252205ede30c45f6de9ebc9193fc47fe4d3a3e5ad6b766"
+    },
+    {
+      "path": "scripts/_d4_counterfactual.py",
+      "sha256": "606c67eb7c5aba1907f9f0737c840c6d940ec700830d81d8cf3b75265d694f26"
+    },
+    {
+      "path": "scripts/_d4_events.py",
+      "sha256": "9aa6c842985e5cd432a8e31900fbf20109766a008484174c5f93be412056e14f"
+    },
+    {
+      "path": "scripts/_d4_findings.py",
+      "sha256": "d0d183bd0cade82c8f687845411a687c04b4b8e033368fd67856d10322dcdb98"
+    },
+    {
+      "path": "scripts/_d4_inventory.py",
+      "sha256": "9540a9d491bd4fafb8f4094acec1fbfdb228516eea59052b8bfe50577372b3f1"
+    },
+    {
+      "path": "scripts/_d4_launch.py",
+      "sha256": "969c23a8b5c082782ea9f344d37ef212b2a7d2e0e64a7e78a334d68b5dc67da6"
+    },
+    {
+      "path": "scripts/_d4_loss.py",
+      "sha256": "b85712bb7306fe1656d55975cd178e95ffc0c523b32d8bed4f54546f4acfd8be"
+    },
+    {
+      "path": "scripts/_d4_origins.py",
+      "sha256": "5105bde3c916b93221a72953dccf335e593bae853b61e28c0b7d320439dcb95d"
+    },
+    {
+      "path": "scripts/_d4_replay.py",
+      "sha256": "9aed59f441bf0fffa1176bda87086ed440998e857a3ebddf6b84a04cc7b894c9"
+    },
+    {
+      "path": "scripts/_d4_report.py",
+      "sha256": "07883a06851c18c2a683e217dd08face9cb75c4b295d3302d050a8081f24e3f7"
+    },
+    {
+      "path": "scripts/_d4_residual.py",
+      "sha256": "149e0e28a30b0259a53783ddeaf69f4ba298609bc3b605fd6fcb14727f3f3a0f"
+    },
+    {
+      "path": "scripts/_d4_timeline.py",
+      "sha256": "a77de0ab0021f896d7068288bc47722d360a195e1630a452c0550eb3d28b4e37"
+    },
+    {
+      "path": "scripts/_d4_validate.py",
+      "sha256": "7e41441b0d2e7d7baeace82169b7a780b1f7ce25d87d3aef86cbdfaa21f0ba7c"
+    }
+  ],
+  "base_commit": "58ae8a7",
+  "production_code_changed": false
+}

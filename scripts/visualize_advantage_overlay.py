@@ -6467,6 +6467,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              prefire_stage_timeout: bool = False,
              prefire_stage_timeout_only: bool = False,
              prefire_origin_guard: bool = False,
+             placement_signal_reconcile: bool = False,
+             placement_signal_reconcile_ojama: bool = False,
+             next_recolor_pair_guard: bool = False,
+             verification_pending_chain_expiry: bool = False,
+             post_counter_death_bound: bool = False,
+             single_death_proof_guard: bool = False,
+             single_death_proof_negative_only: bool = False,
+             post_counter_early_exit: bool = False,
+             hidden_scenario_cap: int | None = None,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7085,7 +7094,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             prefire_stage_timeout=prefire_stage_timeout,
             prefire_stage_timeout_only=prefire_stage_timeout_only,
             prefire_origin_guard=prefire_origin_guard, prefire_match_gate=prefire_match_gate,
-            landing_counter_prob=landing_counter_prob)
+            landing_counter_prob=landing_counter_prob,
+            # 専用ラッパーの partial 指定を上書きしないよう、True のときだけ渡す。
+            **{name: True for name, on in (
+                ('post_counter_death_bound', post_counter_death_bound),
+                ('single_death_proof_guard', single_death_proof_guard),
+                ('single_death_proof_negative_only', single_death_proof_negative_only),
+                ('post_counter_early_exit', post_counter_early_exit)) if on},
+            **({} if hidden_scenario_cap is None else {'hidden_scenario_cap': hidden_scenario_cap}))
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
         if dump_exchange_event_path is None:
@@ -7207,6 +7223,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         _production_recognition_kwargs["enable_pseudo_chain_score_fill"] = bool(
             enable_pseudo_chain_score_fill)
     pipe = RecognitionPipeline.load_default(
+        enable_placement_signal_reconcile=placement_signal_reconcile,
+        enable_placement_signal_ojama=placement_signal_reconcile_ojama,
+        enable_next_recolor_pair_guard=next_recolor_pair_guard,
+        enable_verification_pending_chain_expiry=verification_pending_chain_expiry,
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
         # 未指定 (None) はライブラリ既定に解決する = 本番と同じ挙動を描画する
@@ -7419,10 +7439,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     prev_gross_counters: "GrossOjamaCounters | None" = None
     prev_gross_pending_unc: tuple[int, int] | None = None
     gross_dump_stats = _GrossDumpStats()
+    if placement_signal_reconcile:
+        pipe._placement_reconcile.log_to(out.parent / 'placement_signal_reconcile.jsonl')
     for fi in range(start_frame, n):
         ok, frame = cap.read()
         if not ok or frame is None:
             break
+        if placement_signal_reconcile:
+            pipe.observe_placement_frame(fi, fi / fps, frame)
         # --- 60fps→30fps 正規化 (2026-08-12 追加) ---
         # cap.read() は毎フレーム呼んでデコードし (シーク禁止、収集側
         # collect_boards_lean.py:819-827 と同じ方式)、stride 非対象フレームは
@@ -8329,6 +8353,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         print(f"[done] {written} frames -> {out}")
     else:
         print(f"[done] {written} frames (no-render)")
+    if next_recolor_pair_guard:
+        # cycle65 対整合ガードの監査 (accepted/substituted/kept_observed + 事象一覧)
+        (out.parent / 'next_recolor_pair_guard.json').write_text(json.dumps(dict(
+            counts=pipe.next_recolor_guard_counts,
+            events=pipe.next_recolor_guard_log), ensure_ascii=False))
+    if verification_pending_chain_expiry:
+        (out.parent / 'verification_pending_expiry.json').write_text(json.dumps(dict(
+            expired=pipe.verification_pending_expired_count)))
     if event_overlay is not None and dump_exchange_event_path is not None:
         event_overlay.tracker.save(dump_exchange_event_path)
         if event_overlay._origin_guard is not None:
@@ -8394,6 +8426,16 @@ def main() -> None:
                     help="E33b: 終了信号を使わず段間隔タイムアウトだけで候補を除外（既定OFF）")
     ap.add_argument("--prefire-origin-guard", action="store_true", default=False,
                     help="E34: 収集側の連鎖保持・試合範囲を予測起点保存へ適用（既定OFF）")
+    ap.add_argument("--post-counter-death-bound", action="store_true", default=False,
+                    help="E35: 打ち返し後の死亡上限（既定OFF、本番は--production-exchange-event）")
+    ap.add_argument("--post-counter-early-exit", action="store_true", default=False,
+                    help="E35: 最初に死なない候補で残りの証明を省く（判定同一、本番は--production-exchange-event）")
+    ap.add_argument("--hidden-scenario-cap", type=int, default=None,
+                    help="隠し段の得点候補の上限（重み上位を残す、既定なし、本番は--production-exchange-event）")
+    ap.add_argument("--single-death-proof-guard", action="store_true", default=False,
+                    help="D5: 単発死亡候補を全応手の消去後盤面で証明（既定OFF）")
+    ap.add_argument("--single-death-proof-negative-only", action="store_true", default=False,
+                    help="D5b: 取消を生存枝・相殺可能の証明だけに限定（D5併用時のみ、既定OFF）")
     ap.add_argument("--prefire-snapshot", action="store_true", default=False,
                     help="E31: 発火直前画像の多数決を予測層だけに使用（既定OFF）")
     for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
@@ -9035,6 +9077,14 @@ def main() -> None:
             "構成の再現・A/B比較用)。"
         ),
     )
+    ap.add_argument('--placement-signal-reconcile', action='store_true',
+                    help='置き完了合図で可視セルを一度だけ照合・修正する（既定OFF）')
+    ap.add_argument('--next-recolor-pair-guard', action='store_true',
+                    help='cycle65のNEXT履歴色補正を、観測色と整合する対だけに限定する（既定OFF）')
+    ap.add_argument('--verification-pending-chain-expiry', action='store_true',
+                    help='連鎖後の答え合わせpendingを、新しい連鎖の開始で破棄する（既定OFF）')
+    ap.add_argument('--placement-signal-reconcile-ojama', action='store_true',
+                    help='照合合図におじゃまを追加して旧R1の3合図を再現する（既定OFF）')
     from src.exchange_event_cli import parse_exchange_event_args
     a = parse_exchange_event_args(ap)
     if a.exchange_event_e16 and a.exchange_event_model_dir == Path("models/exchange_event_v1"):
@@ -9081,6 +9131,15 @@ def main() -> None:
               prefire_stage_timeout=a.prefire_stage_timeout,
               prefire_stage_timeout_only=a.prefire_stage_timeout_only,
               prefire_origin_guard=a.prefire_origin_guard,
+              placement_signal_reconcile=a.placement_signal_reconcile,
+              placement_signal_reconcile_ojama=a.placement_signal_reconcile_ojama,
+              next_recolor_pair_guard=a.next_recolor_pair_guard,
+              verification_pending_chain_expiry=a.verification_pending_chain_expiry,
+              post_counter_death_bound=a.post_counter_death_bound,
+              single_death_proof_guard=a.single_death_proof_guard,
+              single_death_proof_negative_only=a.single_death_proof_negative_only,
+              post_counter_early_exit=a.post_counter_early_exit,
+              hidden_scenario_cap=a.hidden_scenario_cap,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

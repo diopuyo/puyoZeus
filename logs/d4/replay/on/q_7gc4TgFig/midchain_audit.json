@@ -1,0 +1,75 @@
+{
+  "candidates": 9,
+  "accepted": 4,
+  "accepted_chains": 3,
+  "next_mismatch": 0,
+  "final_mismatch": 0,
+  "final_unresolved": 0,
+  "skipped": {
+    "unknown_or_floating": 863,
+    "missing_formula": 10,
+    "no_remaining_chain": 151
+  },
+  "rows": [
+    {
+      "game": 7,
+      "side": "2P",
+      "chain_id": 5,
+      "candidate_sec": 484.3,
+      "t_sec": 484.5,
+      "next_count": 2,
+      "observed_count": 2,
+      "observed_score": 920,
+      "expected_score": 920,
+      "predicted_final_score": 1560,
+      "outcome": "accepted",
+      "final_score": 1560,
+      "final_mismatch": false
+    },
+    {
+      "game": 7,
+      "side": "2P",
+      "chain_id": 5,
+      "candidate_sec": 485.6,
+      "t_sec": 485.8333333333333,
+      "next_count": 3,
+      "observed_count": 3,
+      "observed_score": 1560,
+      "expected_score": 1560,
+      "predicted_final_score": 1560,
+      "outcome": "accepted",
+      "final_score": 1560,
+      "final_mismatch": false
+    },
+    {
+      "game": 12,
+      "side": "1P",
+      "chain_id": 4,
+      "candidate_sec": 781.3666666666667,
+      "t_sec": 781.4,
+      "next_count": 2,
+      "observed_count": 2,
+      "observed_score": 1060,
+      "expected_score": 1060,
+      "predicted_final_score": 1060,
+      "outcome": "accepted",
+      "final_score": 1060,
+      "final_mismatch": false
+    },
+    {
+      "game": 13,
+      "side": "2P",
+      "chain_id": 5,
+      "candidate_sec": 845.2,
+      "t_sec": 845.2333333333333,
+      "next_count": 8,
+      "observed_count": 8,
+      "observed_score": 32560,
+      "expected_score": 32560,
+      "predicted_final_score": 40240,
+      "outcome": "accepted",
+      "final_score": 40240,
+      "final_mismatch": false
+    }
+  ]
+}

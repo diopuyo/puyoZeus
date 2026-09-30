@@ -1,0 +1,5134 @@
+[
+  {
+    "match": 1,
+    "bin": 44,
+    "n": 150,
+    "start": 220.0,
+    "end": 224.96666666666667,
+    "delta_sum": 132.68429996151454,
+    "contribution": 0.020331642654231465,
+    "delta_mean": 0.8845619997434303,
+    "off": 0.12212893747915464,
+    "on": 1.006690937222584,
+    "peak": {
+      "i": 6606,
+      "t": 220.2,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.10717651181013693,
+        "loss": 0.11336637924476402,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 0.6816900666190909,
+        "loss": 1.1447297375752907,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "delta": 1.0313633583305266,
+      "bin": 44
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 1.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 1.9666666666666686,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 45,
+    "n": 150,
+    "start": 225.0,
+    "end": 229.96666666666667,
+    "delta_sum": 58.60653605296738,
+    "contribution": 0.008980468288839622,
+    "delta_mean": 0.39071024035311586,
+    "off": 0.11995998774407722,
+    "on": 0.510670228097193,
+    "peak": {
+      "i": 6773,
+      "t": 225.76666666666668,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.10624097967163791,
+        "loss": 0.11231909234975991,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 0.6550412038940251,
+        "loss": 1.0643303006601803,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "delta": 0.9520112083104204,
+      "bin": 45
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 6.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 7.53333333333336,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 43,
+    "n": 150,
+    "start": 215.0,
+    "end": 219.96666666666667,
+    "delta_sum": 33.151518604787896,
+    "contribution": 0.005079913975603417,
+    "delta_mean": 0.2210101240319193,
+    "off": 1.0656360762582966,
+    "on": 1.286646200290216,
+    "peak": {
+      "i": 6596,
+      "t": 219.86666666666667,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.11993835630154193,
+        "loss": 0.12776332430590887,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 0.6585466322805602,
+        "loss": 1.0745441606292723,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "delta": 0.9467808363233634,
+      "bin": 43
+    },
+    "preceding": {
+      "t": 209.46666666666667,
+      "age": 5.533333333333331,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 2,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 2,
+          "before": 5,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 3,
+          "before": 2,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 4,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 5,
+          "col": 3,
+          "before": 1,
+          "after": 2
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 1.6333333333333542,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 1,
+            "col": 0,
+            "before": 0,
+            "after": 2
+          },
+          {
+            "row": 2,
+            "col": 0,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 2,
+            "col": 4,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 3,
+            "col": 4,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "corrections": [
+          {
+            "row": 1,
+            "col": 0,
+            "before": 0,
+            "after": 2
+          },
+          {
+            "row": 2,
+            "col": 0,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 2,
+            "col": 4,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 3,
+            "col": 4,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 1,
+            "col": 0,
+            "before": 0,
+            "after": 2,
+            "reason": "corrected"
+          },
+          {
+            "row": 2,
+            "col": 0,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          },
+          {
+            "row": 2,
+            "col": 4,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          },
+          {
+            "row": 3,
+            "col": 4,
+            "before": 0,
+            "after": 1,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "ojama",
+        "frame": 6464,
+        "t_sec": 215.46666666666667,
+        "observed_frame": 6463,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            5,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            5,
+            2,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            4,
+            2,
+            0,
+            0,
+            1,
+            5
+          ],
+          [
+            4,
+            5,
+            5,
+            1,
+            5,
+            5
+          ],
+          [
+            2,
+            2,
+            5,
+            1,
+            4,
+            1
+          ],
+          [
+            2,
+            4,
+            4,
+            5,
+            4,
+            4
+          ],
+          [
+            5,
+            5,
+            4,
+            5,
+            2,
+            2
+          ],
+          [
+            5,
+            2,
+            1,
+            2,
+            5,
+            2
+          ],
+          [
+            4,
+            4,
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            1,
+            5,
+            5,
+            5
+          ]
+        ]
+      },
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 2,
+            "col": 1,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "corrections": [
+          {
+            "row": 2,
+            "col": 1,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 2,
+            "col": 1,
+            "before": 0,
+            "after": 1,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "ojama",
+        "frame": 6547,
+        "t_sec": 218.23333333333332,
+        "observed_frame": 6546,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            4,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            0,
+            1,
+            4,
+            0
+          ],
+          [
+            4,
+            5,
+            0,
+            4,
+            1,
+            0
+          ],
+          [
+            5,
+            2,
+            0,
+            4,
+            1,
+            0
+          ],
+          [
+            4,
+            2,
+            0,
+            2,
+            1,
+            5
+          ],
+          [
+            4,
+            5,
+            5,
+            1,
+            5,
+            5
+          ],
+          [
+            2,
+            2,
+            5,
+            1,
+            4,
+            1
+          ],
+          [
+            2,
+            4,
+            4,
+            5,
+            4,
+            4
+          ],
+          [
+            5,
+            5,
+            4,
+            5,
+            2,
+            2
+          ],
+          [
+            5,
+            2,
+            1,
+            2,
+            5,
+            2
+          ],
+          [
+            4,
+            4,
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            1,
+            5,
+            5,
+            5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 1,
+    "bin": 41,
+    "n": 150,
+    "start": 205.0,
+    "end": 209.96666666666667,
+    "delta_sum": 0.6740017632703333,
+    "contribution": 0.00010327946112018592,
+    "delta_mean": 0.004493345088468889,
+    "off": 0.5326529261150027,
+    "on": 0.5371462712034716,
+    "peak": {
+      "i": 6284,
+      "t": 209.46666666666667,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.36293435688699555,
+        "loss": 0.45088257830642303,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3
+        ]
+      },
+      "on": {
+        "p": 0.4003525679379642,
+        "loss": 0.5114134097082471,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3
+        ]
+      },
+      "delta": 0.06053083140182408,
+      "bin": 41
+    },
+    "preceding": {
+      "t": 201.4,
+      "age": 3.5999999999999943,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 4,
+          "col": 1,
+          "before": 0,
+          "after": 2
+        },
+        {
+          "row": 6,
+          "col": 2,
+          "before": 0,
+          "after": 5
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 209.46666666666667,
+      "age": 0.0,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 2,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 2,
+          "before": 5,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 3,
+          "before": 2,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 4,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 5,
+          "col": 3,
+          "before": 1,
+          "after": 2
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 2,
+            "col": 2,
+            "before": 1,
+            "after": 0
+          },
+          {
+            "row": 3,
+            "col": 2,
+            "before": 5,
+            "after": 0
+          },
+          {
+            "row": 3,
+            "col": 3,
+            "before": 2,
+            "after": 0
+          },
+          {
+            "row": 4,
+            "col": 2,
+            "before": 1,
+            "after": 0
+          },
+          {
+            "row": 4,
+            "col": 4,
+            "before": 0,
+            "after": 5
+          },
+          {
+            "row": 5,
+            "col": 3,
+            "before": 1,
+            "after": 2
+          }
+        ],
+        "corrections": [
+          {
+            "row": 2,
+            "col": 2,
+            "before": 1,
+            "after": 0
+          },
+          {
+            "row": 3,
+            "col": 2,
+            "before": 5,
+            "after": 0
+          },
+          {
+            "row": 3,
+            "col": 3,
+            "before": 2,
+            "after": 0
+          },
+          {
+            "row": 4,
+            "col": 2,
+            "before": 1,
+            "after": 0
+          },
+          {
+            "row": 4,
+            "col": 4,
+            "before": 0,
+            "after": 5
+          },
+          {
+            "row": 5,
+            "col": 3,
+            "before": 1,
+            "after": 2
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 2,
+            "col": 2,
+            "before": 1,
+            "after": 0,
+            "reason": "corrected"
+          },
+          {
+            "row": 3,
+            "col": 2,
+            "before": 5,
+            "after": 0,
+            "reason": "corrected"
+          },
+          {
+            "row": 3,
+            "col": 3,
+            "before": 2,
+            "after": 0,
+            "reason": "corrected"
+          },
+          {
+            "row": 4,
+            "col": 2,
+            "before": 1,
+            "after": 0,
+            "reason": "corrected"
+          },
+          {
+            "row": 4,
+            "col": 4,
+            "before": 0,
+            "after": 5,
+            "reason": "corrected"
+          },
+          {
+            "row": 5,
+            "col": 3,
+            "before": 1,
+            "after": 2,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 0,
+        "signal": "ojama",
+        "frame": 6284,
+        "t_sec": 209.46666666666667,
+        "observed_frame": 6283,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            0,
+            5,
+            2,
+            0,
+            2
+          ],
+          [
+            0,
+            0,
+            1,
+            1,
+            0,
+            2
+          ],
+          [
+            4,
+            4,
+            2,
+            1,
+            4,
+            2
+          ],
+          [
+            5,
+            2,
+            5,
+            5,
+            4,
+            4
+          ],
+          [
+            4,
+            4,
+            2,
+            5,
+            2,
+            2
+          ],
+          [
+            4,
+            5,
+            2,
+            2,
+            5,
+            4
+          ],
+          [
+            5,
+            2,
+            1,
+            4,
+            2,
+            4
+          ],
+          [
+            5,
+            4,
+            1,
+            5,
+            4,
+            2
+          ],
+          [
+            2,
+            4,
+            2,
+            1,
+            5,
+            2
+          ],
+          [
+            2,
+            1,
+            1,
+            5,
+            5,
+            2
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 2,
+    "bin": 53,
+    "n": 150,
+    "start": 265.0,
+    "end": 269.96666666666664,
+    "delta_sum": 0.30554835735138847,
+    "contribution": 4.682015895669452e-05,
+    "delta_mean": 0.0020369890490092566,
+    "off": 0.36313138526227284,
+    "on": 0.365168374311282,
+    "peak": {
+      "i": 7961,
+      "t": 265.3666666666667,
+      "match": 2,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.5683650039552728,
+        "loss": 0.8401749644443425,
+        "source": "S3_landing",
+        "exchange": 7,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.5848762594130721,
+        "loss": 0.8791786331063225,
+        "source": "S3_landing",
+        "exchange": 7,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.03900366866198002,
+      "bin": 53
+    },
+    "preceding": {
+      "t": 261.6666666666667,
+      "age": 3.3333333333333144,
+      "signal": "next",
+      "side": 0,
+      "cells": [
+        {
+          "row": 3,
+          "col": 3,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 4,
+          "col": 2,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 265.3666666666667,
+      "age": 0.0,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 1,
+          "before": 4,
+          "after": 0
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 1,
+            "col": 1,
+            "before": 4,
+            "after": 0
+          },
+          {
+            "row": 1,
+            "col": 2,
+            "before": 0,
+            "after": 1
+          }
+        ],
+        "corrections": [
+          {
+            "row": 1,
+            "col": 1,
+            "before": 4,
+            "after": 0
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 1,
+            "col": 1,
+            "before": 4,
+            "after": 0,
+            "reason": "corrected"
+          },
+          {
+            "row": 1,
+            "col": 2,
+            "before": 0,
+            "after": 1,
+            "reason": "not_two_frames"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "next",
+        "frame": 7961,
+        "t_sec": 265.3666666666667,
+        "observed_frame": 7961,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            5,
+            3,
+            0,
+            0,
+            5,
+            3
+          ],
+          [
+            1,
+            3,
+            0,
+            0,
+            1,
+            3
+          ],
+          [
+            1,
+            4,
+            4,
+            3,
+            1,
+            1
+          ],
+          [
+            1,
+            4,
+            3,
+            3,
+            5,
+            5
+          ],
+          [
+            3,
+            3,
+            4,
+            1,
+            5,
+            3
+          ],
+          [
+            3,
+            1,
+            5,
+            1,
+            4,
+            3
+          ],
+          [
+            1,
+            4,
+            5,
+            4,
+            1,
+            1
+          ],
+          [
+            5,
+            5,
+            4,
+            5,
+            1,
+            4
+          ],
+          [
+            4,
+            4,
+            5,
+            3,
+            3,
+            4
+          ]
+        ]
+      },
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 8,
+            "col": 4,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 9,
+            "col": 5,
+            "before": 0,
+            "after": 4
+          }
+        ],
+        "corrections": [
+          {
+            "row": 8,
+            "col": 4,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 9,
+            "col": 5,
+            "before": 0,
+            "after": 4
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 8,
+            "col": 4,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          },
+          {
+            "row": 9,
+            "col": 5,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 0,
+        "signal": "ojama",
+        "frame": 8091,
+        "t_sec": 269.7,
+        "observed_frame": 8090,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            5,
+            0,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            5,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            3,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            1,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            3,
+            5,
+            4,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            3,
+            4,
+            0,
+            0
+          ],
+          [
+            1,
+            4,
+            3,
+            5,
+            3,
+            0
+          ],
+          [
+            3,
+            3,
+            5,
+            4,
+            3,
+            4
+          ],
+          [
+            4,
+            3,
+            4,
+            1,
+            4,
+            1
+          ],
+          [
+            4,
+            5,
+            5,
+            5,
+            1,
+            1
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 1,
+    "bin": 42,
+    "n": 150,
+    "start": 210.0,
+    "end": 214.96666666666667,
+    "delta_sum": 0.20380138879098342,
+    "contribution": 3.1229143241033315e-05,
+    "delta_mean": 0.0013586759252732228,
+    "off": 1.4375787147435484,
+    "on": 1.4389373906688219,
+    "peak": {
+      "i": 6314,
+      "t": 210.46666666666667,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.3809845182849899,
+        "loss": 0.47962499576214856,
+        "source": "S3_provisional",
+        "exchange": 6,
+        "chains": [
+          1,
+          3
+        ]
+      },
+      "on": {
+        "p": 0.5202181740840081,
+        "loss": 0.7344238077516573,
+        "source": "S3_provisional",
+        "exchange": 6,
+        "chains": [
+          1,
+          3
+        ]
+      },
+      "delta": 0.2547988119895087,
+      "bin": 42
+    },
+    "preceding": {
+      "t": 209.46666666666667,
+      "age": 0.5333333333333314,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 2,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 2,
+          "before": 5,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 3,
+          "before": 2,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 4,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 5,
+          "col": 3,
+          "before": 1,
+          "after": 2
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 209.46666666666667,
+      "age": 1.0,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 2,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 2,
+          "before": 5,
+          "after": 0
+        },
+        {
+          "row": 3,
+          "col": 3,
+          "before": 2,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 2,
+          "before": 1,
+          "after": 0
+        },
+        {
+          "row": 4,
+          "col": 4,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 5,
+          "col": 3,
+          "before": 1,
+          "after": 2
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 63,
+    "n": 150,
+    "start": 315.0,
+    "end": 319.96666666666664,
+    "delta_sum": 0.0014986933604053954,
+    "contribution": 2.296496108497388e-07,
+    "delta_mean": 9.991289069369302e-06,
+    "off": 0.37850340751449174,
+    "on": 0.3785133988035611,
+    "peak": {
+      "i": 9550,
+      "t": 318.3333333333333,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.8002133058150099,
+        "loss": 0.22287695458551343,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5
+        ]
+      },
+      "on": {
+        "p": 0.7998136475280808,
+        "loss": 0.2233765190389819,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5
+        ]
+      },
+      "delta": 0.0004995644534684651,
+      "bin": 63
+    },
+    "preceding": {
+      "t": 309.2,
+      "age": 5.800000000000011,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 3,
+          "col": 5,
+          "before": 5,
+          "after": 3
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 318.3333333333333,
+      "age": 0.0,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 5,
+          "before": 9,
+          "after": 5
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 1,
+            "col": 2,
+            "before": 0,
+            "after": 1
+          },
+          {
+            "row": 1,
+            "col": 5,
+            "before": 9,
+            "after": 5
+          }
+        ],
+        "corrections": [
+          {
+            "row": 1,
+            "col": 5,
+            "before": 9,
+            "after": 5
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 1,
+            "col": 2,
+            "before": 0,
+            "after": 1,
+            "reason": "not_two_frames"
+          },
+          {
+            "row": 1,
+            "col": 5,
+            "before": 9,
+            "after": 5,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "next",
+        "frame": 9550,
+        "t_sec": 318.3333333333333,
+        "observed_frame": 9550,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            9,
+            5,
+            0,
+            0,
+            0,
+            9
+          ],
+          [
+            9,
+            2,
+            0,
+            0,
+            4,
+            9
+          ],
+          [
+            5,
+            9,
+            9,
+            3,
+            3,
+            5
+          ],
+          [
+            5,
+            5,
+            4,
+            3,
+            9,
+            3
+          ],
+          [
+            3,
+            2,
+            3,
+            4,
+            4,
+            4
+          ],
+          [
+            2,
+            4,
+            4,
+            3,
+            2,
+            3
+          ],
+          [
+            2,
+            2,
+            4,
+            3,
+            5,
+            3
+          ],
+          [
+            3,
+            3,
+            3,
+            2,
+            5,
+            4
+          ],
+          [
+            5,
+            2,
+            2,
+            3,
+            3,
+            4
+          ],
+          [
+            2,
+            4,
+            5,
+            3,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            4,
+            5,
+            4,
+            2
+          ],
+          [
+            5,
+            5,
+            4,
+            4,
+            3,
+            4
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 0,
+    "bin": 27,
+    "n": 22,
+    "start": 139.26666666666668,
+    "end": 139.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.6923766995661573,
+    "on": 0.6923766995661573,
+    "peak": {
+      "i": 4178,
+      "t": 139.26666666666668,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.48878655028907964,
+        "loss": 0.6709680661887806,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.48878655028907964,
+        "loss": 0.6709680661887806,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.0,
+      "bin": 27
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 28,
+    "n": 150,
+    "start": 140.0,
+    "end": 144.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7189775975674481,
+    "on": 0.7189775975674481,
+    "peak": {
+      "i": 4200,
+      "t": 140.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.5093855790391567,
+        "loss": 0.7120967530507389,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.5093855790391567,
+        "loss": 0.7120967530507389,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.0,
+      "bin": 28
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 29,
+    "n": 150,
+    "start": 145.0,
+    "end": 149.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.719508770795779,
+    "on": 0.719508770795779,
+    "peak": {
+      "i": 4350,
+      "t": 145.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.4876614461219918,
+        "loss": 0.6687696344211947,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.4876614461219918,
+        "loss": 0.6687696344211947,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.0,
+      "bin": 29
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 30,
+    "n": 150,
+    "start": 150.0,
+    "end": 154.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.6655946174677634,
+    "on": 0.6655946174677634,
+    "peak": {
+      "i": 4500,
+      "t": 150.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.5583636260793354,
+        "loss": 0.8172684189315826,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.5583636260793354,
+        "loss": 0.8172684189315826,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.0,
+      "bin": 30
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 31,
+    "n": 150,
+    "start": 155.0,
+    "end": 159.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.3261608495016231,
+    "on": 0.3261608495016231,
+    "peak": {
+      "i": 4650,
+      "t": 155.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.2669300317742528,
+        "loss": 0.3105141270456015,
+        "source": "S3_landing",
+        "exchange": 5,
+        "chains": [
+          4
+        ]
+      },
+      "on": {
+        "p": 0.2669300317742528,
+        "loss": 0.3105141270456015,
+        "source": "S3_landing",
+        "exchange": 5,
+        "chains": [
+          4
+        ]
+      },
+      "delta": 0.0,
+      "bin": 31
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 32,
+    "n": 150,
+    "start": 160.0,
+    "end": 164.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.5868654283427921,
+    "on": 0.5868654283427921,
+    "peak": {
+      "i": 4800,
+      "t": 160.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.37870624899657296,
+        "loss": 0.47595127990057695,
+        "source": "S3_landing",
+        "exchange": 5,
+        "chains": [
+          4,
+          5
+        ]
+      },
+      "on": {
+        "p": 0.37870624899657296,
+        "loss": 0.47595127990057695,
+        "source": "S3_landing",
+        "exchange": 5,
+        "chains": [
+          4,
+          5
+        ]
+      },
+      "delta": 0.0,
+      "bin": 32
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 33,
+    "n": 150,
+    "start": 165.0,
+    "end": 169.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.27032591747182105,
+    "on": 0.27032591747182105,
+    "peak": {
+      "i": 4950,
+      "t": 165.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.2534198870845399,
+        "loss": 0.29225234972293596,
+        "source": "S3_landing",
+        "exchange": 5,
+        "chains": [
+          4,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 0.2534198870845399,
+        "loss": 0.29225234972293596,
+        "source": "S3_landing",
+        "exchange": 5,
+        "chains": [
+          4,
+          5,
+          6
+        ]
+      },
+      "delta": 0.0,
+      "bin": 33
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 34,
+    "n": 150,
+    "start": 170.0,
+    "end": 174.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.05457430901152504,
+    "on": 0.05457430901152504,
+    "peak": {
+      "i": 5100,
+      "t": 170.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.46129034243721334,
+        "loss": 0.6185785219219353,
+        "source": "G_fe",
+        "exchange": 5,
+        "chains": [
+          4,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 0.46129034243721334,
+        "loss": 0.6185785219219353,
+        "source": "G_fe",
+        "exchange": 5,
+        "chains": [
+          4,
+          5,
+          6
+        ]
+      },
+      "delta": 0.0,
+      "bin": 34
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 35,
+    "n": 150,
+    "start": 175.0,
+    "end": 179.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 1.0000000494736474e-07,
+    "on": 1.0000000494736474e-07,
+    "peak": {
+      "i": 5250,
+      "t": 175.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 1e-07,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 5,
+        "chains": [
+          4,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 1e-07,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 5,
+        "chains": [
+          4,
+          5,
+          6
+        ]
+      },
+      "delta": 0.0,
+      "bin": 35
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 0,
+    "bin": 36,
+    "n": 124,
+    "start": 180.0,
+    "end": 184.1,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7104800911672805,
+    "on": 0.7104800911672805,
+    "peak": {
+      "i": 5400,
+      "t": 180.0,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 1e-07,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 5,
+        "chains": [
+          4,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 1e-07,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 5,
+        "chains": [
+          4,
+          5,
+          6
+        ]
+      },
+      "delta": 0.0,
+      "bin": 36
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 36,
+    "n": 26,
+    "start": 184.13333333333333,
+    "end": 184.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7005533846346766,
+    "on": 0.7005533846346766,
+    "peak": {
+      "i": 5524,
+      "t": 184.13333333333333,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.4886172339503784,
+        "loss": 0.6706369162438878,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.4886172339503784,
+        "loss": 0.6706369162438878,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 36
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 37,
+    "n": 150,
+    "start": 185.0,
+    "end": 189.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.75100791721719,
+    "on": 0.75100791721719,
+    "peak": {
+      "i": 5550,
+      "t": 185.0,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.5083920483282355,
+        "loss": 0.7100737263361163,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5083920483282355,
+        "loss": 0.7100737263361163,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 37
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 38,
+    "n": 150,
+    "start": 190.0,
+    "end": 194.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7865338133596678,
+    "on": 0.7865338133596678,
+    "peak": {
+      "i": 5700,
+      "t": 190.0,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.5336313864775694,
+        "loss": 0.7627789414023215,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5336313864775694,
+        "loss": 0.7627789414023215,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 38
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 39,
+    "n": 150,
+    "start": 195.0,
+    "end": 199.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.8251943024650091,
+    "on": 0.8251943024650091,
+    "peak": {
+      "i": 5850,
+      "t": 195.0,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.49724886516128525,
+        "loss": 0.6876599930694373,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.49724886516128525,
+        "loss": 0.6876599930694373,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 39
+    },
+    "preceding": null,
+    "peak_preceding": null,
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 47,
+    "n": 150,
+    "start": 235.0,
+    "end": 239.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.02133029940289388,
+    "on": 0.02133029940289388,
+    "peak": {
+      "i": 7050,
+      "t": 235.0,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.029438182930230768,
+        "loss": 0.029880182296720223,
+        "source": "G_fe",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6,
+          7
+        ]
+      },
+      "on": {
+        "p": 0.029438182930230768,
+        "loss": 0.029880182296720223,
+        "source": "G_fe",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6,
+          7
+        ]
+      },
+      "delta": 0.0,
+      "bin": 47
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 16.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 16.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 48,
+    "n": 150,
+    "start": 240.0,
+    "end": 244.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.6450432862463357,
+    "on": 0.6450432862463357,
+    "peak": {
+      "i": 7200,
+      "t": 240.0,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 1e-07,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6,
+          7
+        ]
+      },
+      "on": {
+        "p": 1e-07,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6,
+          7
+        ]
+      },
+      "delta": 0.0,
+      "bin": 48
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 21.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 21.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 49,
+    "n": 16,
+    "start": 245.0,
+    "end": 245.5,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7354466845147087,
+    "on": 0.7354466845147087,
+    "peak": {
+      "i": 7350,
+      "t": 245.0,
+      "match": 1,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.5159388721049141,
+        "loss": 0.7255440829364418,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5159388721049141,
+        "loss": 0.7255440829364418,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 49
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 26.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 26.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 2,
+    "bin": 49,
+    "n": 134,
+    "start": 245.53333333333333,
+    "end": 249.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7504659422574195,
+    "on": 0.7504659422574195,
+    "peak": {
+      "i": 7366,
+      "t": 245.53333333333333,
+      "match": 2,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.5305431971209316,
+        "loss": 0.7561789912140422,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5305431971209316,
+        "loss": 0.7561789912140422,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 49
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 27.30000000000001,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 27.30000000000001,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 2,
+    "bin": 50,
+    "n": 150,
+    "start": 250.0,
+    "end": 254.96666666666667,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7030019766291499,
+    "on": 0.7030019766291499,
+    "peak": {
+      "i": 7500,
+      "t": 250.0,
+      "match": 2,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.4946972717152003,
+        "loss": 0.6825975673622193,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.4946972717152003,
+        "loss": 0.6825975673622193,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 50
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 31.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 31.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 2,
+    "bin": 51,
+    "n": 150,
+    "start": 255.0,
+    "end": 259.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7269995184883322,
+    "on": 0.7269995184883322,
+    "peak": {
+      "i": 7650,
+      "t": 255.0,
+      "match": 2,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.49318423982815157,
+        "loss": 0.6796077335998667,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.49318423982815157,
+        "loss": 0.6796077335998667,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 51
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 36.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 36.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 2,
+    "bin": 55,
+    "n": 150,
+    "start": 275.0,
+    "end": 279.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.16021718773454546,
+    "on": 0.16021718773454546,
+    "peak": {
+      "i": 8250,
+      "t": 275.0,
+      "match": 2,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.26632270788130336,
+        "loss": 0.3096860035589214,
+        "source": "S3_landing",
+        "exchange": 7,
+        "chains": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "on": {
+        "p": 0.26632270788130336,
+        "loss": 0.3096860035589214,
+        "source": "S3_landing",
+        "exchange": 7,
+        "chains": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "delta": 0.0,
+      "bin": 55
+    },
+    "preceding": {
+      "t": 269.7,
+      "age": 5.300000000000011,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 269.7,
+      "age": 5.300000000000011,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 2,
+    "bin": 56,
+    "n": 150,
+    "start": 280.0,
+    "end": 284.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.6470655218050382,
+    "on": 0.6470655218050382,
+    "peak": {
+      "i": 8400,
+      "t": 280.0,
+      "match": 2,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 1e-07,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 7,
+        "chains": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "on": {
+        "p": 1e-07,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 7,
+        "chains": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "delta": 0.0,
+      "bin": 56
+    },
+    "preceding": {
+      "t": 269.7,
+      "age": 10.300000000000011,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 269.7,
+      "age": 10.300000000000011,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 2,
+    "bin": 57,
+    "n": 48,
+    "start": 285.0,
+    "end": 286.56666666666666,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7033856234253494,
+    "on": 0.7033856234253494,
+    "peak": {
+      "i": 8550,
+      "t": 285.0,
+      "match": 2,
+      "game": 4,
+      "y": 0,
+      "off": {
+        "p": 0.4893846771181098,
+        "loss": 0.6721387650639462,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.4893846771181098,
+        "loss": 0.6721387650639462,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 57
+    },
+    "preceding": {
+      "t": 269.7,
+      "age": 15.300000000000011,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 269.7,
+      "age": 15.300000000000011,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 57,
+    "n": 102,
+    "start": 286.6,
+    "end": 289.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7343624699355158,
+    "on": 0.7343624699355158,
+    "peak": {
+      "i": 8598,
+      "t": 286.6,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.4722858128119109,
+        "loss": 0.7501709410408414,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.4722858128119109,
+        "loss": 0.7501709410408414,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 57
+    },
+    "preceding": {
+      "t": 269.7,
+      "age": 16.900000000000034,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 269.7,
+      "age": 16.900000000000034,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 58,
+    "n": 150,
+    "start": 290.0,
+    "end": 294.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7273409851715449,
+    "on": 0.7273409851715449,
+    "peak": {
+      "i": 8700,
+      "t": 290.0,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.491477135239005,
+        "loss": 0.710339860845272,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.491477135239005,
+        "loss": 0.710339860845272,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 58
+    },
+    "preceding": {
+      "t": 269.7,
+      "age": 20.30000000000001,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 269.7,
+      "age": 20.30000000000001,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 59,
+    "n": 150,
+    "start": 295.0,
+    "end": 299.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.6810295799166507,
+    "on": 0.6810295799166507,
+    "peak": {
+      "i": 8850,
+      "t": 295.0,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.4908737634628424,
+        "loss": 0.7115682851340577,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.4908737634628424,
+        "loss": 0.7115682851340577,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 59
+    },
+    "preceding": {
+      "t": 269.7,
+      "age": 25.30000000000001,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 269.7,
+      "age": 25.30000000000001,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 60,
+    "n": 150,
+    "start": 300.0,
+    "end": 304.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.685922311271793,
+    "on": 0.685922311271793,
+    "peak": {
+      "i": 9000,
+      "t": 300.0,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.49540743567723733,
+        "loss": 0.7023747525981835,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.49540743567723733,
+        "loss": 0.7023747525981835,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 60
+    },
+    "preceding": {
+      "t": 269.7,
+      "age": 30.30000000000001,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 269.7,
+      "age": 30.30000000000001,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 61,
+    "n": 150,
+    "start": 305.0,
+    "end": 309.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7318901520212948,
+    "on": 0.7318901520212948,
+    "peak": {
+      "i": 9150,
+      "t": 305.0,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.501848228304111,
+        "loss": 0.6894575390581179,
+        "source": "S3_provisional",
+        "exchange": 8,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.501848228304111,
+        "loss": 0.6894575390581179,
+        "source": "S3_provisional",
+        "exchange": 8,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.0,
+      "bin": 61
+    },
+    "preceding": {
+      "t": 269.7,
+      "age": 35.30000000000001,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 269.7,
+      "age": 35.30000000000001,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 3,
+            "col": 5,
+            "before": 5,
+            "after": 3
+          }
+        ],
+        "corrections": [
+          {
+            "row": 3,
+            "col": 5,
+            "before": 5,
+            "after": 3
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 3,
+            "col": 5,
+            "before": 5,
+            "after": 3,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "ojama",
+        "frame": 9276,
+        "t_sec": 309.2,
+        "observed_frame": 9275,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            5,
+            0,
+            0,
+            0,
+            0,
+            5
+          ],
+          [
+            5,
+            5,
+            4,
+            0,
+            0,
+            5
+          ],
+          [
+            3,
+            2,
+            3,
+            0,
+            0,
+            5
+          ],
+          [
+            2,
+            4,
+            4,
+            3,
+            2,
+            5
+          ],
+          [
+            2,
+            2,
+            4,
+            3,
+            5,
+            3
+          ],
+          [
+            3,
+            3,
+            3,
+            2,
+            5,
+            4
+          ],
+          [
+            5,
+            2,
+            2,
+            3,
+            3,
+            4
+          ],
+          [
+            2,
+            4,
+            5,
+            3,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            4,
+            5,
+            4,
+            2
+          ],
+          [
+            5,
+            5,
+            4,
+            4,
+            3,
+            4
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 3,
+    "bin": 62,
+    "n": 150,
+    "start": 310.0,
+    "end": 314.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7324099805992119,
+    "on": 0.7324099805992119,
+    "peak": {
+      "i": 9300,
+      "t": 310.0,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.4423550347372807,
+        "loss": 0.8156424733219209,
+        "source": "G_fe",
+        "exchange": 9,
+        "chains": [
+          2
+        ]
+      },
+      "on": {
+        "p": 0.4423550347372807,
+        "loss": 0.8156424733219209,
+        "source": "G_fe",
+        "exchange": 9,
+        "chains": [
+          2
+        ]
+      },
+      "delta": 0.0,
+      "bin": 62
+    },
+    "preceding": {
+      "t": 309.2,
+      "age": 0.8000000000000114,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 3,
+          "col": 5,
+          "before": 5,
+          "after": 3
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 309.2,
+      "age": 0.8000000000000114,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 3,
+          "col": 5,
+          "before": 5,
+          "after": 3
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 64,
+    "n": 150,
+    "start": 320.0,
+    "end": 324.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.3257581015513895,
+    "on": 0.3257581015513895,
+    "peak": {
+      "i": 9600,
+      "t": 320.0,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.7909161227114826,
+        "loss": 0.23456335639272213,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5,
+          3
+        ]
+      },
+      "on": {
+        "p": 0.7909161227114826,
+        "loss": 0.23456335639272213,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5,
+          3
+        ]
+      },
+      "delta": 0.0,
+      "bin": 64
+    },
+    "preceding": {
+      "t": 318.3333333333333,
+      "age": 1.6666666666666856,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 5,
+          "before": 9,
+          "after": 5
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 318.3333333333333,
+      "age": 1.6666666666666856,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 5,
+          "before": 9,
+          "after": 5
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 65,
+    "n": 150,
+    "start": 325.0,
+    "end": 329.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.23989205974470437,
+    "on": 0.23989205974470437,
+    "peak": {
+      "i": 9750,
+      "t": 325.0,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.6582022087483392,
+        "loss": 0.4182430867381159,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6
+        ]
+      },
+      "on": {
+        "p": 0.6582022087483392,
+        "loss": 0.4182430867381159,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6
+        ]
+      },
+      "delta": 0.0,
+      "bin": 65
+    },
+    "preceding": {
+      "t": 318.3333333333333,
+      "age": 6.666666666666686,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 5,
+          "before": 9,
+          "after": 5
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 318.3333333333333,
+      "age": 6.666666666666686,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 5,
+          "before": 9,
+          "after": 5
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 68,
+    "n": 150,
+    "start": 340.0,
+    "end": 344.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.038349387693622616,
+    "on": 0.038349387693622616,
+    "peak": {
+      "i": 10200,
+      "t": 340.0,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.8944215924129424,
+        "loss": 0.1115780350872204,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7,
+          8
+        ]
+      },
+      "on": {
+        "p": 0.8944215924129424,
+        "loss": 0.1115780350872204,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7,
+          8
+        ]
+      },
+      "delta": 0.0,
+      "bin": 68
+    },
+    "preceding": {
+      "t": 334.1666666666667,
+      "age": 5.833333333333314,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 334.1666666666667,
+      "age": 5.833333333333314,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 69,
+    "n": 150,
+    "start": 345.0,
+    "end": 349.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 1.0000000494736474e-07,
+    "on": 1.0000000494736474e-07,
+    "peak": {
+      "i": 10350,
+      "t": 345.0,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.9999999,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7,
+          8
+        ]
+      },
+      "on": {
+        "p": 0.9999999,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7,
+          8
+        ]
+      },
+      "delta": 0.0,
+      "bin": 69
+    },
+    "preceding": {
+      "t": 334.1666666666667,
+      "age": 10.833333333333314,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 334.1666666666667,
+      "age": 10.833333333333314,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 70,
+    "n": 150,
+    "start": 350.0,
+    "end": 354.96666666666664,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.6330744335780839,
+    "on": 0.6330744335780839,
+    "peak": {
+      "i": 10500,
+      "t": 350.0,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.9999999,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7,
+          8
+        ]
+      },
+      "on": {
+        "p": 0.9999999,
+        "loss": 1.0000000494736474e-07,
+        "source": "confirmed_death",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7,
+          8
+        ]
+      },
+      "delta": 0.0,
+      "bin": 70
+    },
+    "preceding": {
+      "t": 334.1666666666667,
+      "age": 15.833333333333314,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 334.1666666666667,
+      "age": 15.833333333333314,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 71,
+    "n": 54,
+    "start": 355.0,
+    "end": 356.76666666666665,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.6931471805599455,
+    "on": 0.6931471805599455,
+    "peak": {
+      "i": 10650,
+      "t": 355.0,
+      "match": 3,
+      "game": 5,
+      "y": 1,
+      "off": {
+        "p": 0.5,
+        "loss": 0.6931471805599453,
+        "source": "waiting_confirmed",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5,
+        "loss": 0.6931471805599453,
+        "source": "waiting_confirmed",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 71
+    },
+    "preceding": {
+      "t": 334.1666666666667,
+      "age": 20.833333333333314,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 334.1666666666667,
+      "age": 20.833333333333314,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 1,
+    "bin": 40,
+    "n": 150,
+    "start": 200.0,
+    "end": 204.96666666666667,
+    "delta_sum": -0.06289742803813092,
+    "contribution": -9.63797548852757e-06,
+    "delta_mean": -0.0004193161869208728,
+    "off": 0.7205772483108274,
+    "on": 0.7201579321239066,
+    "peak": {
+      "i": 6048,
+      "t": 201.6,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.5756670041159954,
+        "loss": 0.8572367643390214,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5787451649904144,
+        "loss": 0.8645173196138723,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.007280555274850942,
+      "bin": 40
+    },
+    "preceding": null,
+    "peak_preceding": {
+      "t": 201.4,
+      "age": 0.19999999999998863,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 4,
+          "col": 1,
+          "before": 0,
+          "after": 2
+        },
+        {
+          "row": 6,
+          "col": 2,
+          "before": 0,
+          "after": 5
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 4,
+            "col": 1,
+            "before": 0,
+            "after": 2
+          },
+          {
+            "row": 6,
+            "col": 2,
+            "before": 0,
+            "after": 5
+          }
+        ],
+        "corrections": [
+          {
+            "row": 4,
+            "col": 1,
+            "before": 0,
+            "after": 2
+          },
+          {
+            "row": 6,
+            "col": 2,
+            "before": 0,
+            "after": 5
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 4,
+            "col": 1,
+            "before": 0,
+            "after": 2,
+            "reason": "corrected"
+          },
+          {
+            "row": 6,
+            "col": 2,
+            "before": 0,
+            "after": 5,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "next",
+        "frame": 6042,
+        "t_sec": 201.4,
+        "observed_frame": 6042,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            5,
+            0,
+            0,
+            0,
+            0,
+            4
+          ],
+          [
+            4,
+            2,
+            0,
+            0,
+            0,
+            4
+          ],
+          [
+            4,
+            5,
+            0,
+            0,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            5,
+            0,
+            4,
+            2
+          ],
+          [
+            2,
+            4,
+            4,
+            0,
+            4,
+            4
+          ],
+          [
+            5,
+            5,
+            4,
+            0,
+            2,
+            2
+          ],
+          [
+            5,
+            2,
+            1,
+            2,
+            5,
+            2
+          ],
+          [
+            4,
+            4,
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            1,
+            5,
+            5,
+            5
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 1,
+    "bin": 46,
+    "n": 150,
+    "start": 230.0,
+    "end": 234.96666666666667,
+    "delta_sum": -0.21155805169915648,
+    "contribution": -3.241772168237151e-05,
+    "delta_mean": -0.00141038701132771,
+    "off": 0.08564458946166398,
+    "on": 0.08423420245033626,
+    "peak": {
+      "i": 6936,
+      "t": 231.2,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.14443930629920992,
+        "loss": 0.15599824287031488,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6,
+          7
+        ]
+      },
+      "on": {
+        "p": 0.1500213996564976,
+        "loss": 0.1625441058811652,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6,
+          7
+        ]
+      },
+      "delta": 0.006545863010850306,
+      "bin": 46
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 11.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 12.966666666666669,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 67,
+    "n": 150,
+    "start": 335.0,
+    "end": 339.96666666666664,
+    "delta_sum": -0.23983465109157115,
+    "contribution": -3.675063608513196e-05,
+    "delta_mean": -0.0015988976739438076,
+    "off": 0.08091079745696671,
+    "on": 0.07931189978302289,
+    "peak": {
+      "i": 10084,
+      "t": 336.1333333333333,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.98,
+        "loss": 0.020202707317519466,
+        "source": "unavoidable_death",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7
+        ]
+      },
+      "on": {
+        "p": 0.98,
+        "loss": 0.020202707317519466,
+        "source": "unavoidable_death",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7
+        ]
+      },
+      "delta": 0.0,
+      "bin": 67
+    },
+    "preceding": {
+      "t": 334.1666666666667,
+      "age": 0.8333333333333144,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 334.1666666666667,
+      "age": 1.9666666666666401,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "within": []
+  },
+  {
+    "match": 3,
+    "bin": 66,
+    "n": 150,
+    "start": 330.0,
+    "end": 334.96666666666664,
+    "delta_sum": -0.4311209953878745,
+    "contribution": -6.606205874775889e-05,
+    "delta_mean": -0.002874139969252497,
+    "off": 0.1143685283064724,
+    "on": 0.1114943883372199,
+    "peak": {
+      "i": 10034,
+      "t": 334.46666666666664,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.9234973449218843,
+        "loss": 0.07958735436388453,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7
+        ]
+      },
+      "on": {
+        "p": 0.9219422564406616,
+        "loss": 0.0812726859760993,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7
+        ]
+      },
+      "delta": 0.0016853316122147632,
+      "bin": 66
+    },
+    "preceding": {
+      "t": 318.3333333333333,
+      "age": 11.666666666666686,
+      "signal": "next",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 5,
+          "before": 9,
+          "after": 5
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 334.1666666666667,
+      "age": 0.2999999999999545,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 1,
+          "col": 0,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 1,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "before": 0,
+          "after": 5
+        },
+        {
+          "row": 3,
+          "col": 0,
+          "before": 0,
+          "after": 2
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 1,
+            "col": 0,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 1,
+            "col": 4,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 2,
+            "col": 0,
+            "before": 0,
+            "after": 5
+          },
+          {
+            "row": 3,
+            "col": 0,
+            "before": 0,
+            "after": 2
+          }
+        ],
+        "corrections": [
+          {
+            "row": 1,
+            "col": 0,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 1,
+            "col": 4,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 2,
+            "col": 0,
+            "before": 0,
+            "after": 5
+          },
+          {
+            "row": 3,
+            "col": 0,
+            "before": 0,
+            "after": 2
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 1,
+            "col": 0,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          },
+          {
+            "row": 1,
+            "col": 4,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          },
+          {
+            "row": 2,
+            "col": 0,
+            "before": 0,
+            "after": 5,
+            "reason": "corrected"
+          },
+          {
+            "row": 3,
+            "col": 0,
+            "before": 0,
+            "after": 2,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 1,
+        "signal": "ojama",
+        "frame": 10025,
+        "t_sec": 334.1666666666667,
+        "observed_frame": 10024,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            9,
+            5
+          ],
+          [
+            0,
+            5,
+            0,
+            0,
+            9,
+            9
+          ],
+          [
+            5,
+            9,
+            0,
+            0,
+            9,
+            5
+          ],
+          [
+            5,
+            9,
+            3,
+            0,
+            5,
+            3
+          ],
+          [
+            5,
+            9,
+            3,
+            9,
+            2,
+            3
+          ],
+          [
+            9,
+            5,
+            9,
+            9,
+            5,
+            3
+          ],
+          [
+            9,
+            2,
+            9,
+            2,
+            5,
+            4
+          ],
+          [
+            9,
+            2,
+            2,
+            3,
+            3,
+            4
+          ],
+          [
+            2,
+            4,
+            5,
+            3,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            4,
+            5,
+            4,
+            2
+          ],
+          [
+            5,
+            5,
+            4,
+            4,
+            3,
+            4
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 2,
+    "bin": 52,
+    "n": 150,
+    "start": 260.0,
+    "end": 264.96666666666664,
+    "delta_sum": -0.4720374592726516,
+    "contribution": -7.23318202992111e-05,
+    "delta_mean": -0.003146916395151011,
+    "off": 0.854014417691133,
+    "on": 0.8508675012959819,
+    "peak": {
+      "i": 7800,
+      "t": 260.0,
+      "match": 2,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.5166160863904594,
+        "loss": 0.72694408886361,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5166160863904594,
+        "loss": 0.72694408886361,
+        "source": "G_fe",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 52
+    },
+    "preceding": {
+      "t": 218.23333333333332,
+      "age": 41.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 218.23333333333332,
+      "age": 41.76666666666668,
+      "signal": "ojama",
+      "side": 1,
+      "cells": [
+        {
+          "row": 2,
+          "col": 1,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    },
+    "within": [
+      {
+        "reason": "corrected",
+        "differences": [
+          {
+            "row": 1,
+            "col": 2,
+            "before": 0,
+            "after": 1
+          },
+          {
+            "row": 3,
+            "col": 3,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 4,
+            "col": 2,
+            "before": 0,
+            "after": 4
+          }
+        ],
+        "corrections": [
+          {
+            "row": 3,
+            "col": 3,
+            "before": 0,
+            "after": 4
+          },
+          {
+            "row": 4,
+            "col": 2,
+            "before": 0,
+            "after": 4
+          }
+        ],
+        "cell_reasons": [
+          {
+            "row": 1,
+            "col": 2,
+            "before": 0,
+            "after": 1,
+            "reason": "not_two_frames"
+          },
+          {
+            "row": 3,
+            "col": 3,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          },
+          {
+            "row": 4,
+            "col": 2,
+            "before": 0,
+            "after": 4,
+            "reason": "corrected"
+          }
+        ],
+        "quality": "",
+        "erasing": false,
+        "previous_quality": "",
+        "previous_erasing": false,
+        "side": 0,
+        "signal": "next",
+        "frame": 7850,
+        "t_sec": 261.6666666666667,
+        "observed_frame": 7850,
+        "before": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            4,
+            3,
+            0
+          ],
+          [
+            0,
+            0,
+            3,
+            5,
+            1,
+            0
+          ],
+          [
+            3,
+            1,
+            3,
+            4,
+            4,
+            0
+          ],
+          [
+            3,
+            3,
+            5,
+            4,
+            5,
+            0
+          ],
+          [
+            1,
+            1,
+            3,
+            5,
+            5,
+            0
+          ],
+          [
+            1,
+            4,
+            3,
+            1,
+            4,
+            0
+          ],
+          [
+            3,
+            3,
+            5,
+            4,
+            1,
+            4
+          ],
+          [
+            4,
+            3,
+            4,
+            1,
+            4,
+            1
+          ],
+          [
+            4,
+            5,
+            5,
+            5,
+            1,
+            1
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "match": 2,
+    "bin": 54,
+    "n": 150,
+    "start": 270.0,
+    "end": 274.96666666666664,
+    "delta_sum": -3.8116453689691143,
+    "contribution": -0.0005840706970531895,
+    "delta_mean": -0.02541096912646076,
+    "off": 0.28807003450384483,
+    "on": 0.2626590653773841,
+    "peak": {
+      "i": 8151,
+      "t": 271.7,
+      "match": 2,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.2221227081707013,
+        "loss": 0.2511864898277093,
+        "source": "S3_landing",
+        "exchange": 7,
+        "chains": [
+          1,
+          2
+        ]
+      },
+      "on": {
+        "p": 0.2561053654000896,
+        "loss": 0.2958558743395378,
+        "source": "S3_landing",
+        "exchange": 7,
+        "chains": [
+          1,
+          2
+        ]
+      },
+      "delta": 0.0446693845118285,
+      "bin": 54
+    },
+    "preceding": {
+      "t": 269.7,
+      "age": 0.30000000000001137,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "peak_preceding": {
+      "t": 269.7,
+      "age": 2.0,
+      "signal": "ojama",
+      "side": 0,
+      "cells": [
+        {
+          "row": 8,
+          "col": 4,
+          "before": 0,
+          "after": 4
+        },
+        {
+          "row": 9,
+          "col": 5,
+          "before": 0,
+          "after": 4
+        }
+      ]
+    },
+    "within": []
+  }
+]

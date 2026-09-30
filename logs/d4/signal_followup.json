@@ -1,0 +1,15 @@
+{
+  "next": {
+    "verified": 295,
+    "unverified": 3
+  },
+  "ojama": {
+    "verified": 112,
+    "unverified": 73,
+    "wrong": 4
+  },
+  "formula": {
+    "verified": 57,
+    "unverified": 6
+  }
+}
