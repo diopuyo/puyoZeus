@@ -65,7 +65,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            prefire_stage_timeout: bool = False, prefire_stage_timeout_only: bool = False,
            prefire_origin_guard: bool = False, post_counter_death_bound: bool = False,
            single_death_proof_guard: bool = False,
-           single_death_proof_negative_only: bool = False) -> dict:
+           single_death_proof_negative_only: bool = False,
+           prefire_exchange_prediction: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -103,15 +104,23 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         single_death_proof_negative_only=single_death_proof_negative_only)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
+    prefire_layer = None
+    if prefire_exchange_prediction:
+        from src.prefire_exchange_layer import FileHazardModel, PrefireExchangeLayer
+        prefire_layer = PrefireExchangeLayer(FileHazardModel.load())
     for item in stream:
         if item["kind"] == "update":
             inputs = item["args"]
+            if prefire_layer is not None:
+                prefire_layer.restore(overlay)
             if (e16 or death_guard or evaluation_layers or completion_check or confirmed_death_hold) and not getattr(
                     inputs[0], "terminal_evidence_available", False):
                 raise ValueError("E16/E17再生には元映像の死亡確認信号を補完した記録が必要")
             overlay.update(*inputs)
             if observer is not None:
                 observer(overlay, inputs)
+            if prefire_layer is not None:
+                prefire_layer.apply(overlay, inputs[3], inputs[4])
             _exchange_display(overlay, 0.0, 0.5, smoothing, inputs[3])
             frames += 1
         elif item["kind"] == "display":
@@ -120,6 +129,9 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
             rows.append(display_row(overlay, inputs, item, smoothing))
         elif item["kind"] == "complete" and item["frames"] != frames:
             raise ValueError("記録フレーム数が不一致")
+    if prefire_layer is not None:
+        prefire_layer.restore(overlay)
+        prefire_layer.save(out / "prefire_trace.npz")
     save_display_timeline(out / "display.npz", header["video_id"], rows)
     overlay.tracker.save(out / "events.jsonl")
     if overlay._landing_projection.post_counter_bound is not None:
@@ -189,6 +201,8 @@ def main() -> None:
                  "death-pending-ledger", "hidden-row-death", "midchain-single-observation", "prefire-candidates", "prefire-snapshot", "hidden-row-belief", "prefire-stage-timeout", "prefire-stage-timeout-only"):
         parser.add_argument("--" + name, action="store_true", default=False)
     parser.add_argument("--confirmed-death-hold", action="store_true", default=False)
+    parser.add_argument("--prefire-exchange-prediction", action="store_true", default=False,
+                        help="発火前の撃ち合い予測を表示へ混ぜる (既定OFF、models/prefire_hazard_v1)")
     parser.add_argument("--landing-counter-prob", action="store_true", default=False)
     for name in ("count-sync", "death-guard", "evaluation-layers", "completion-check"):
         parser.add_argument("--exchange-event-" + name, action="store_true", default=False)
@@ -219,7 +233,8 @@ def main() -> None:
                     prefire_origin_guard=options.prefire_origin_guard,
                     post_counter_death_bound=options.post_counter_death_bound,
                     single_death_proof_guard=options.single_death_proof_guard,
-                    single_death_proof_negative_only=options.single_death_proof_negative_only)
+                    single_death_proof_negative_only=options.single_death_proof_negative_only,
+                    prefire_exchange_prediction=options.prefire_exchange_prediction)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))
