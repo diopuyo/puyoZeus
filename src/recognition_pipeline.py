@@ -831,6 +831,8 @@ class RecognitionPipeline:
     # (残像/連鎖後不一致率 0.09→0.28 悪化) を修正するため、適用は止めず
     # 事後の多数決比較で不一致なら補正する方式に変更。
     CHAIN_VERIFY_FRAMES: int = 5
+    # pending を失効させる状態 (新しい連鎖の開始を示す)。
+    VERIFY_EXPIRY_STATES = (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
     # 事後不一致とみなす cell 数閾値 (COLOR_UNKNOWN 除外)。
     # cycle 48 の大量 hallucination ガード基準 (6 cell) を流用。
     CHAIN_VERIFY_MISMATCH_CELLS: int = 6
@@ -1859,6 +1861,10 @@ class RecognitionPipeline:
         # 整合しない対では上書きしない (q第14試合1P 884秒の誤確定の根因A)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_next_recolor_pair_guard: bool = False,
+        # 2026-09-30: 答え合わせ pending の連鎖失効。pending 作成後に同じ側で新しい連鎖
+        # (CHAIN/GRAVITY_SETTLE) が始まったら、連鎖前の履歴が混ざるため破棄する
+        # (q第14試合1P 881.967秒の幻おじゃま9,9,9の根因B)。default False = bit-identical。
+        enable_verification_pending_chain_expiry: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2790,6 +2796,10 @@ class RecognitionPipeline:
         self.next_recolor_guard_counts: dict[str, int] = {
             k: 0 for k in next_recolor_pair_guard.OUTCOMES}
         self.next_recolor_guard_log: list[dict] = []
+        # 答え合わせ pending の連鎖失効 (既定OFF)。失効件数は監査用。
+        self._enable_verification_pending_chain_expiry: bool = bool(
+            enable_verification_pending_chain_expiry)
+        self.verification_pending_expired_count: int = 0
         # game-event ベース連鎖終了 (C-1/C-2 plan, 2026-06-01)。
         # True で次ツモ変化 / お邪魔出現をトリガーとして CHAIN 終了する。
         # False = 従来 timing hold のみ (backwards compat)。
@@ -3653,6 +3663,10 @@ class RecognitionPipeline:
         # 整合しない対では上書きしない (q第14試合1P 884秒の誤確定の根因A)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_next_recolor_pair_guard: bool = False,
+        # 2026-09-30: 答え合わせ pending の連鎖失効。pending 作成後に同じ側で新しい連鎖
+        # (CHAIN/GRAVITY_SETTLE) が始まったら、連鎖前の履歴が混ざるため破棄する
+        # (q第14試合1P 881.967秒の幻おじゃま9,9,9の根因B)。default False = bit-identical。
+        enable_verification_pending_chain_expiry: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3929,6 +3943,8 @@ class RecognitionPipeline:
             enable_placement_signal_reconcile=enable_placement_signal_reconcile,
             enable_placement_signal_ojama=enable_placement_signal_ojama,
             enable_next_recolor_pair_guard=enable_next_recolor_pair_guard,
+            enable_verification_pending_chain_expiry=(
+                enable_verification_pending_chain_expiry),
         )
 
     # ------------------------------------------------------------------
@@ -6935,6 +6951,18 @@ class RecognitionPipeline:
             self._chain_verify_pending_1p if side == "1P"
             else self._chain_verify_pending_2p
         )
+        if (
+            pending is not None
+            and self._enable_verification_pending_chain_expiry
+            and state in self.VERIFY_EXPIRY_STATES
+        ):
+            # 新しい連鎖が始まった: 履歴の連鎖前フレームが多数決へ混ざるため破棄。
+            if side == "1P":
+                self._chain_verify_pending_1p = None
+            else:
+                self._chain_verify_pending_2p = None
+            self.verification_pending_expired_count += 1
+            return None, None
         if pending is None or state != BoardState.STABLE:
             return None, None
         pending["cnn_history"].append(cnn_board.copy())
