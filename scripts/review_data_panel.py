@@ -237,6 +237,11 @@ def _prediction_label(overlay: Any, record: Any, game_idx: int) -> str:
     """現在層・死亡観測と区別し、候補に基づく予測を画面とCSVへ明示する。"""
     if record is None or overlay.tracker.source in ('G_fe', 'confirmed_death', 'E16_current'):
         return ''
+    landing = getattr(overlay, '_landing_projection', None)
+    proof = getattr(landing, 'death', None) or getattr(landing, 'last', None) or {}
+    if (overlay.tracker.source == 'unavoidable_death'
+            and any(row.get('dead') for row in proof.get('post_counter_bound', ()))):
+        return '（打ち返し後の負け確定・予測込み）'
     prefire = getattr(overlay, '_prefire', None)
     if prefire is not None and prefire.provenance(record.chains):
         if prefire.provenance(record.chains)[0].get('method') == 'prefire_snapshot':

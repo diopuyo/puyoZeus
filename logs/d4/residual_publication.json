@@ -1,0 +1,343 @@
+[
+  {
+    "source": "zenchi",
+    "t": 2711.233333333333,
+    "i": 4820,
+    "side": 0,
+    "row": 9,
+    "col": 1,
+    "reference": 0,
+    "category": "修正後に残存・再変化",
+    "age": 0.0,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 2711.233333333333,
+    "observed_frame": 162674,
+    "cnn": 0,
+    "hsv": 0,
+    "publication": [
+      {
+        "t": 2711.2166666666667,
+        "value": 4
+      },
+      {
+        "t": 2711.25,
+        "value": 0
+      },
+      {
+        "t": 2711.2833333333333,
+        "value": 0
+      }
+    ]
+  },
+  {
+    "source": "zenchi",
+    "t": 2933.1666666666665,
+    "i": 11478,
+    "side": 0,
+    "row": 1,
+    "col": 5,
+    "reference": 0,
+    "category": "修正後に残存・再変化",
+    "age": 0.0,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 2933.1666666666665,
+    "observed_frame": 175990,
+    "cnn": 0,
+    "hsv": 0,
+    "publication": [
+      {
+        "t": 2933.15,
+        "value": 4
+      },
+      {
+        "t": 2933.1833333333334,
+        "value": 0
+      },
+      {
+        "t": 2933.2166666666667,
+        "value": 0
+      }
+    ]
+  },
+  {
+    "source": "zenchi",
+    "t": 2933.1666666666665,
+    "i": 11478,
+    "side": 0,
+    "row": 2,
+    "col": 4,
+    "reference": 4,
+    "category": "修正後に残存・再変化",
+    "age": 0.0,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 2933.1666666666665,
+    "observed_frame": 175990,
+    "cnn": 4,
+    "hsv": 4,
+    "publication": [
+      {
+        "t": 2933.15,
+        "value": 0
+      },
+      {
+        "t": 2933.1833333333334,
+        "value": 4
+      },
+      {
+        "t": 2933.2166666666667,
+        "value": 4
+      }
+    ]
+  },
+  {
+    "source": "zenchi",
+    "t": 2987.133333333333,
+    "i": 13097,
+    "side": 0,
+    "row": 11,
+    "col": 2,
+    "reference": 0,
+    "category": "修正後に残存・再変化",
+    "age": 0.0,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 2987.133333333333,
+    "observed_frame": 179228,
+    "cnn": 0,
+    "hsv": 0,
+    "publication": [
+      {
+        "t": 2987.116666666667,
+        "value": 3
+      },
+      {
+        "t": 2987.15,
+        "value": 0
+      },
+      {
+        "t": 2987.1833333333334,
+        "value": 0
+      }
+    ]
+  },
+  {
+    "source": "zenchi",
+    "t": 2987.133333333333,
+    "i": 13097,
+    "side": 0,
+    "row": 12,
+    "col": 0,
+    "reference": 3,
+    "category": "修正後に残存・再変化",
+    "age": 0.0,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 2987.133333333333,
+    "observed_frame": 179228,
+    "cnn": 3,
+    "hsv": 3,
+    "publication": [
+      {
+        "t": 2987.116666666667,
+        "value": 0
+      },
+      {
+        "t": 2987.15,
+        "value": 3
+      },
+      {
+        "t": 2987.1833333333334,
+        "value": 3
+      }
+    ]
+  },
+  {
+    "source": "zenchi",
+    "t": 2987.133333333333,
+    "i": 13097,
+    "side": 0,
+    "row": 12,
+    "col": 2,
+    "reference": 0,
+    "category": "修正後に残存・再変化",
+    "age": 0.0,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 2987.133333333333,
+    "observed_frame": 179228,
+    "cnn": 0,
+    "hsv": 0,
+    "publication": [
+      {
+        "t": 2987.116666666667,
+        "value": 3
+      },
+      {
+        "t": 2987.15,
+        "value": 0
+      },
+      {
+        "t": 2987.1833333333334,
+        "value": 0
+      }
+    ]
+  },
+  {
+    "source": "zenchi",
+    "t": 2987.9666666666667,
+    "i": 13122,
+    "side": 0,
+    "row": 11,
+    "col": 2,
+    "reference": 0,
+    "category": "修正後に残存・再変化",
+    "age": 0.8333333333334849,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 2987.133333333333,
+    "observed_frame": 179228,
+    "cnn": 0,
+    "hsv": 0,
+    "publication": [
+      {
+        "t": 2987.95,
+        "value": 1
+      },
+      {
+        "t": 2987.983333333333,
+        "value": 1
+      },
+      {
+        "t": 2988.016666666667,
+        "value": 1
+      }
+    ]
+  },
+  {
+    "source": "zenchi",
+    "t": 2987.9666666666667,
+    "i": 13122,
+    "side": 0,
+    "row": 12,
+    "col": 2,
+    "reference": 0,
+    "category": "修正後に残存・再変化",
+    "age": 0.8333333333334849,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 2987.133333333333,
+    "observed_frame": 179228,
+    "cnn": 0,
+    "hsv": 0,
+    "publication": [
+      {
+        "t": 2987.95,
+        "value": 1
+      },
+      {
+        "t": 2987.983333333333,
+        "value": 1
+      },
+      {
+        "t": 2988.016666666667,
+        "value": 1
+      }
+    ]
+  },
+  {
+    "source": "zenchi",
+    "t": 3068.233333333333,
+    "i": 15530,
+    "side": 0,
+    "row": 7,
+    "col": 4,
+    "reference": 3,
+    "category": "修正後に残存・再変化",
+    "age": 0.0,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 3068.233333333333,
+    "observed_frame": 184094,
+    "cnn": 3,
+    "hsv": 3,
+    "publication": [
+      {
+        "t": 3068.2166666666667,
+        "value": 0
+      },
+      {
+        "t": 3068.25,
+        "value": 3
+      },
+      {
+        "t": 3068.2833333333333,
+        "value": 3
+      }
+    ]
+  },
+  {
+    "source": "zenchi",
+    "t": 3228.266666666667,
+    "i": 20331,
+    "side": 0,
+    "row": 12,
+    "col": 2,
+    "reference": 2,
+    "category": "修正後に残存・再変化",
+    "age": 0.0,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 3228.266666666667,
+    "observed_frame": 193696,
+    "cnn": 2,
+    "hsv": 2,
+    "publication": [
+      {
+        "t": 3228.25,
+        "value": 5
+      },
+      {
+        "t": 3228.2833333333333,
+        "value": 2
+      },
+      {
+        "t": 3228.3166666666666,
+        "value": 2
+      }
+    ]
+  },
+  {
+    "source": "review",
+    "t": 2711.233333333333,
+    "i": 4865,
+    "side": 0,
+    "row": 9,
+    "col": 1,
+    "reference": 0,
+    "category": "修正後に残存・再変化",
+    "age": 0.0,
+    "reason": "corrected",
+    "signal": "next",
+    "signal_t": 2711.233333333333,
+    "observed_frame": 162674,
+    "cnn": 0,
+    "hsv": 0,
+    "publication": [
+      {
+        "t": 2711.2166666666667,
+        "value": 4
+      },
+      {
+        "t": 2711.25,
+        "value": 0
+      },
+      {
+        "t": 2711.2833333333333,
+        "value": 0
+      }
+    ]
+  }
+]

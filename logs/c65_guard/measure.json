@@ -1,0 +1,89 @@
+[
+ {
+  "source": "q_7gc4TgFig",
+  "totals": {
+   "calls": 24,
+   "outcome_accepted": 3,
+   "infer_returned_none": 2,
+   "cells": 48,
+   "recolored_by_off": 27,
+   "truth_cells": 48,
+   "observed_right": 48,
+   "off_right": 21,
+   "on_right": 48,
+   "outcome_substituted": 8,
+   "outcome_kept_observed": 13,
+   "on_worse_cells": 0
+  },
+  "on_worse": []
+ },
+ {
+  "source": "fcXG83vInDY",
+  "totals": {
+   "calls": 20,
+   "outcome_kept_observed": 10,
+   "infer_returned_none": 4,
+   "cells": 40,
+   "recolored_by_off": 20,
+   "truth_cells": 40,
+   "observed_right": 39,
+   "off_right": 20,
+   "on_right": 39,
+   "outcome_substituted": 6,
+   "outcome_accepted": 4,
+   "on_worse_cells": 0
+  },
+  "on_worse": []
+ },
+ {
+  "source": "mia8KCjr52g",
+  "totals": {
+   "calls": 237,
+   "outcome_substituted": 117,
+   "infer_returned_none": 0,
+   "cells": 474,
+   "recolored_by_off": 257,
+   "truth_cells": 434,
+   "observed_right": 434,
+   "off_right": 198,
+   "on_right": 434,
+   "outcome_accepted": 64,
+   "outcome_kept_observed": 56,
+   "no_truth": 40,
+   "on_worse_cells": 0
+  },
+  "on_worse": []
+ },
+ {
+  "source": "zenchi",
+  "totals": {
+   "calls": 31,
+   "outcome_kept_observed": 12,
+   "infer_returned_none": 2,
+   "cells": 62,
+   "recolored_by_off": 33,
+   "truth_cells": 62,
+   "observed_right": 60,
+   "off_right": 30,
+   "on_right": 60,
+   "outcome_substituted": 13,
+   "outcome_accepted": 6,
+   "on_worse_cells": 1
+  },
+  "on_worse": [
+   {
+    "t": 3155.75,
+    "side": "1P",
+    "cell": [
+     7,
+     5
+    ],
+    "observed": 9,
+    "off": 3,
+    "on": 9,
+    "truth": 3,
+    "outcome": "kept_observed"
+   }
+  ]
+ }
+]

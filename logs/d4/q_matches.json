@@ -1,0 +1,312 @@
+[
+  {
+    "match": 1,
+    "game": 2,
+    "n": 1694,
+    "start": 184.13333333333333,
+    "end": 240.56666666666666,
+    "delta_sum": 225.04570229159478,
+    "contribution": 0.034484477825864966,
+    "delta_mean": 0.13284870265147272,
+    "off": 0.5835012465667659,
+    "on": 0.716349949218238,
+    "peak": {
+      "i": 6606,
+      "t": 220.2,
+      "match": 1,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.10717651181013693,
+        "loss": 0.11336637924476402,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "on": {
+        "p": 0.6816900666190909,
+        "loss": 1.1447297375752907,
+        "source": "S3_landing",
+        "exchange": 6,
+        "chains": [
+          1,
+          3,
+          5,
+          6
+        ]
+      },
+      "delta": 1.0313633583305266,
+      "bin": 44
+    }
+  },
+  {
+    "match": 0,
+    "game": 1,
+    "n": 1228,
+    "start": 139.26666666666668,
+    "end": 180.16666666666666,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.4206298261516848,
+    "on": 0.4206298261516848,
+    "peak": {
+      "i": 4178,
+      "t": 139.26666666666668,
+      "match": 0,
+      "game": 1,
+      "y": 0,
+      "off": {
+        "p": 0.48878655028907964,
+        "loss": 0.6709680661887806,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "on": {
+        "p": 0.48878655028907964,
+        "loss": 0.6709680661887806,
+        "source": "G_fe",
+        "exchange": 3,
+        "chains": [
+          1
+        ]
+      },
+      "delta": 0.0,
+      "bin": 27
+    }
+  },
+  {
+    "match": 0,
+    "game": 2,
+    "n": 118,
+    "start": 180.2,
+    "end": 184.1,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7466061924130742,
+    "on": 0.7466061924130742,
+    "peak": {
+      "i": 5406,
+      "t": 180.2,
+      "match": 0,
+      "game": 2,
+      "y": 0,
+      "off": {
+        "p": 0.5,
+        "loss": 0.6931471805599453,
+        "source": "waiting_confirmed",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5,
+        "loss": 0.6931471805599453,
+        "source": "waiting_confirmed",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 36
+    }
+  },
+  {
+    "match": 1,
+    "game": 3,
+    "n": 148,
+    "start": 240.6,
+    "end": 245.5,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.7332678249269297,
+    "on": 0.7332678249269297,
+    "peak": {
+      "i": 7218,
+      "t": 240.6,
+      "match": 1,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.5,
+        "loss": 0.6931471805599453,
+        "source": "waiting_confirmed",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5,
+        "loss": 0.6931471805599453,
+        "source": "waiting_confirmed",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 48
+    }
+  },
+  {
+    "match": 2,
+    "game": 4,
+    "n": 149,
+    "start": 281.6333333333333,
+    "end": 286.56666666666666,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.8780022368803507,
+    "on": 0.8780022368803507,
+    "peak": {
+      "i": 8449,
+      "t": 281.6333333333333,
+      "match": 2,
+      "game": 4,
+      "y": 0,
+      "off": {
+        "p": 0.5,
+        "loss": 0.6931471805599453,
+        "source": "waiting_confirmed",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5,
+        "loss": 0.6931471805599453,
+        "source": "waiting_confirmed",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 56
+    }
+  },
+  {
+    "match": 3,
+    "game": 5,
+    "n": 191,
+    "start": 350.43333333333334,
+    "end": 356.76666666666665,
+    "delta_sum": 0.0,
+    "contribution": 0.0,
+    "delta_mean": 0.0,
+    "off": 0.6931471805599454,
+    "on": 0.6931471805599454,
+    "peak": {
+      "i": 10513,
+      "t": 350.43333333333334,
+      "match": 3,
+      "game": 5,
+      "y": 1,
+      "off": {
+        "p": 0.5,
+        "loss": 0.6931471805599453,
+        "source": "waiting_confirmed",
+        "exchange": null,
+        "chains": []
+      },
+      "on": {
+        "p": 0.5,
+        "loss": 0.6931471805599453,
+        "source": "waiting_confirmed",
+        "exchange": null,
+        "chains": []
+      },
+      "delta": 0.0,
+      "bin": 70
+    }
+  },
+  {
+    "match": 3,
+    "game": 4,
+    "n": 1915,
+    "start": 286.6,
+    "end": 350.4,
+    "delta_sum": -0.6694569531190412,
+    "contribution": -0.00010258304522204124,
+    "delta_mean": -0.0003495858763023714,
+    "off": 0.41011032998467095,
+    "on": 0.4097607441083685,
+    "peak": {
+      "i": 10034,
+      "t": 334.46666666666664,
+      "match": 3,
+      "game": 4,
+      "y": 1,
+      "off": {
+        "p": 0.9234973449218843,
+        "loss": 0.07958735436388453,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7
+        ]
+      },
+      "on": {
+        "p": 0.9219422564406616,
+        "loss": 0.0812726859760993,
+        "source": "S3_landing",
+        "exchange": 11,
+        "chains": [
+          5,
+          3,
+          6,
+          7
+        ]
+      },
+      "delta": 0.0016853316122147632,
+      "bin": 66
+    }
+  },
+  {
+    "match": 2,
+    "game": 3,
+    "n": 1083,
+    "start": 245.53333333333333,
+    "end": 281.6,
+    "delta_sum": -3.9781344708903763,
+    "contribution": -0.0006095823583957058,
+    "delta_mean": -0.00367325435908622,
+    "off": 0.5215859826490176,
+    "on": 0.5179127282899313,
+    "peak": {
+      "i": 8151,
+      "t": 271.7,
+      "match": 2,
+      "game": 3,
+      "y": 0,
+      "off": {
+        "p": 0.2221227081707013,
+        "loss": 0.2511864898277093,
+        "source": "S3_landing",
+        "exchange": 7,
+        "chains": [
+          1,
+          2
+        ]
+      },
+      "on": {
+        "p": 0.2561053654000896,
+        "loss": 0.2958558743395378,
+        "source": "S3_landing",
+        "exchange": 7,
+        "chains": [
+          1,
+          2
+        ]
+      },
+      "delta": 0.0446693845118285,
+      "bin": 54
+    }
+  }
+]

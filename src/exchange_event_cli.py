@@ -8,6 +8,9 @@ import sys
 from src import production_config
 
 
+RECONCILE_OPTION = "--placement-signal-reconcile"
+
+
 def parse_exchange_event_args(
     parser: argparse.ArgumentParser, argv: list[str] | None = None,
 ) -> argparse.Namespace:
@@ -20,5 +23,8 @@ def parse_exchange_event_args(
     options = parser.parse_args(arguments)
     if options.production_exchange_event:
         arguments.extend(shlex.split(production_config.exchange_event_flags()))
+        if RECONCILE_OPTION in parser._option_string_actions:
+            # 描画CLIだけが認識を動かすので、受け付けるパーサーにだけ追加する。
+            arguments.extend(shlex.split(production_config.placement_reconcile_flags()))
         options = parser.parse_args(arguments)
     return options

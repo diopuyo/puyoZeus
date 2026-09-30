@@ -1421,6 +1421,45 @@ EXCHANGE_EVENT_ADOPTED: tuple[AdoptedFlag, ...] = (
         '--hidden-row-belief', "2026-09-29",
         'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
     ),
+    AdoptedFlag(
+        '--post-counter-death-bound', "2026-09-30",
+        'E35 打ち返し後の死亡上限 (コミット0f28a04)。 e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+    AdoptedFlag(
+        '--single-death-proof-guard', "2026-09-30",
+        'D5 単発着弾死亡を全応手の消去後盤面で証明してから確定 (71d378d)。 e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+    AdoptedFlag(
+        '--single-death-proof-negative-only', "2026-09-30",
+        'D5b 取消を生存枝・相殺可能の証明だけに限定 (0b8a76b)。 e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+    AdoptedFlag(
+        '--post-counter-early-exit', "2026-09-30",
+        'E35で最初に死なない候補が見つかった時点で残りの候補証明を省く (判定は同一、監査のproofsだけ短くなる)。 評価遅延対策B2 (6f370c8/92d5460): 保存記録5本の再生で現本番と出力一致 (内訳proofsを除く51/51ファイル)・門通過 (q .507567 / zenchi 7,671/8,333 / 誤発火0/37 / 3:00場面 2760.38秒 / 第14試合0)。rt由来のb20窓 (4,196通知) で最大 18.9秒→0.62秒・1秒超 66→0件。ノード上限(B1)は実在の死亡確定を1件失うため不採用 (座長判定、DECISIONS.md 2026-09-30)。抽出元: logs/multilanding_speed/RESULT.md、logs/multilanding_speed/gate_bounded2/SUMMARY.json。',
+    ),
+    AdoptedFlag(
+        '--hidden-scenario-cap 256', "2026-09-30",
+        '隠し段の得点候補が256通りを超えるとき重み上位256通りに絞る (合計重み保存、保存記録5本では発動せず、b20窓の43通知で発動し評価値8,234件中62件が最大3.4ポイント動く・判定変化0)。 評価遅延対策B2 (6f370c8/92d5460): 保存記録5本の再生で現本番と出力一致 (内訳proofsを除く51/51ファイル)・門通過 (q .507567 / zenchi 7,671/8,333 / 誤発火0/37 / 3:00場面 2760.38秒 / 第14試合0)。rt由来のb20窓 (4,196通知) で最大 18.9秒→0.62秒・1秒超 66→0件。ノード上限(B1)は実在の死亡確定を1件失うため不採用 (座長判定、DECISIONS.md 2026-09-30)。抽出元: logs/multilanding_speed/RESULT.md、logs/multilanding_speed/gate_bounded2/SUMMARY.json。',
+    ),
+)
+
+# R1b 認識側の置き完了合図照合 (NEXT移動+掛け算式の2合図)。撃ち合い評価の再生CLIは
+# 保存済み記録を読むだけで受け付けないため、EXCHANGE_EVENT_ADOPTED とは別バケットにする。
+# RECOGNITION_ADOPTED は load_default kwargs へ機械変換され (enable_* 名の重複供給で
+# TypeError)、かつ AST 固定テストで凍結されているため、そこへは入れない。
+PLACEMENT_RECONCILE_ADOPTED: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag(
+        '--placement-signal-reconcile', "2026-09-30",
+        'R1b (82d3baf) 置き完了合図の照合 (NEXT移動+掛け算式、おじゃま合図は含めない): e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+    AdoptedFlag(
+        '--next-recolor-pair-guard', "2026-09-30",
+        'cycle65 NEXT履歴色補正の対整合ガード (d3c5b0d)。確定遅延時に1手先のqueueで着地セルを上書きする誤りを止める (根因: logs/match14_misread/DIAGNOSIS.md)。 c65全長検収 (R1b+E35+D5+D5b+本ガード、E36事前登録門): q .507567 (門 .508040) / zenchi 92.06% (7,671/8,333、門7,671) / 誤発火0/37 (門1/35) / 3:00場面 2760.38秒 (門2766.0秒) / 第14試合1P 884秒の誤確定0。E36b本番比 q +0.000002 / zenchi -5フレーム / 誤発火 1→0。影子測定 4動画 書換セル正解 269→581/584 (悪化1セル zenchi 3155.75秒)。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/c65_guard/e36b_on、logs/c65_guard/RESULT.md。',
+    ),
+    AdoptedFlag(
+        '--verification-pending-chain-expiry', "2026-09-30",
+        '連鎖後答え合わせの pending を新しい連鎖開始で失効 (0c0c338)。q第14試合の幻おじゃま (1,5)(2,5)(3,5) の根因B (logs/match14_misread/DIAGNOSIS.md)。 影子測定 4動画: 答え合わせ248件中失効10、書込セル正解 1,106→1,179/1,467 (悪化0・改善73)。 全長ゲート (事前登録 e9e1912、現本番比非悪化): q .507567 / zenchi 7,671/8,333 / 誤発火0/37 / 3:00場面 2760.38秒 / 第14試合誤確定0 — 評価出力は現本番と同一 (認識記録は q 693行・fc 1,365行が変化、盤面品質のみ改善)。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/pending_expiry/e36b_on、logs/pending_expiry/RESULT.md。',
+    ),
 )
 
 
@@ -1472,6 +1511,11 @@ def exchange_event_flags() -> str:
     return _join(EXCHANGE_EVENT_ADOPTED)
 
 
+def placement_reconcile_flags() -> str:
+    """R1b認識側の合図照合フラグ (描画CLIだけが受け付ける) を返す。"""
+    return _join(PLACEMENT_RECONCILE_ADOPTED)
+
+
 def visualization_flags() -> str:
     """認識オーバーレイ表示の本番構成フラグを返す。"""
     return _join(VISUALIZATION_ADOPTED)
@@ -1485,6 +1529,7 @@ def describe() -> str:
         ("認識(収集専用)", COLLECT_ONLY_ADOPTED),
         ("有利不利", ADVANTAGE_ADOPTED),
         ("撃ち合いイベント評価", EXCHANGE_EVENT_ADOPTED),
+        ("認識(置き完了合図の照合)", PLACEMENT_RECONCILE_ADOPTED),
         ("表示", VISUALIZATION_ADOPTED),
         ("連鎖シミュレーション", CHAIN_SIM_ADOPTED),
         ("指標大整理", INDICATOR_REORG_DECISIONS),

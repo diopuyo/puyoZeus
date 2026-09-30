@@ -2804,6 +2804,7 @@ def _near_future_known_expand(
     tiebreak: bool = False,
     resolve_before_death: bool = False,
     use_exact_score: bool = False,
+    fast_expand: bool = False,
 ) -> "list[tuple[float, Board, int]]":
     """既知ペア (22配置、_enumerate_placements 流用) で1手展開する。
 
@@ -2817,7 +2818,13 @@ def _near_future_known_expand(
     Args:
         tiebreak: True で同点候補を「後で伸びる形」で並べ替える
             (既定 False、backwards compat、_near_future_sort_candidates 参照)。
+        fast_expand: True で連鎖しない子盤面の連結検出を省く出力同一の高速展開
+            (src/exchange_fast_expand.py、既定 False)。
     """
+    if fast_expand:
+        from src.exchange_fast_expand import FastExpander
+        return _near_future_sort_candidates(FastExpander(sim).known(
+            frontier, pair, resolve_before_death, use_exact_score), tiebreak)
     candidates: "list[tuple[float, Board, int]]" = []
     for _, base_board in frontier:
         for _, placed in _enumerate_placements(base_board, pair, sim):
@@ -2837,6 +2844,7 @@ def _near_future_free_expand(
     tiebreak: bool = False,
     resolve_before_death: bool = False,
     use_exact_score: bool = False,
+    fast_expand: bool = False,
 ) -> "list[tuple[float, Board, int]]":
     """自由1個ずつ (6列×色数) で1手展開する (理想ツモ、_drop_one_color 流用)。
 
@@ -2845,7 +2853,12 @@ def _near_future_free_expand(
 
     Args:
         tiebreak: _near_future_known_expand と同じ (既定 False)。
+        fast_expand: _near_future_known_expand と同じ (既定 False)。
     """
+    if fast_expand:
+        from src.exchange_fast_expand import FastExpander
+        return _near_future_sort_candidates(FastExpander(sim).free(
+            frontier, colors, resolve_before_death, use_exact_score), tiebreak)
     candidates: "list[tuple[float, Board, int]]" = []
     for _, base_board in frontier:
         for col in range(BOARD_COLS):
@@ -2884,6 +2897,7 @@ def near_future_fire_power(
     tiebreak: bool = False,
     resolve_before_death: bool = False,
     use_exact_score: bool = False,
+    fast_expand: bool = False,
 ) -> NearFutureFireResult:
     """XIV 近未来最大火力 (K=1..5)。
 
@@ -2922,6 +2936,8 @@ def near_future_fire_power(
             連鎖解消後の窒息だけを除外する。既定Falseで旧指標を維持する。
         use_exact_score: True のときだけ結果の exact_score を優先する。
             既定False、または属性がない場合は calculate_chain_score を使う。
+        fast_expand: True で連鎖しない子盤面の連結検出を省く出力同一の高速展開
+            (src/exchange_fast_expand.py)。既定 False (従来経路)。
 
     Returns:
         NearFutureFireResult: K別 IndicatorV2Value + 参考連鎖数 + used_real_next。
@@ -2933,7 +2949,7 @@ def near_future_fire_power(
     return _near_future_search(
         board, colors, next_pair, dnext_pair, elapsed_sec, sim, beam_width, k_levels,
         tiebreak=tiebreak, resolve_before_death=resolve_before_death,
-        use_exact_score=use_exact_score,
+        use_exact_score=use_exact_score, fast_expand=fast_expand,
     )
 
 
@@ -2949,6 +2965,7 @@ def _near_future_search(
     tiebreak: bool = False,
     resolve_before_death: bool = False,
     use_exact_score: bool = False,
+    fast_expand: bool = False,
 ) -> NearFutureFireResult:
     """near_future_fire_power の本体探索ループ (ビーム + チェックポイント)。"""
     max_k = max(k_levels)
@@ -2962,15 +2979,18 @@ def _near_future_search(
     for hand_idx in range(total_hands):
         if hand_idx == 0 and _near_future_is_valid_pair(next_pair):
             expanded = _near_future_known_expand(frontier, next_pair, sim, tiebreak=tiebreak,
-                resolve_before_death=resolve_before_death, use_exact_score=use_exact_score)
+                resolve_before_death=resolve_before_death, use_exact_score=use_exact_score,
+                fast_expand=fast_expand)
             used_real_next = True
         elif hand_idx == 1 and _near_future_is_valid_pair(dnext_pair):
             expanded = _near_future_known_expand(frontier, dnext_pair, sim, tiebreak=tiebreak,
-                resolve_before_death=resolve_before_death, use_exact_score=use_exact_score)
+                resolve_before_death=resolve_before_death, use_exact_score=use_exact_score,
+                fast_expand=fast_expand)
             used_real_next = True
         else:
             expanded = _near_future_free_expand(frontier, colors, sim, tiebreak=tiebreak,
-                resolve_before_death=resolve_before_death, use_exact_score=use_exact_score)
+                resolve_before_death=resolve_before_death, use_exact_score=use_exact_score,
+                fast_expand=fast_expand)
         if not expanded:
             break
         frontier = [(s, b) for s, b, _c in expanded[:beam_width]]

@@ -1,0 +1,8 @@
+{
+  "signal": "formula",
+  "n": 6526,
+  "log_loss": 0.5417496420121876,
+  "changed_notifications": 0,
+  "interventions": [],
+  "scope": "同側直前合図別の物理完走起点だけをOFFへ差替え。認識の合図無効化ではない"
+}

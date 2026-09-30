@@ -1,0 +1,3 @@
+{'frames': 3000, 't': 2649.016666666667}
+{'frames': 6000, 't': 2749.016666666667}
+{"state": "completed", "frames": 6848, "display_frames": 5948, "elapsed_seconds": 61.19968851294834, "record_bytes": 404461, "live_count": true, "model_dir": "models/exchange_event_v3"}

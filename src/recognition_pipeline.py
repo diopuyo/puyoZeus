@@ -32,6 +32,7 @@ from src.board import (
     BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN,
     HIDDEN_ROWS, Board,
 )
+from src import next_recolor_pair_guard
 from src.hidden_row_inferrer import infer_hidden_row
 from src.probabilistic_board import ProbabilisticBoard
 from src.board_state_machine import (
@@ -830,6 +831,8 @@ class RecognitionPipeline:
     # (残像/連鎖後不一致率 0.09→0.28 悪化) を修正するため、適用は止めず
     # 事後の多数決比較で不一致なら補正する方式に変更。
     CHAIN_VERIFY_FRAMES: int = 5
+    # pending を失効させる状態 (新しい連鎖の開始を示す)。
+    VERIFY_EXPIRY_STATES = (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
     # 事後不一致とみなす cell 数閾値 (COLOR_UNKNOWN 除外)。
     # cycle 48 の大量 hallucination ガード基準 (6 cell) を流用。
     CHAIN_VERIFY_MISMATCH_CELLS: int = 6
@@ -1852,6 +1855,16 @@ class RecognitionPipeline:
         # 既存の連鎖保持期限 (`_chain_until_Xp`) をそのまま使う。新しい定数は作らない。
         # default False = 従来挙動完全維持・bit-identical。
         enable_chain_active_record_hold: bool = False,
+        enable_placement_signal_reconcile: bool = False,
+        enable_placement_signal_ojama: bool = False,
+        # 2026-09-30: cycle65 NEXT履歴の色補正の対整合ガード。観測した新規2セルの色と
+        # 整合しない対では上書きしない (q第14試合1P 884秒の誤確定の根因A)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_next_recolor_pair_guard: bool = False,
+        # 2026-09-30: 答え合わせ pending の連鎖失効。pending 作成後に同じ側で新しい連鎖
+        # (CHAIN/GRAVITY_SETTLE) が始まったら、連鎖前の履歴が混ざるため破棄する
+        # (q第14試合1P 881.967秒の幻おじゃま9,9,9の根因B)。default False = bit-identical。
+        enable_verification_pending_chain_expiry: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2136,6 +2149,15 @@ class RecognitionPipeline:
         self._prev_frame: np.ndarray | None = None
         # Score tracker (任意): ScoreOcr が無ければ delta=0 固定
         self._score_ocr = score_ocr
+        self._placement_reconcile = None
+        if enable_placement_signal_reconcile:
+            from src.placement_signal_runtime import PlacementSignalRuntime
+            classifier = getattr(image_reader, '_classifier', None)
+            ocr = score_ocr if score_ocr is not None else ScoreOcr.load_default()
+            self._placement_reconcile = PlacementSignalRuntime(
+                getattr(classifier, '_cnn', classifier), ocr._mult_template_gray,
+                enable_ojama=enable_placement_signal_ojama,
+            )
         self._score_tracker_1p: ScoreTracker | None = (
             ScoreTracker("1P", score_ocr) if score_ocr else None
         )
@@ -2768,6 +2790,16 @@ class RecognitionPipeline:
         # 非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容 (= 物理的に自然)。
         # デフォルト False = 従来挙動維持 (backwards compat)。
         self._enable_infer_empty_guard: bool = bool(enable_infer_empty_guard)
+        # cycle65 対整合ガード (既定OFF)。監査カウンタと事象ログを持つ。
+        self._enable_next_recolor_pair_guard: bool = bool(
+            enable_next_recolor_pair_guard)
+        self.next_recolor_guard_counts: dict[str, int] = {
+            k: 0 for k in next_recolor_pair_guard.OUTCOMES}
+        self.next_recolor_guard_log: list[dict] = []
+        # 答え合わせ pending の連鎖失効 (既定OFF)。失効件数は監査用。
+        self._enable_verification_pending_chain_expiry: bool = bool(
+            enable_verification_pending_chain_expiry)
+        self.verification_pending_expired_count: int = 0
         # game-event ベース連鎖終了 (C-1/C-2 plan, 2026-06-01)。
         # True で次ツモ変化 / お邪魔出現をトリガーとして CHAIN 終了する。
         # False = 従来 timing hold のみ (backwards compat)。
@@ -3625,6 +3657,16 @@ class RecognitionPipeline:
         enable_landing_chain_record_hold: bool = False,
         # W48b (2026-09-18): 連鎖が動いている間は記録しない。詳細は __init__ 側。
         enable_chain_active_record_hold: bool = False,
+        enable_placement_signal_reconcile: bool = False,
+        enable_placement_signal_ojama: bool = False,
+        # 2026-09-30: cycle65 NEXT履歴の色補正の対整合ガード。観測した新規2セルの色と
+        # 整合しない対では上書きしない (q第14試合1P 884秒の誤確定の根因A)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_next_recolor_pair_guard: bool = False,
+        # 2026-09-30: 答え合わせ pending の連鎖失効。pending 作成後に同じ側で新しい連鎖
+        # (CHAIN/GRAVITY_SETTLE) が始まったら、連鎖前の履歴が混ざるため破棄する
+        # (q第14試合1P 881.967秒の幻おじゃま9,9,9の根因B)。default False = bit-identical。
+        enable_verification_pending_chain_expiry: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3898,6 +3940,11 @@ class RecognitionPipeline:
             enable_chain_active_record_hold=(
                 enable_chain_active_record_hold
             ),
+            enable_placement_signal_reconcile=enable_placement_signal_reconcile,
+            enable_placement_signal_ojama=enable_placement_signal_ojama,
+            enable_next_recolor_pair_guard=enable_next_recolor_pair_guard,
+            enable_verification_pending_chain_expiry=(
+                enable_verification_pending_chain_expiry),
         )
 
     # ------------------------------------------------------------------
@@ -4053,6 +4100,8 @@ class RecognitionPipeline:
                 VideoChainTracker 既定の 0.0 (= 動画絶対時刻がそのまま
                 elapsed になる旧挙動) を維持する。
         """
+        if self._placement_reconcile is not None:
+            self._placement_reconcile.reset()
         self._sm_1p.reset()
         self._sm_2p.reset()
         self._gen_1p.reset()
@@ -4276,10 +4325,36 @@ class RecognitionPipeline:
             self._online_hsv_injected = False
             self._online_hsv_injected_colors.clear()
 
+    def _guard_recolor_pair(
+        self, side: str, time_sec: float,
+        diffs: "list[tuple[int, int, int]]",
+        queue: "list[tuple[int, int]]",
+        used_pair: "tuple[int, int]",
+    ) -> "tuple[int, int] | None":
+        """cycle65 の補正対を観測色と照合する。None なら補正しない (観測色維持)。"""
+        observed = [color for _, _, color in diffs]
+        pair, outcome = next_recolor_pair_guard.select_recolor_pair(
+            observed, queue)
+        self.next_recolor_guard_counts[outcome] += 1
+        self.next_recolor_guard_log.append(dict(
+            side=side, t=round(time_sec, 3), outcome=outcome,
+            cells=[(r, c) for r, c, _ in diffs], observed=observed,
+            used=list(used_pair), chosen=None if pair is None else list(pair)))
+        return pair
+
+    def observe_placement_frame(
+        self, frame_idx: int, time_sec: float, frame: np.ndarray,
+    ) -> None:
+        """R1専用の原フレーム入力。OFFでは読取りも状態変更も行わない。"""
+        runtime = getattr(self, '_placement_reconcile', None)
+        if runtime is not None:
+            runtime.observe(self, frame_idx, time_sec, frame)
+
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
     ) -> PipelineResult:
         """1 frame 投入、結果を返す."""
+        self.observe_placement_frame(frame_idx, time_sec, frame)
         # 0. 解像度依存 S_min 調整は呼び出し側 (viz/diag script) が
         # set_resolution_aware_s_min で明示設定する. pipeline.update に渡る
         # frame は image_reader で 1920x1080 にリサイズ済のため、 ここでの
@@ -6876,6 +6951,18 @@ class RecognitionPipeline:
             self._chain_verify_pending_1p if side == "1P"
             else self._chain_verify_pending_2p
         )
+        if (
+            pending is not None
+            and self._enable_verification_pending_chain_expiry
+            and state in self.VERIFY_EXPIRY_STATES
+        ):
+            # 新しい連鎖が始まった: 履歴の連鎖前フレームが多数決へ混ざるため破棄。
+            if side == "1P":
+                self._chain_verify_pending_1p = None
+            else:
+                self._chain_verify_pending_2p = None
+            self.verification_pending_expired_count += 1
+            return None, None
         if pending is None or state != BoardState.STABLE:
             return None, None
         pending["cnn_history"].append(cnn_board.copy())
@@ -7996,6 +8083,13 @@ class RecognitionPipeline:
                         falling_pair_b = prev_next_queue[-2]
                     elif prev_next_queue:
                         falling_pair_b = prev_next_queue[-1]
+                    if (
+                        self._enable_next_recolor_pair_guard
+                        and next_recolor_pair_guard.is_usable_pair(falling_pair_b)
+                    ):
+                        falling_pair_b = self._guard_recolor_pair(
+                            side, ctx.time_sec, diffs, prev_next_queue,
+                            falling_pair_b)
                     if (
                         falling_pair_b is not None
                         and falling_pair_b[0] not in (

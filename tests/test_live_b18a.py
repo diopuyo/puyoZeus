@@ -30,7 +30,9 @@ def test_live_default_matches_runtime_getter(monkeypatch: pytest.MonkeyPatch) ->
     getter.assert_not_called()
     effective = cli_options(RENDER, command, monkeypatch)
     getter.assert_called_once_with()
-    expected = cli_options(RENDER, shlex.split(flags), monkeypatch)
+    # 描画CLIは本番指定で認識側 (R1b 合図照合ほか) の別バケットも足すので、期待側にも同じ集合を足す。
+    reconcile = shlex.split(production_config.placement_reconcile_flags())
+    expected = cli_options(RENDER, shlex.split(flags) + reconcile, monkeypatch)
     assert effective.pop('production_exchange_event') is True
     assert expected.pop('production_exchange_event') is False
     assert effective == expected
