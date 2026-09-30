@@ -1,7 +1,7 @@
 """既存overlayの観測とイベント評価器を結ぶ読み取り専用アダプター。"""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass, replace
 from copy import copy
 from itertools import zip_longest
 from collections.abc import Callable
@@ -22,6 +22,19 @@ from src.scoring import calculate_chain_score, compute_effective_rate
 
 UNUSED_S1_M0 = .5  # S1/S3の特徴列にはM0がなく、G_feにはこの値を渡さない。
 
+
+def _replaced(value: Any, **changes: Any) -> Any:
+    """入力を変えずに一部の属性だけ差し替えた複製を返す。
+
+    リアルタイムの側データは frozen dataclass で代入できないため replace を使う。
+    それ以外 (記録再生の可変オブジェクト) は従来どおり浅い複製へ代入する。
+    """
+    if is_dataclass(value) and not isinstance(value, type) and value.__dataclass_params__.frozen:
+        return replace(value, **changes)
+    saved = copy(value)
+    for name, item in changes.items():
+        setattr(saved, name, item)
+    return saved
 
 class EndSignals(Protocol):
     """既存の絶対終了判定器を再利用するための境界。"""
@@ -332,9 +345,8 @@ class ExchangeEventOverlay:
     def _fire_notifications(self, result: Any, snapshot: Any, stamp: float, ready: list) -> None:
         """元の入力を変更せず、保留から復帰した通知を順序どおり処理する。"""
         for pair in zip_longest(*ready):
-            saved = copy(result)
-            saved.p1, saved.p2 = copy(result.p1), copy(result.p2)
-            saved.p1.chain_event, saved.p2.chain_event = pair
+            saved = _replaced(result, p1=_replaced(result.p1, chain_event=pair[0]),
+                              p2=_replaced(result.p2, chain_event=pair[1]))
             selected = [(i, event.trigger_sec) for i, event in enumerate(pair) if event is not None]
             stamps = tuple(e.trigger_sec if e is not None else None for e in pair)
             self._fire(saved, snapshot, stamp, stamps, selected)
