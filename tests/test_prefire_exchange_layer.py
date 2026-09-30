@@ -21,10 +21,12 @@ class ConstantHazard:
 def fake_overlay(source: str = 'G_fe', probability: float = 0.4, current=None) -> SimpleNamespace:
     grid = np.zeros((13, 6), dtype=np.int8)
     grid[10:13, 0] = 1
-    side = SimpleNamespace(board=SimpleNamespace(_grid=grid), queue=np.array([1, 1, 2, 3]), t_sec=1.0)
+    before = SimpleNamespace(board=SimpleNamespace(_grid=np.zeros((13, 6), dtype=np.int8)),
+                             queue=np.array([1, 1, 2, 3]), t_sec=0.5)
+    side = SimpleNamespace(board=SimpleNamespace(_grid=grid), queue=np.array([2, 3, 4, 4]), t_sec=1.0)
     tracker = SimpleNamespace(source=source, probability=probability, current=current, models=None)
-    return SimpleNamespace(tracker=tracker, _start=0.0, _history=[[side], [side]], _snapshots=[(1.0, None)],
-                           _game=0)
+    return SimpleNamespace(tracker=tracker, _start=0.0, _history=[[before, side], [before, side]],
+                           _snapshots=[(1.0, None)], _game=0)
 
 
 @pytest.fixture
@@ -88,3 +90,14 @@ def test_trace_records_provenance(fixed_branch: None, tmp_path) -> None:
         row = dict(zip(data['columns'], data['values'][0]))
     assert row['p_current'] == 0.4 and row['v_1p'] == 0.9 and row['v_2p'] == 0.1
     assert abs(row['p_shown'] - (0.6 * 0.4 + 0.2 * 0.9 + 0.2 * 0.1)) < 1e-12
+
+
+def test_known_pairs_starts_from_previous_board_next() -> None:
+    """記録の NEXT は1つ先。次に置く組は直前の別盤面の NEXT (赤赤)、続いて今の NEXT/NEXT2。"""
+    overlay = fake_overlay()
+    assert layer_module.known_pairs(overlay._history[0]) == (1, 1, 2, 3, 4, 4)
+
+
+def test_known_pairs_missing_previous_is_unread() -> None:
+    overlay = fake_overlay()
+    assert layer_module.known_pairs(overlay._history[0][1:])[:2] == (0, 0)

@@ -180,7 +180,12 @@ MAX_COUNTER_HANDS = 16        # 応手探索の深さ上限 (最大級の連鎖�
 def _rollout_pairs(rng: np.random.Generator, known: tuple[int, ...], hands: int,
                    colors: tuple[int, ...]) -> list[tuple[int, int]]:
     """既知の NEXT/NEXT2 の後ろへ、試合で見えた色から等確率の仮ツモを足す (1標本分)。"""
-    pairs = [(int(known[0]), int(known[1])), (int(known[2]), int(known[3]))][:hands]
+    pairs = []
+    for i in range(0, len(known) - 1, 2):   # 見えている組は先頭から、最初の未読で打ち切る
+        if not (int(known[i]) in PLAYABLE_COLORS and int(known[i + 1]) in PLAYABLE_COLORS):
+            break
+        pairs.append((int(known[i]), int(known[i + 1])))
+    pairs = pairs[:hands]
     while len(pairs) < hands:
         pairs.append((int(rng.choice(colors)), int(rng.choice(colors))))
     return pairs
@@ -193,7 +198,7 @@ def counter_scores(raw: bytes, queue: tuple[int, ...], hands: int, colors: tuple
     未知のツモは人のミスではなく運なので標本で扱う (user 決定 9/30: 探索の不確かさだけを扱う)。
     NEXT が未読・盤面が不正なら 0 点 (応手なしの欠測、楽観で埋めない)。seed は盤面から決まる (再現可能)。
     """
-    if not queue_valid(queue) or not colors or fire_options(raw, queue) is UNSTABLE_BOARD:
+    if not queue_valid(tuple(queue[:4])) or not colors or fire_options(raw, tuple(queue[:4])) is UNSTABLE_BOARD:
         return np.zeros(COUNTER_ROLLOUTS)
     board, depth = _board(raw), int(min(max(1, hands), MAX_COUNTER_HANDS))
     rng = np.random.default_rng(seed)

@@ -82,11 +82,27 @@ def _queue(side: Any) -> tuple[int, ...]:
     return tuple(int(v) for v in side.queue)
 
 
-def counter_send(receiver: Any, option: sim.FireOption, elapsed: float) -> float:
+def known_pairs(history: list) -> tuple[int, ...]:
+    """次に置く組から順に、見えているツモを6色 (3組) で返す。欠ければ 0 (未読)。
+
+    記録の NEXT は STABLE 確定の時点で既に1つ先を指す。q 記録の実測では、置いた組が
+    「1つ前の別盤面の NEXT」と一致したのが 699/892 (78%)、「今の NEXT」とは 81/892 (9%、偶然と同程度)。
+    よって次に置く組 = 直前の別盤面の NEXT、その次 = 今の NEXT、その次 = 今の NEXT2。
+    148動画の学習データは「行の NEXT = 次に置く組」(17,338組中 67% 一致) なので、この並びで揃う。
+    """
+    latest = history[-1]
+    grid = latest.board._grid
+    previous = next((s for s in reversed(history) if not np.array_equal(s.board._grid, grid)), None)
+    current = _queue(previous)[:2] if previous is not None else (0, 0)
+    return (*current, *_queue(latest))
+
+
+def counter_send(receiver: Any, option: sim.FireOption, elapsed: float,
+                 queue: tuple[int, ...] | None = None) -> float:
     """受け側の最善応手 (おじゃま個数)。猶予手数 = 攻撃の連鎖時間の手数 + 攻撃側が発火までに使う手数。"""
     from src.exchange_event_landing import future_send, remaining_hands
     grid = np.asarray(receiver.board._grid, dtype=np.int8)
-    queue = _queue(receiver)
+    queue = _queue(receiver) if queue is None else queue[:4]
     if not sim.queue_valid(queue):
         return 0.0   # 応手の探索に NEXT が要る。未読なら応手なし (欠測を楽観で埋めない)
     hands = remaining_hands(option.chain_count, 0.0, 0.0) + option.hand - 1
@@ -95,7 +111,7 @@ def counter_send(receiver: Any, option: sim.FireOption, elapsed: float) -> float
 
 def branch_value(overlay: Any, latest: tuple, attacker: int, option: sim.FireOption,
                  elapsed: float, counters: np.ndarray | None = None,
-                 feature_cache: dict | None = None) -> float:
+                 feature_cache: dict | None = None, known: tuple | None = None) -> float:
     """側 attacker が option を撃ち、受け側が最善応手で返した撃ち合いの S3 勝率 (1P)。
 
     入力は現在の確定盤面・NEXT だけ (時刻 t 以前)。S3 の入力の作り方は overlay._fire と同じで、
@@ -107,7 +123,8 @@ def branch_value(overlay: Any, latest: tuple, attacker: int, option: sim.FireOpt
     from src.exchange_event_overlay import UNUSED_S1_M0
     receiver = 1 - attacker
     if counters is None:
-        counters = np.asarray([counter_send(latest[receiver], option, elapsed) * sim.effective_rate(elapsed)])
+        queue = None if known is None else known[receiver]
+        counters = np.asarray([counter_send(latest[receiver], option, elapsed, queue) * sim.effective_rate(elapsed)])
     snapshot = overlay._snapshots[-1][1]
     static = overlay._build_static(tuple(s.board for s in latest), snapshot, elapsed, UNUSED_S1_M0)
     prefire = np.stack([side_features_cached(overlay, s, elapsed, feature_cache) for s in latest])
@@ -140,14 +157,15 @@ def side_features_cached(overlay: Any, side: Any, elapsed: float, cache: dict | 
     return cache[key]
 
 
-def mc_counters(latest: tuple, receiver: int, option: sim.FireOption, colors: tuple[int, ...]) -> np.ndarray:
-    """構成B: 受け側の応手得点を未来ツモの標本で求める (既知 NEXT/NEXT2 + 見えた色の等確率ツモ)。"""
+def mc_counters(latest: tuple, receiver: int, option: sim.FireOption, colors: tuple[int, ...],
+                known: tuple) -> np.ndarray:
+    """構成B: 受け側の応手得点を未来ツモの標本で求める (見えている3組 + 見えた色の等確率ツモ)。"""
     from src.exchange_event_landing import remaining_hands
     side = latest[receiver]
     grid = np.asarray(side.board._grid, dtype=np.int8)
     hands = remaining_hands(option.chain_count, 0.0, 0.0) + option.hand - 1
-    seed = sim.stable_seed(grid.tobytes(), _queue(side), hands, option.placed)
-    return sim.counter_scores(grid.tobytes(), _queue(side), hands, colors, seed)
+    seed = sim.stable_seed(grid.tobytes(), known[receiver], hands, option.placed)
+    return sim.counter_scores(grid.tobytes(), known[receiver], hands, colors, seed)
 
 
 class PrefireExchangeLayer:
@@ -195,17 +213,17 @@ class PrefireExchangeLayer:
 
     def _branches(self, overlay: Any, latest: tuple, elapsed: float) -> tuple:
         """同じ盤面・NEXT・換算率の組では探索と S3 を一度だけ行う。"""
-        key = (tuple(s.board._grid.tobytes() for s in latest), tuple(_queue(s) for s in latest),
-               sim.effective_rate(elapsed), overlay._game)
+        known = tuple(known_pairs(h) for h in overlay._history)
+        key = (tuple(s.board._grid.tobytes() for s in latest), known, sim.effective_rate(elapsed), overlay._game)
         if key not in self._cache:
-            self._cache[key] = self._compute(overlay, latest, elapsed)
+            self._cache[key] = self._compute(overlay, latest, elapsed, known)
         return self._cache[key]
 
-    def _compute(self, overlay: Any, latest: tuple, elapsed: float) -> tuple:
-        """両側の発火候補・hazard・枝の勝率を求める。"""
+    def _compute(self, overlay: Any, latest: tuple, elapsed: float, known: tuple) -> tuple:
+        """両側の発火候補・hazard・枝の勝率を求める。ツモは次に置く組から (known_pairs)。"""
         grids = [np.asarray(s.board._grid, dtype=np.int8) for s in latest]
-        options = [sim.fire_options(g.tobytes(), _queue(s)) for g, s in zip(grids, latest)]
-        colors = sim.seen_colors(grids, [_queue(s) for s in latest])
+        options = [sim.fire_options(g.tobytes(), q[:4]) for g, q in zip(grids, known)]
+        colors = sim.seen_colors(grids, list(known))
         result = []
         for a in SIDES:
             best = options[a].best()
@@ -215,8 +233,8 @@ class PrefireExchangeLayer:
             features = sim.hazard_features(options[a], options[1 - a], grids[a], grids[1 - a], elapsed)
             weight = 1.0 if options[a].forced else self.hazard.predict(features)
             try:
-                counters = mc_counters(latest, 1 - a, best, colors) if self.counter_mc else None
-                value = branch_value(overlay, latest, a, best, elapsed, counters, self._features)
+                counters = mc_counters(latest, 1 - a, best, colors, known) if self.counter_mc else None
+                value = branch_value(overlay, latest, a, best, elapsed, counters, self._features, known)
             except (ValueError, TypeError, FloatingPointError):
                 result.append(None)   # 評価入力が作れない枝は混ぜない (欠測を推測で埋めない)
                 continue
