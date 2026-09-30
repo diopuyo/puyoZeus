@@ -71,5 +71,6 @@ def video_session(pipe: Any, source: Any, queue: Any, config: Any,
     session = DeviceSession(pipe, Path('.'), 0, queue)
     session.switch(config)
     source.on_hold = session.hold
-    session.source = VerifiedVideo(source, session, continuous=continuous)
+    verifier = PuyoScreenVerifier(relaxed=getattr(config, 'relaxed_verify', False))
+    session.source = VerifiedVideo(source, session, verifier, continuous=continuous)
     return session, session.source

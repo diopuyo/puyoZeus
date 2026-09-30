@@ -43,6 +43,11 @@ DEFAULT_OUTPUT_DIR = 'output'
 PIPELINE_FIXED = dict(verification_only=True, coalesce_features=True, cpu_threads=1,
                       evaluation_nice=10, cnn_device='cpu', fast_terminal=True,
                       performance_cores=True, fast_telop=True)
+# 画面確認の緩和 (2026-09-30 verifier_diag): 連鎖中の掛け算式を許容し外枠の上辺を免除 (対戦中合格 44%→87%)、
+# 継続確認は連続 3 回不合格で初めて hold (1 回で履歴・色較正を全リセットしない)。詳細は packaging/verifier_diag/FIX_RESULT.md。
+VERIFY_FAIL_STREAK = 3
+PIPELINE_FIXED['relaxed_verify'] = True
+PIPELINE_FIXED['verify_fail_streak'] = VERIFY_FAIL_STREAK
 VIDEO_WARMUP_SEC = 1.0
 
 EXIT_OK, EXIT_CONFIG, EXIT_MANIFEST = 0, 2, 3

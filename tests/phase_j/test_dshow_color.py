@@ -211,3 +211,6 @@ def test_real_pipeline_parser_accepts_color_correction_key(tmp_path: Path, monke
     options = parse_args()
     assert options.source == 'dshow' and options.input_config == path
     assert DeviceConfig.load(path).color_correction == '601to709'
+    # 配布既定の画面確認の緩和 (掛け算式許容・上辺免除・連続 3 回不合格) が入力設定まで届く
+    loaded = DeviceConfig.load(path)
+    assert loaded.relaxed_verify is True and loaded.verify_fail_streak == 3

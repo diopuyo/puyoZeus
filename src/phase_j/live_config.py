@@ -23,7 +23,8 @@ def apply_config(parser: argparse.ArgumentParser, argv: list[str]) -> argparse.N
     if config.config:
         data = json.loads(config.config.read_text(encoding='utf-8'))
         allowed = {action.dest for action in parser._actions}
-        unknown = set(data)-allowed-{'name', 'index', 'verification_only', 'color_correction'}
+        unknown = set(data)-allowed-{'name', 'index', 'verification_only', 'color_correction',
+                                  'relaxed_verify', 'verify_fail_streak'}
         if unknown:
             parser.error(f'未知の設定項目: {sorted(unknown)}')
         defaults = {key: Path(value) if key in PATH_KEYS else value
@@ -59,5 +60,6 @@ def input_identity(config: str | None, video: str) -> Any:
     from .live_device import DeviceConfig
     if config:
         data = json.loads(Path(config).read_text(encoding='utf-8'))
-        return DeviceConfig(data.get('name', Path(video).stem), data.get('index', 0), True)
+        return DeviceConfig(data.get('name', Path(video).stem), data.get('index', 0), True,
+                            relaxed_verify=data.get('relaxed_verify', False))
     return DeviceConfig(Path(video).stem, 0, True)

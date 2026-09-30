@@ -24,6 +24,8 @@ GRID_MARGIN = 20
 GRID_POSITION_TOLERANCE = 80
 BORDER_POSITION_TOLERANCE = 24
 BORDER_COVERAGE = 0.65
+# 継続確認の不合格を何回連続で数えたら hold するか。既定 1 = 従来 (1 回で hold)。
+DEFAULT_VERIFY_FAIL_STREAK = 1
 CALIBRATION_ROOT = Path('config/device_calibration')
 # 保存先の切替 (任意)。未設定なら従来の CALIBRATION_ROOT のまま (配布ランチャーが設定から与える)。
 CALIBRATION_DIR_ENV = 'PUYO_CALIBRATION_DIR'
@@ -36,6 +38,10 @@ class DeviceConfig:
     verification_only: bool = True
     # DirectShow の色行列補正 (off / auto / 601to709)。既定 off = 従来と同一 (dshow_color.py)。
     color_correction: str = DEFAULT_COLOR_CORRECTION
+    # 画面確認の緩和 (既定 False = 従来と同一): 得点 8 桁 または 掛け算式で得点欄を許容し、外枠照合は上辺を免除。
+    relaxed_verify: bool = False
+    # 継続確認で連続 K 回不合格になって初めて不合格扱い (既定 1 = 従来)。入口の初回確認は常に 1 回。
+    verify_fail_streak: int = DEFAULT_VERIFY_FAIL_STREAK
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip() or type(self.index) is not int or self.index < 0:
@@ -44,12 +50,18 @@ class DeviceConfig:
             raise ValueError('verification_onlyはboolが必要です')
         if self.color_correction not in COLOR_CORRECTION_MODES:
             raise ValueError(f'color_correctionは{COLOR_CORRECTION_MODES}のいずれかが必要です')
+        if type(self.relaxed_verify) is not bool:
+            raise ValueError('relaxed_verifyはboolが必要です')
+        if type(self.verify_fail_streak) is not int or self.verify_fail_streak < 1:
+            raise ValueError('verify_fail_streakは1以上の整数が必要です')
 
     @classmethod
     def load(cls, path: Path) -> DeviceConfig:
         data = json.loads(path.read_text(encoding='utf-8'))
         return cls(name=data['name'], index=data['index'], verification_only=data.get('verification_only', True),
-                   color_correction=data.get('color_correction', DEFAULT_COLOR_CORRECTION))
+                   color_correction=data.get('color_correction', DEFAULT_COLOR_CORRECTION),
+                   relaxed_verify=data.get('relaxed_verify', False),
+                   verify_fail_streak=data.get('verify_fail_streak', DEFAULT_VERIFY_FAIL_STREAK))
 
     @property
     def calibration_path(self) -> Path:
@@ -59,15 +71,29 @@ class DeviceConfig:
 
 
 class PuyoScreenVerifier:
-    """固定の盤面枠位置と両側得点OCRを既存検出器で確認する。"""
+    """固定の盤面枠位置と両側得点OCRを既存検出器で確認する。
 
-    def __init__(self) -> None:
+    relaxed=True (既定 False = 従来と同一) のとき:
+      - 得点欄は「8桁が読める」または「掛け算式が有効」で合格 (連鎖中の式表示を許容)。
+      - 外枠フォールバックは上辺を免除し下/左/右の3辺で照合 (高積みで上辺が隠れる局面)。
+    """
+
+    relaxed = False
+
+    def __init__(self, relaxed: bool = False) -> None:
         from src.board_grid_detector import BoardGridDetector
         from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION
         from src.score_ocr import ScoreOcr
         self.grid = BoardGridDetector()
         self.score = ScoreOcr.load_default()
         self.regions = (DEFAULT_P1_REGION, DEFAULT_P2_REGION)
+        self.relaxed = relaxed
+
+    def score_ok(self, image: np.ndarray, side: str) -> bool:
+        """得点欄が読めるか。relaxed 時は掛け算式が有効でも可 (既存 read_formula_side を再利用)。"""
+        if self.score.read_side(image, side)[0] is not None:
+            return True
+        return self.relaxed and bool(self.score.read_formula_side(image, side).valid)
 
     def __call__(self, image: np.ndarray) -> bool:
         for side, region in zip(('1P', '2P'), self.regions):
@@ -75,10 +101,11 @@ class PuyoScreenVerifier:
             crop = image[y:region.y+region.height+GRID_MARGIN,
                          x:region.x+region.width+GRID_MARGIN]
             grid = self.grid.detect(crop)
-            if self.score.read_side(image, side)[0] is None:
+            if not self.score_ok(image, side):
                 return False
             if grid is None:
-                if not frame_border_matches(crop, region.width, region.height):
+                if not frame_border_matches(crop, region.width, region.height,
+                                            exempt_top=self.relaxed):
                     return False
                 continue
             expected = np.array([GRID_MARGIN, GRID_MARGIN,
@@ -89,8 +116,8 @@ class PuyoScreenVerifier:
         return True
 
 
-def frame_border_matches(crop: np.ndarray, width: int, height: int) -> bool:
-    """内部grid線が隠れる局面は、既存Hough分離器で外枠4辺を照合する。"""
+def frame_border_matches(crop: np.ndarray, width: int, height: int, exempt_top: bool = False) -> bool:
+    """内部grid線が隠れる局面は、既存Hough分離器で外枠4辺を照合する (exempt_top 時は上辺を除く3辺)。"""
     from src.board_grid_detector import (CANNY_LOW, CANNY_HIGH, HOUGH_RHO, HOUGH_THETA,
         HOUGH_THRESHOLD, HOUGH_MIN_LINE_LENGTH, HOUGH_MAX_LINE_GAP, _segments_to_lines)
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
@@ -100,13 +127,16 @@ def frame_border_matches(crop: np.ndarray, width: int, height: int) -> bool:
     if segments is None:
         return False
     horizontal, vertical = _segments_to_lines(segments)
-    return (border_pair(horizontal, 1, width, height) and border_pair(vertical, 0, height, width))
+    return (border_pair(horizontal, 1, width, height, exempt_first=exempt_top)
+            and border_pair(vertical, 0, height, width))
 
 
-def border_pair(lines: list[tuple], axis: int, span: int, distance: int) -> bool:
-    """位置と辺の長さの両方が合う線を、対向する2辺に要求する。"""
+def border_pair(lines: list[tuple], axis: int, span: int, distance: int,
+                exempt_first: bool = False) -> bool:
+    """位置と辺の長さの両方が合う線を、対向する2辺に要求する。exempt_first 時は先頭辺 (上/左) を免除。"""
+    targets = (GRID_MARGIN, GRID_MARGIN+distance)[1 if exempt_first else 0:]
     return all(border_coverage(lines, axis, span, target) >= BORDER_COVERAGE
-               for target in (GRID_MARGIN, GRID_MARGIN+distance))
+               for target in targets)
 
 
 def border_coverage(lines: list[tuple], axis: int, span: int, target: int) -> float:
@@ -164,11 +194,12 @@ class DirectShowSource(FrameSource):
     def __iter__(self) -> Iterator[CapturedFrame]:
         capture = self._capture()
         origin, last_verify, verified = self.clock(), float('-inf'), False
+        fail_streak = 0  # 検証済み状態での連続不合格回数 (verify_fail_streak 未満なら許容)
         if self.event_priority.enabled:
             capture.origin, capture.duration = origin, self.duration
         continuity = FrameContinuity(VERIFY_PERIOD_SEC)
         try:
-            verifier = self.verifier or PuyoScreenVerifier()
+            verifier = self.verifier or PuyoScreenVerifier(relaxed=self.config.relaxed_verify)
             capture.set(cv2.CAP_PROP_FRAME_WIDTH, NATIVE_SIZE[0])
             capture.set(cv2.CAP_PROP_FRAME_HEIGHT, NATIVE_SIZE[1])
             capture.set(cv2.CAP_PROP_FPS, RECOGNITION_HZ)
@@ -177,10 +208,11 @@ class DirectShowSource(FrameSource):
                 captured, normalized, size = self._read(capture)
                 transport_ready = normalized is not None and continuity.ready(normalized, size, captured)
                 if not transport_ready:
-                    verified = False
+                    verified, fail_streak = False, 0
                     last_verify = float('-inf')
                 elif captured-last_verify >= VERIFY_PERIOD_SEC:
-                    verified, last_verify = verifier(normalized), captured
+                    verified, fail_streak = self._judge(verifier(normalized), verified, fail_streak)
+                    last_verify = captured
                 if not verified:
                     if self.on_status:
                         self.on_status('verifying' if not transport_ready else 'no_puyo_screen')
@@ -197,6 +229,13 @@ class DirectShowSource(FrameSource):
             capture.release()
             if self.event_priority.enabled:
                 self.dropped = capture.dropped
+
+    def _judge(self, passed: bool, verified: bool, fail_streak: int) -> tuple[bool, int]:
+        """検証結果を継続確認の連続不合格数へ反映する。入口 (未検証) の不合格は即不合格 (K=1)。"""
+        if passed:
+            return True, 0
+        fail_streak += 1
+        return verified and fail_streak < self.config.verify_fail_streak, fail_streak
 
     def _decide_color_correction(self, capture: Any) -> bool:
         """色補正の要否。auto は開いた機器のメディアサブタイプ (BufferedCapture 等 get が無い場合は不明扱い)。"""
