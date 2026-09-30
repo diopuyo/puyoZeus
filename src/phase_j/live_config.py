@@ -23,7 +23,7 @@ def apply_config(parser: argparse.ArgumentParser, argv: list[str]) -> argparse.N
     if config.config:
         data = json.loads(config.config.read_text(encoding='utf-8'))
         allowed = {action.dest for action in parser._actions}
-        unknown = set(data)-allowed-{'name', 'index', 'verification_only'}
+        unknown = set(data)-allowed-{'name', 'index', 'verification_only', 'color_correction'}
         if unknown:
             parser.error(f'未知の設定項目: {sorted(unknown)}')
         defaults = {key: Path(value) if key in PATH_KEYS else value

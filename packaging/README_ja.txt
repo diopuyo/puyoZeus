@@ -14,6 +14,11 @@
          "app" (既定)   ... このフォルダの app\config\device_calibration
          "localappdata" ... %LOCALAPPDATA%\PuyoLive\device_calibration
      Program Files など書き込めない場所に置くときは "localappdata" にする。
+     色の行列補正 "dshow_color_correction" (任意、既定 "off" = 何も変えない):
+         "off" ... 補正なし (従来どおり)
+         "601to709" ... OBS 仮想カメラを OBS 既定 (Rec.709) で使うとき、Windows が 601 で
+                        復号してしまう色のずれを戻す。OBS 側を Rec.601 にしている場合は使わない
+         "auto" ... 機器が YUV (NV12/YUY2 等) で映像を渡していれば 601to709 を適用
 
 2. OBS 側
    - ボードのキャプチャ映像を「ソース出力」で仮想カメラに流す

@@ -12,6 +12,8 @@ from typing import Any, Callable, Iterator
 import cv2
 import numpy as np
 
+from .dshow_color import (COLOR_CORRECTION_MODES, DEFAULT_COLOR_CORRECTION, correct_601_as_709,
+                          fourcc_to_str, resolve_correction)
 from .live_source import CapturedFrame, FrameSource, NATIVE_SIZE, RECOGNITION_HZ
 from .live_input_guard import FrameContinuity
 
@@ -32,17 +34,22 @@ class DeviceConfig:
     name: str
     index: int
     verification_only: bool = True
+    # DirectShow の色行列補正 (off / auto / 601to709)。既定 off = 従来と同一 (dshow_color.py)。
+    color_correction: str = DEFAULT_COLOR_CORRECTION
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip() or type(self.index) is not int or self.index < 0:
             raise ValueError('機器名と非負の機器indexを明示してください')
         if type(self.verification_only) is not bool:
             raise ValueError('verification_onlyはboolが必要です')
+        if self.color_correction not in COLOR_CORRECTION_MODES:
+            raise ValueError(f'color_correctionは{COLOR_CORRECTION_MODES}のいずれかが必要です')
 
     @classmethod
     def load(cls, path: Path) -> DeviceConfig:
         data = json.loads(path.read_text(encoding='utf-8'))
-        return cls(name=data['name'], index=data['index'], verification_only=data.get('verification_only', True))
+        return cls(name=data['name'], index=data['index'], verification_only=data.get('verification_only', True),
+                   color_correction=data.get('color_correction', DEFAULT_COLOR_CORRECTION))
 
     @property
     def calibration_path(self) -> Path:
@@ -131,6 +138,7 @@ class DirectShowSource(FrameSource):
         self.capture_factory, self.verifier = capture_factory, verifier
         self.clock, self.sleep, self.dropped = clock, sleep, 0
         self.on_status = on_status
+        self._correct_color = False  # 開いた機器のサブタイプ確定後に __iter__ が決める
         from .live_degrade import EventPriority
         self.event_priority = EventPriority()
 
@@ -148,6 +156,8 @@ class DirectShowSource(FrameSource):
             captured = capture.last_captured_at if ok else captured
             self.dropped = capture.dropped
         normalized = self._normalize(image) if ok else None
+        if normalized is not None and self._correct_color:
+            normalized = correct_601_as_709(normalized)
         size = (image.shape[1], image.shape[0]) if normalized is not None else None
         return captured, normalized, size
 
@@ -162,6 +172,7 @@ class DirectShowSource(FrameSource):
             capture.set(cv2.CAP_PROP_FRAME_WIDTH, NATIVE_SIZE[0])
             capture.set(cv2.CAP_PROP_FRAME_HEIGHT, NATIVE_SIZE[1])
             capture.set(cv2.CAP_PROP_FPS, RECOGNITION_HZ)
+            self._correct_color = self._decide_color_correction(capture)
             while self.clock()-origin < self.duration:
                 captured, normalized, size = self._read(capture)
                 transport_ready = normalized is not None and continuity.ready(normalized, size, captured)
@@ -186,6 +197,15 @@ class DirectShowSource(FrameSource):
             capture.release()
             if self.event_priority.enabled:
                 self.dropped = capture.dropped
+
+    def _decide_color_correction(self, capture: Any) -> bool:
+        """色補正の要否。auto は開いた機器のメディアサブタイプ (BufferedCapture 等 get が無い場合は不明扱い)。"""
+        mode = self.config.color_correction
+        if mode == DEFAULT_COLOR_CORRECTION:
+            return False
+        getter = getattr(capture, 'get', None)
+        subtype = fourcc_to_str(getter(cv2.CAP_PROP_FOURCC)) if callable(getter) else None
+        return resolve_correction(mode, subtype)
 
     @staticmethod
     def _normalize(image: np.ndarray | None) -> np.ndarray | None:

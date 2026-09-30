@@ -4980,3 +4980,10 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 - 追加/変更: src/cnn_onnx.py (ONNX、既定OFF、PUYO_CNN_BACKEND=onnx)、patch_classifier.py に _forward (既定は従来と同一)、live_device.py に環境変数 PUYO_CALIBRATION_DIR を1つ追加 (未設定なら従来どおり)。live_snapshot/exchange_event_terminal/exchange_event_multilanding/live_process は無変更。
 - 結果と未了の詳細: docs/PHASE_J_PACKAGING_PLAN_2026-09-30.md §11。ONNX事前登録: docs/PHASE_J_ONNX_PREREGISTRATION_2026-09-30.md。ライセンス: docs/PHASE_J_PACKAGING_LICENSES_2026-09-30.md。
 - 依頼: WSL側の同値確認 (packaging/run_equiv.sh) は本エージェントの環境で wsl を起動できず未実施。手順は計画書 §11-7。
+
+## 2026-09-30 コーダ (packaging worktree): DirectShow 色行列補正 (既定 OFF)
+
+- 発見: OBS 仮想カメラ (NV12, OBS 既定 Rec.709/Partial) を CAP_DSHOW で読むと 709 符号化を 601 で復号 (動画経路と同じ不一致)。捕捉 vs Linux 709 PNG の平均絶対差 4.89→601to709 補正で 1.12 (床 0.37)。静止した試合中フレームの confirmed 差 2/10,920→0/10,920。
+- 追加/変更: src/phase_j/dshow_color.py (新規)、live_device.py (DeviceConfig.color_correction 既定 off、DirectShowSource._read の補正)、live_config.py 許可キー、launcher.py `dshow_color_correction`、README_ja.txt、tests/phase_j/test_dshow_color.py (28 件)。既定 OFF は生画素と bit 一致を試験で固定。
+- OBS: 一時プロファイル/シーンで測定後、global.ini/user.ini を復元し一時物を削除 (「無題」未変更)。
+- 結果: D:/puyo_analyzer/packaging/equiv/dshow_color/RESULT.md。既定 ON は user 判断待ち (auto は OBS を 601 にした利用者を悪化させる、実キャプチャボード・動画列 A/B 未実施)。

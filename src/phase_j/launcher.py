@@ -43,9 +43,14 @@ EXIT_OK, EXIT_CONFIG, EXIT_MANIFEST = 0, 2, 3
 CALIBRATION_APP, CALIBRATION_LOCALAPPDATA = 'app', 'localappdata'  # 機器別較正の保存先 (既定は app)
 # live_device.CALIBRATION_DIR_ENV と同値 (live_device は cv2 を import するためここでは複製し、試験で一致を固定)
 CALIBRATION_DIR_ENV = 'PUYO_CALIBRATION_DIR'
+# DirectShow の色行列補正 (off / auto / 601to709)。dshow_color.COLOR_CORRECTION_MODES と同値
+# (dshow_color は cv2 を import するためここでは複製し、試験で一致を固定)。既定 off = 従来と同一。
+COLOR_CORRECTION_MODES = ('off', 'auto', '601to709')
+DEFAULT_COLOR_CORRECTION = 'off'
 LOCALAPPDATA_SUBDIR =Path('PuyoLive') / 'device_calibration'
 USER_KEYS = frozenset({'source', 'device_name', 'device_index', 'video_path', 'port', 'host',
-                       'output_dir', 'mc_rollouts', 'start_sec', 'end_sec', 'calibration_location'})
+                       'output_dir', 'mc_rollouts', 'start_sec', 'end_sec', 'calibration_location',
+                       'dshow_color_correction'})
 
 
 class LauncherConfigError(ValueError):
@@ -65,6 +70,7 @@ class UserConfig:
     start_sec: float | None
     end_sec: float | None
     calibration_location: str = CALIBRATION_APP
+    dshow_color_correction: str = DEFAULT_COLOR_CORRECTION
 
 
 def _int(data: dict[str, Any], key: str, default: int, low: int, high: int | None = None) -> int:
@@ -89,6 +95,14 @@ def _calibration_location(data: dict[str, Any]) -> str:
     if value not in (CALIBRATION_APP, CALIBRATION_LOCALAPPDATA):
         raise LauncherConfigError(f'"calibration_location" は "{CALIBRATION_APP}" (既定: アプリ内) か '
                                   f'"{CALIBRATION_LOCALAPPDATA}" (%LOCALAPPDATA%) です (現在: {value!r})')
+    return value
+
+
+def _color_correction(data: dict[str, Any]) -> str:
+    value = data.get('dshow_color_correction', DEFAULT_COLOR_CORRECTION)
+    if value not in COLOR_CORRECTION_MODES:
+        raise LauncherConfigError(f'"dshow_color_correction" は {list(COLOR_CORRECTION_MODES)} のいずれかです '
+                                  f'(既定: "{DEFAULT_COLOR_CORRECTION}"、現在: {value!r})')
     return value
 
 
@@ -140,7 +154,8 @@ def parse_user_config(data: Any, base_dir: Path, allow_video: bool = False) -> U
         output_dir=_resolve(base_dir, str(data.get('output_dir', DEFAULT_OUTPUT_DIR))),
         mc_rollouts=_int(data, 'mc_rollouts', DEFAULT_MC_ROLLOUTS, 1),
         start_sec=_optional_sec(data, 'start_sec'), end_sec=_optional_sec(data, 'end_sec'),
-        calibration_location=_calibration_location(data))
+        calibration_location=_calibration_location(data),
+        dshow_color_correction=_color_correction(data))
 
 
 def load_user_config(path: Path, allow_video: bool = False) -> UserConfig:
@@ -161,6 +176,8 @@ def build_pipeline_config(user: UserConfig) -> dict[str, Any]:
     config: dict[str, Any] = dict(source=user.source, name=user.device_name or user.video_path.stem,
         index=user.device_index, mc_rollouts=user.mc_rollouts, host=user.host, port=user.port,
         **PIPELINE_FIXED)
+    if user.source == SOURCE_DSHOW and user.dshow_color_correction != DEFAULT_COLOR_CORRECTION:
+        config['color_correction'] = user.dshow_color_correction  # 既定 off のときはキー自体を出さない
     if user.source == SOURCE_VIDEO:
         config.update(realtime=True, warmup_sec=VIDEO_WARMUP_SEC)
         for key in ('start_sec', 'end_sec'):
