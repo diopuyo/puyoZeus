@@ -34,6 +34,11 @@ PERCENTILES = (50, 95, 99)
 PROBE_TIMEOUT_SEC = 60
 PROBE_READY_SEC = 10
 PROBE_JOIN_SEC = 2
+# 環境変数 PUYO_<大文字> で spawn 子processへ渡す bool フラグ (全て既定OFF)
+LIVE_ENV_FLAGS = ('cpu_isolation', 'adaptive_evaluation', 'event_priority',
+                  'async_notice_queue', 'fast_terminal')
+# 認識processを分離した時だけ意味を持つフラグ (thread比較モードでは拒否)
+PROCESS_ONLY_FLAGS = ('cpu_isolation', 'adaptive_evaluation', 'event_priority', 'async_notice_queue')
 
 
 def build_command(options: argparse.Namespace) -> list[str]:
@@ -68,6 +73,7 @@ def asset_hashes() -> dict[str, str]:
         'src/phase_j/live_capture_buffer.py',
         'src/phase_j/live_cache.py', 'src/phase_j/live_memory.py',
         'src/phase_j/live_retention.py', 'src/phase_j/live_spool.py', 'src/exchange_event_tracker.py',
+        'src/phase_j/live_notice_sender.py', 'src/exchange_event_terminal.py',
         'src/phase_j/live_faults.py', 'src/phase_j/live_lifetime.py', 'src/phase_j/live_telemetry.py',
         'config/live_defaults.json',
         'src/phase_j/live_video_session.py', 'src/phase_j/overlay.html', 'config/live_evaluation.json'],
@@ -467,7 +473,7 @@ def configure_cpu(options: argparse.Namespace, parser: argparse.ArgumentParser) 
     from src.phase_j.live_cpu import configure_environment
     try:
         configure_environment(options.cpu_threads, options.evaluation_nice)
-        for field in ('cpu_isolation', 'adaptive_evaluation', 'event_priority'):
+        for field in LIVE_ENV_FLAGS:
             if type(getattr(options, field, False)) is not bool:
                 raise ValueError(field+'はboolが必要です')
             os.environ['PUYO_'+field.upper()] = str(int(getattr(options, field, False)))
@@ -475,14 +481,13 @@ def configure_cpu(options: argparse.Namespace, parser: argparse.ArgumentParser) 
             os.environ['PUYO_LIVE_RESERVED_CPU'] = str(min(os.sched_getaffinity(0)))
     except ValueError as error:
         parser.error(str(error))
-    enabled = any(getattr(options, field, False) for field in
-                  ('cpu_isolation', 'adaptive_evaluation', 'event_priority'))
+    enabled = any(getattr(options, field, False) for field in PROCESS_ONLY_FLAGS)
     if options.worker_mode == 'thread' and (options.evaluation_nice or options.recognition_audit or enabled):
         parser.error('優先度変更と認識監査はprocessモード専用です')
 
 
 def add_fault_arguments(parser: argparse.ArgumentParser) -> None:
-    for flag in ('cpu-isolation', 'adaptive-evaluation', 'event-priority'):
+    for flag in (field.replace('_', '-') for field in LIVE_ENV_FLAGS):
         parser.add_argument('--'+flag, action=argparse.BooleanOptionalAction, default=False)
     from src.phase_j.live_faults import KINDS
     parser.add_argument('--video-fault', choices=KINDS)

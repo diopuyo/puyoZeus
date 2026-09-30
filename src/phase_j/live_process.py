@@ -78,6 +78,8 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
+    from .live_notice_sender import wrap_queue, close_queue
+    queue = wrap_queue(queue, cancel)  # 既定OFFでは同一objectを返す
     try:
         with ExitStack() as storage:
             configure_recognition_retention(storage)
@@ -88,6 +90,7 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
         queue.put(('error', traceback.format_exc()))
     finally:
         queue.put(('done', None))
+        close_queue(queue)
 
 
 def configure_recognition_retention(storage: ExitStack) -> None:
@@ -181,9 +184,13 @@ def finish_recognition(queue: Any, source: Any, audit: Any, count: int,
     runtime = runtime_snapshot('recognition')
     if audit is not None:
         audit.save(runtime, source)
-    queue.put(('summary', dict(dropped=source.dropped, sent=count, wire_bytes=wire_bytes, runtime=runtime,
-                              dropped_times=list(getattr(source, 'dropped_times', [])),
-                              gated=gated+getattr(source, 'gated_frames', 0))))
+    from .live_notice_sender import queue_stats
+    summary = dict(dropped=source.dropped, sent=count, wire_bytes=wire_bytes, runtime=runtime,
+                   dropped_times=list(getattr(source, 'dropped_times', [])),
+                   gated=gated+getattr(source, 'gated_frames', 0))
+    if (sender := queue_stats(queue)) is not None:
+        summary['notice_sender'] = sender  # 既定OFFでは従来と同じキー集合
+    queue.put(('summary', summary))
 
 
 def recognition_logs(storage: ExitStack, source: Any, path: str | None, pipe: Any = None) -> Any:
@@ -300,6 +307,7 @@ class ProcessRecognitionBridge(RecognitionBridge):
             self.recognition_runtime = value.get('runtime')
             self.source.dropped, self.sent, self.wire_bytes = value['dropped'], value['sent'], value['wire_bytes']
             self.gated_frames = value.get('gated', 0)
+            self.notice_sender = value.get('notice_sender')
             self.source.dropped_times = value.get('dropped_times', [])
         if kind == 'done':
             self.finished = True
