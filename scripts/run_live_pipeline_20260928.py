@@ -36,7 +36,7 @@ PROBE_READY_SEC = 10
 PROBE_JOIN_SEC = 2
 # 環境変数 PUYO_<大文字> で spawn 子processへ渡す bool フラグ (全て既定OFF)
 LIVE_ENV_FLAGS = ('cpu_isolation', 'adaptive_evaluation', 'event_priority',
-                  'async_notice_queue', 'fast_terminal')
+                  'async_notice_queue', 'fast_terminal', 'performance_cores', 'fast_telop')
 # 認識processを分離した時だけ意味を持つフラグ (thread比較モードでは拒否)
 PROCESS_ONLY_FLAGS = ('cpu_isolation', 'adaptive_evaluation', 'event_priority', 'async_notice_queue')
 

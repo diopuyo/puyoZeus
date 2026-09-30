@@ -1808,7 +1808,8 @@ class ImageReader:
         if frame.dtype != np.uint8 or type(self).read_board is not ImageReader.read_board:
             return cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         height, width = frame.shape[:2]
-        hsv = np.zeros_like(frame)
+        # np.zeros は OS の零ページを遅延で使い、np.zeros_like (確保後に全面を埋める) より Windows で速い (値は同一)
+        hsv = np.zeros(frame.shape, dtype=frame.dtype)
         for region in regions:
             first = region.cell_sample_rect(HIDDEN_ROWS, 0)
             last = region.cell_sample_rect(BOARD_ROWS-1, BOARD_COLS-1)

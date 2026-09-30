@@ -11,6 +11,16 @@ import numpy as np
 NCC_DECISION_MARGIN = 1e-4
 NCC_VARIANCE_EPS_FACTOR = 10.0
 NCC_VARIANCE_FLOOR = 0.5
+# 元式は `FACTOR*eps*total_sq` (先にスカラー同士を掛ける)。同じ評価順・同じ型のスカラーを 1 度だけ作る。
+NCC_VARIANCE_EPS_SCALE = NCC_VARIANCE_EPS_FACTOR*np.finfo(np.float32).eps
+
+
+def _window_sum(table: np.ndarray, height: int, width: int) -> np.ndarray:
+    """積分画像から窓和 (元式と同じ演算順 ((A-B)-C)+D を in-place で。整数は同じ桁あふれ規則)。"""
+    window = table[height:, width:]-table[:-height, width:]
+    window -= table[height:, :-width]
+    window += table[:-height, :-width]
+    return window
 
 
 @dataclass
@@ -60,7 +70,40 @@ class PreparedTemplate:
         return mean.item(), std.item()
 
     def scores(self, image: np.ndarray, prepared: PreparedImage | None = None) -> np.ndarray:
-        """OpenCVと同じ平均除去・局所分散で正規化する。"""
+        """OpenCVと同じ平均除去・局所分散で正規化する。
+
+        `scores_reference` と演算の種類・順序が同一で、一時配列を減らすため in-place 演算にしただけ
+        (要素ごとの演算なので結果は bit-identical。Windows は大きい配列の確保が遅く効果が大きい)。
+        """
+        th, tw = self.template.shape
+        count = self.template.size
+        prepared = prepared or PreparedImage(image)
+        sums, squares = prepared.integrals
+        total = _window_sum(sums, th, tw).astype(np.float64)
+        total_sq = _window_sum(squares, th, tw)
+        mean, std = self.statistics
+        if std == 0:
+            return np.ones(total.shape, dtype=np.float32)
+        numerator = self.correlate(image, prepared).astype(np.float64)
+        scratch = total*mean
+        numerator -= scratch
+        np.multiply(total, total, out=scratch)
+        scratch /= count
+        variance = total_sq-scratch
+        np.maximum(variance, 0, out=variance)
+        np.multiply(total_sq, NCC_VARIANCE_EPS_SCALE, out=scratch)
+        np.minimum(scratch, NCC_VARIANCE_FLOOR, out=scratch)
+        variance[variance <= scratch] = 0
+        np.sqrt(variance, out=variance)
+        variance *= std
+        variance *= np.sqrt(count)
+        result = np.zeros(total.shape, dtype=np.float64)
+        np.divide(numerator, variance, out=result, where=variance != 0)
+        np.clip(result, -1, 1, out=result)
+        return result.astype(np.float32)
+
+    def scores_reference(self, image: np.ndarray, prepared: PreparedImage | None = None) -> np.ndarray:
+        """`scores` の元実装 (基準)。一致確認の試験だけが使う。本番経路は呼ばない。"""
         th, tw = self.template.shape
         count = self.template.size
         prepared = prepared or PreparedImage(image)

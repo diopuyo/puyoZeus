@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import sys
 from typing import Any
+
+from . import live_win_cores as win_cores
 
 THREAD_ENV = 'PUYO_LIVE_CPU_THREADS'
 NICE_ENV = 'PUYO_LIVE_EVALUATION_NICE'
@@ -44,7 +47,19 @@ def apply_runtime(role: str, lower_priority: bool = True) -> dict[str, Any]:
             current = os.nice(0)
             if current < nice:
                 os.nice(nice-current)
-    return runtime_snapshot(role)
+    snapshot = runtime_snapshot(role)
+    if role == 'recognition' and lower_priority and win_cores.requested():
+        snapshot['performance_cpu_sets'] = apply_performance_cores()
+    return snapshot
+
+
+def apply_performance_cores() -> list[int]:
+    """認識 process を性能コアへ寄せ、適用した件数を必ず stderr へ残す (0 件を成功と読み替えない)。"""
+    ids = win_cores.prefer_performance_cores()
+    print(f'[performance_cores] 性能コアの CPU set {len(ids)} 個へ限定'
+          if ids else '[performance_cores] 適用なし (非ハイブリッド CPU または Windows 以外)',
+          file=sys.stderr, flush=True)
+    return ids
 
 
 def isolate_cpu(role: str) -> None:

@@ -4987,3 +4987,12 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 - 追加/変更: src/phase_j/dshow_color.py (新規)、live_device.py (DeviceConfig.color_correction 既定 off、DirectShowSource._read の補正)、live_config.py 許可キー、launcher.py `dshow_color_correction`、README_ja.txt、tests/phase_j/test_dshow_color.py (28 件)。既定 OFF は生画素と bit 一致を試験で固定。
 - OBS: 一時プロファイル/シーンで測定後、global.ini/user.ini を復元し一時物を削除 (「無題」未変更)。
 - 結果: D:/puyo_analyzer/packaging/equiv/dshow_color/RESULT.md。既定 ON は user 判断待ち (auto は OBS を 601 にした利用者を悪化させる、実キャプチャボード・動画列 A/B 未実施)。
+
+## 2026-09-30 夜 コーダ (packaging worktree): Windows 認識速度の改善 (詳細 docs/PHASE_J_PERF_2026-09-30.md)
+
+- rt (c8b8996) を merge。配布既定に `fast_terminal` / 新フラグ `performance_cores` (認識を Windows の性能コアへ) / `fast_telop` (テロップ検出の縮小予備判定) と、同梱時の ONNX CNN を追加。`async_notice_queue` は OFF のまま。
+- 結果 (同一 PNG 900 frame、別 agent の WSL ジョブ並走下の交互 A/B 3 組): 認識 P50 37.0〜41.4 → **25.1〜25.8 ms**、P95 51.9〜58.3 → **31.9〜33.0 ms**。決定 digest は 960 frame 中 0 差 (WSL torch とも 0 差)。
+- 発見 1: E コア固定だと P50 75.6 ms。負荷下の「60〜68 ms」は OS が認識を E コア/HT 兄弟へ寄せたため。
+- 発見 2 (別問題、未着手): 配布版の `PuyoScreenVerifier` が実対戦 frame を頻繁に不合格にし、OBS 仮想カメラ入力で 330 秒中 18% の frame しか認識に渡らない。`live_device.py` の設計判断が要る。
+- 注意: fast_telop は実データに可視テロップが 0 件 (491,928 frame) のため、陽性側は合成証拠のみ。外すなら `launcher.py PIPELINE_FIXED` の 1 語。
+- 一時停止中: `--zip` の最終再ビルドと閑散時の OBS 5 分再測定 (発火前予測ジョブ終了後)。OBS 設定は復元済み。

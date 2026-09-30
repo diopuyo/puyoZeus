@@ -35,14 +35,23 @@ DEFAULT_MC_ROLLOUTS = 30
 MAX_PROBE_INDEX = 8  # --list-devices が調べる機器 index の上限
 DEFAULT_OUTPUT_DIR = 'output'
 # 既存 live_dshow.example.json と同じ配布既定 (CPU のみ・評価は低優先度)
+# fast_terminal: 死亡検出の低解像度予備判定。491,928 フレームで決定が完全一致 (rt logs/live_b20/RESULT.md、2026-09-30)。
+# fast_telop: 中央テロップ検出の縮小予備判定。491,928 フレーム (983,856 テンプレート×フレーム) で決定差 0。
+#   ただし実データに可視テロップが 0 件のため、陽性側は合成 (216 対で誤スキップ 0) の証拠のみ (packaging/perf/RESULT.md)。
+# performance_cores: 認識を Windows の性能コアへ寄せる (ハイブリッド CPU のみ作用。決定には無関係)。
+# async_notice_queue は 54 秒の配信空白を起こしたため配布でも OFF のまま (キーを出さない = 既定 False)。
 PIPELINE_FIXED = dict(verification_only=True, coalesce_features=True, cpu_threads=1,
-                      evaluation_nice=10, cnn_device='cpu')
+                      evaluation_nice=10, cnn_device='cpu', fast_terminal=True,
+                      performance_cores=True, fast_telop=True)
 VIDEO_WARMUP_SEC = 1.0
 
 EXIT_OK, EXIT_CONFIG, EXIT_MANIFEST = 0, 2, 3
 CALIBRATION_APP, CALIBRATION_LOCALAPPDATA = 'app', 'localappdata'  # 機器別較正の保存先 (既定は app)
 # live_device.CALIBRATION_DIR_ENV と同値 (live_device は cv2 を import するためここでは複製し、試験で一致を固定)
 CALIBRATION_DIR_ENV = 'PUYO_CALIBRATION_DIR'
+# cnn_onnx.BACKEND_ENV / BACKEND_ONNX / INDEX_NAME と同値 (cnn_onnx は numpy を import するためここでは複製し、試験で一致を固定)
+CNN_BACKEND_ENV, CNN_BACKEND_ONNX = 'PUYO_CNN_BACKEND', 'onnx'
+ONNX_INDEX = Path('models') / 'onnx' / 'index.json'
 # DirectShow の色行列補正 (off / auto / 601to709)。dshow_color.COLOR_CORRECTION_MODES と同値
 # (dshow_color は cv2 を import するためここでは複製し、試験で一致を固定)。既定 off = 従来と同一。
 COLOR_CORRECTION_MODES = ('off', 'auto', '601to709')
@@ -274,6 +283,7 @@ def prepare(options: argparse.Namespace) -> tuple[UserConfig, list[str]]:
         raise SystemExit(EXIT_MANIFEST)
     user.output_dir.mkdir(parents=True, exist_ok=True)
     apply_calibration_dir(user)
+    apply_cnn_backend()
     pipeline_config = user.output_dir / PIPELINE_CONFIG_NAME
     pipeline_config.write_text(json.dumps(build_pipeline_config(user), ensure_ascii=False, indent=2),
                                encoding='utf-8')
@@ -290,6 +300,17 @@ def apply_calibration_dir(user: UserConfig) -> None:
     if target is not None:
         target.mkdir(parents=True, exist_ok=True)
         os.environ[CALIBRATION_DIR_ENV] = str(target)
+
+
+def apply_cnn_backend(app_root: Path = APP_ROOT) -> str | None:
+    """ONNX の CNN が同梱された配布物では ONNX Runtime 版を既定にする (spawn 子へも環境変数で継承)。
+
+    torch 版と ONNX 版は全セル argmax 0 不一致 (2,073,168 セル) かつパイプライン出力 0 差 (docs/PHASE_J_ONNX_PREREGISTRATION)。
+    利用者が環境変数を明示済みならそれを尊重する。同梱が無い配布物では何も設定しない (torch 版のまま)。
+    ONNX を要求して使えない場合は cnn_onnx が例外で止まる (黙って torch へ戻さない)。"""
+    if CNN_BACKEND_ENV not in os.environ and (app_root / ONNX_INDEX).is_file():
+        os.environ[CNN_BACKEND_ENV] = CNN_BACKEND_ONNX
+    return os.environ.get(CNN_BACKEND_ENV)
 
 
 def overlay_url(user: UserConfig) -> str:

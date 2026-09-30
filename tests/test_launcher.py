@@ -75,7 +75,9 @@ def test_dshow_pipeline_config_matches_shipped_example(tmp_path: Path) -> None:
     """配布既定 (CPU 専用・低優先度) が既存の live_dshow.example.json と食い違わない。"""
     example = json.loads((ROOT / 'config/live_dshow.example.json').read_text(encoding='utf-8'))
     config = build_pipeline_config(parse_user_config(DSHOW, tmp_path))
-    assert config == example
+    # 配布だけ fast_terminal=True (決定同一を 491,928 フレームで確認済) と performance_cores=True (Windows 性能コア優先)・fast_telop=True (テロップ検出の縮小予備判定)。async_notice_queue は OFF のまま (キー無し)
+    assert config == dict(example, fast_terminal=True, performance_cores=True, fast_telop=True)
+    assert 'async_notice_queue' not in config
 
 
 def test_video_pipeline_config_keeps_window(tmp_path: Path) -> None:
@@ -214,3 +216,20 @@ def test_prepare_rejects_video_unless_dev_flag(tmp_path: Path, capsys: pytest.Ca
     assert info.value.code == EXIT_CONFIG and 'OBS 仮想カメラ等の入力' in capsys.readouterr().err
     user, _ = prepare(launcher_args(path, '--skip-manifest', '--dev-allow-video'))
     assert user.source == 'video'
+
+
+def test_cnn_backend_constants_match_cnn_onnx() -> None:
+    from src import cnn_onnx
+    assert (launcher.CNN_BACKEND_ENV, launcher.CNN_BACKEND_ONNX) == (cnn_onnx.BACKEND_ENV, cnn_onnx.BACKEND_ONNX)
+    assert launcher.ONNX_INDEX == cnn_onnx.ONNX_DIR / cnn_onnx.INDEX_NAME
+
+
+def test_apply_cnn_backend_uses_onnx_only_when_bundled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(os, 'environ', os.environ.copy())
+    monkeypatch.delenv(launcher.CNN_BACKEND_ENV, raising=False)
+    assert launcher.apply_cnn_backend(tmp_path) is None                       # 同梱なし = 何も設定しない (torch 版)
+    (tmp_path / launcher.ONNX_INDEX).parent.mkdir(parents=True)
+    (tmp_path / launcher.ONNX_INDEX).write_text('{}', encoding='utf-8')
+    assert launcher.apply_cnn_backend(tmp_path) == 'onnx' and os.environ[launcher.CNN_BACKEND_ENV] == 'onnx'
+    monkeypatch.setenv(launcher.CNN_BACKEND_ENV, 'torch')                     # 利用者の明示を尊重
+    assert launcher.apply_cnn_backend(tmp_path) == 'torch'
