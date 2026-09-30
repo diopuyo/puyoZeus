@@ -20,6 +20,7 @@ import sys
 from typing import Any, Callable, Sequence
 
 from .launcher_manifest import MANIFEST_FILENAME, ManifestError, verify_manifest
+from .launcher_runtime import EXIT_RUNTIME, missing_runtime_dlls, runtime_guidance
 
 APP_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_USER_CONFIG = Path('puyo_live.json')
@@ -39,8 +40,12 @@ PIPELINE_FIXED = dict(verification_only=True, coalesce_features=True, cpu_thread
 VIDEO_WARMUP_SEC = 1.0
 
 EXIT_OK, EXIT_CONFIG, EXIT_MANIFEST = 0, 2, 3
+CALIBRATION_APP, CALIBRATION_LOCALAPPDATA = 'app', 'localappdata'  # 機器別較正の保存先 (既定は app)
+# live_device.CALIBRATION_DIR_ENV と同値 (live_device は cv2 を import するためここでは複製し、試験で一致を固定)
+CALIBRATION_DIR_ENV = 'PUYO_CALIBRATION_DIR'
+LOCALAPPDATA_SUBDIR =Path('PuyoLive') / 'device_calibration'
 USER_KEYS = frozenset({'source', 'device_name', 'device_index', 'video_path', 'port', 'host',
-                       'output_dir', 'mc_rollouts', 'start_sec', 'end_sec'})
+                       'output_dir', 'mc_rollouts', 'start_sec', 'end_sec', 'calibration_location'})
 
 
 class LauncherConfigError(ValueError):
@@ -59,6 +64,7 @@ class UserConfig:
     mc_rollouts: int
     start_sec: float | None
     end_sec: float | None
+    calibration_location: str = CALIBRATION_APP
 
 
 def _int(data: dict[str, Any], key: str, default: int, low: int, high: int | None = None) -> int:
@@ -76,6 +82,25 @@ def _optional_sec(data: dict[str, Any], key: str) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
         raise LauncherConfigError(f'"{key}" は0以上の秒数で指定してください (現在: {value!r})')
     return float(value)
+
+
+def _calibration_location(data: dict[str, Any]) -> str:
+    value = data.get('calibration_location', CALIBRATION_APP)
+    if value not in (CALIBRATION_APP, CALIBRATION_LOCALAPPDATA):
+        raise LauncherConfigError(f'"calibration_location" は "{CALIBRATION_APP}" (既定: アプリ内) か '
+                                  f'"{CALIBRATION_LOCALAPPDATA}" (%LOCALAPPDATA%) です (現在: {value!r})')
+    return value
+
+
+def calibration_dir(user: UserConfig, environ: dict[str, str] | None = None) -> Path | None:
+    """機器別較正の保存先。app (既定) は None = 既存の config/device_calibration のまま。"""
+    if user.calibration_location == CALIBRATION_APP:
+        return None
+    base = (os.environ if environ is None else environ).get('LOCALAPPDATA')
+    if not base:
+        raise LauncherConfigError('calibration_location が "localappdata" ですが、環境変数 LOCALAPPDATA が'
+                                  '設定されていません (Windows 以外では "app" を使ってください)')
+    return Path(base) / LOCALAPPDATA_SUBDIR
 
 
 def _resolve(base: Path, value: str) -> Path:
@@ -107,7 +132,8 @@ def parse_user_config(data: Any, base_dir: Path) -> UserConfig:
         port=_int(data, 'port', DEFAULT_PORT, MIN_PORT, MAX_PORT), host=host.strip(),
         output_dir=_resolve(base_dir, str(data.get('output_dir', DEFAULT_OUTPUT_DIR))),
         mc_rollouts=_int(data, 'mc_rollouts', DEFAULT_MC_ROLLOUTS, 1),
-        start_sec=_optional_sec(data, 'start_sec'), end_sec=_optional_sec(data, 'end_sec'))
+        start_sec=_optional_sec(data, 'start_sec'), end_sec=_optional_sec(data, 'end_sec'),
+        calibration_location=_calibration_location(data))
 
 
 def load_user_config(path: Path) -> UserConfig:
@@ -213,15 +239,32 @@ def prepare(options: argparse.Namespace) -> tuple[UserConfig, list[str]]:
     except LauncherConfigError as error:
         print(f'[設定エラー] {error}', file=sys.stderr)
         raise SystemExit(EXIT_CONFIG) from error
+    missing = missing_runtime_dlls(Path(sys.executable).parent)
+    if missing:
+        print(f'[実行環境エラー] {runtime_guidance(missing)}', file=sys.stderr)
+        raise SystemExit(EXIT_RUNTIME)
     problem = None if options.skip_manifest else check_bundle(APP_ROOT, options.require_manifest)
     if problem:
         print(f'[配布物エラー] {problem}', file=sys.stderr)
         raise SystemExit(EXIT_MANIFEST)
     user.output_dir.mkdir(parents=True, exist_ok=True)
+    apply_calibration_dir(user)
     pipeline_config = user.output_dir / PIPELINE_CONFIG_NAME
     pipeline_config.write_text(json.dumps(build_pipeline_config(user), ensure_ascii=False, indent=2),
                                encoding='utf-8')
     return user, build_pipeline_argv(user, pipeline_config)
+
+
+def apply_calibration_dir(user: UserConfig) -> None:
+    """設定が localappdata のときだけ環境変数で live_device へ渡す (spawn 子へも継承される)。"""
+    try:
+        target = calibration_dir(user)
+    except LauncherConfigError as error:
+        print(f'[設定エラー] {error}', file=sys.stderr)
+        raise SystemExit(EXIT_CONFIG) from error
+    if target is not None:
+        target.mkdir(parents=True, exist_ok=True)
+        os.environ[CALIBRATION_DIR_ENV] = str(target)
 
 
 def overlay_url(user: UserConfig) -> str:

@@ -60,6 +60,15 @@ PRUNE_PATHS = ('torch/include',)
 # torch/lib の *.lib は C++ 拡張をリンクする時だけ必要 (dnnl.lib 653MB 等、実測で torch の約 7 割)
 PRUNE_FILE_GLOBS = ('torch/lib/*.lib',)
 FINISHED_MARK = '.puyo_finished'
+DEFAULT_VC_RUNTIME_DIR = Path('C:/Windows/System32')  # VC++ 再頒布可能パッケージが入れた DLL の取得元
+# Microsoft の再頒布可能コード (VC++ 2015-2022 CRT/C++ 標準ライブラリ)。packaging/scan_dll_deps.py の走査で
+# 必須と出たのは msvcp140.dll (torch)。同系の補助 DLL も先回りで同梱する。
+VC_RUNTIME_DLLS = ('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'msvcp140_1.dll',
+                   'msvcp140_2.dll', 'concrt140.dll')
+ONNX_WHEELHOUSE = Path('downloads/wheelhouse_onnx')
+ONNX_WHEEL_PREFIXES = ('onnxruntime-', 'flatbuffers-', 'protobuf-', 'packaging-')
+ONNX_SITE_GLOBS = ('onnxruntime', 'onnxruntime-*.dist-info', 'flatbuffers', 'flatbuffers-*.dist-info', 'google',
+                   'protobuf-*.dist-info', 'packaging', 'packaging-*.dist-info')
 SHIPPED_TEXT =('puyo_live.example.json', 'README_ja.txt', 'PuyoLive.bat')
 
 
@@ -134,14 +143,17 @@ def read_asset_list() -> list[str]:
 
 def expand_asset(rel: str, asset_root: Path) -> list[str]:
     """資産 1 行 (ファイルまたはディレクトリ) を相対パス列へ。リポジトリ優先、無ければ asset_root。"""
+    found: set[str] = set()
     for base in (ROOT, asset_root):
         target = base / rel
         if target.is_file():
             return [rel]
-        if target.is_dir():
-            return sorted(path.relative_to(base).as_posix() for path in target.rglob('*')
-                          if path.is_file() and not SKIP_DIRS & set(path.parts))
-    raise FileNotFoundError(f'資産が見つかりません: {rel} (リポジトリにも {asset_root} にも無い)')
+        if target.is_dir():  # ディレクトリは両方の和集合 (git 管理分と管理外分が分かれているため)
+            found |= {path.relative_to(base).as_posix() for path in target.rglob('*')
+                      if path.is_file() and not SKIP_DIRS & set(path.parts)}
+    if not found:
+        raise FileNotFoundError(f'資産が見つかりません: {rel} (リポジトリにも {asset_root} にも無い)')
+    return sorted(found)
 
 
 def source_of(rel: str, asset_root: Path) -> Path:
@@ -218,11 +230,75 @@ def prepare_bundle_dir(bundle: Path, work: Path, reuse_python: bool) -> None:
     stage_python(bundle, work)
 
 
-def build(work: Path, asset_root: Path, make_archive: bool, reuse_python: bool = False) -> dict:
+def install_native_wheel(python: Path, wheel_dir: Path) -> str | None:
+    """Windows 向けに別途ビルドした puyo_core (Rust) の wheel を展開する。無ければ None。
+    本番構成は幽霊連鎖ルール ON で native を必須とする (Python フォールバックは未対応、実測で判明)。"""
+    wheels = sorted(wheel_dir.glob('puyo_core-*.whl'))
+    if not wheels:
+        return None
+    with zipfile.ZipFile(wheels[-1]) as archive:
+        archive.extractall(python / SITE_PACKAGES)
+    return wheels[-1].name
+
+
+def add_vc_runtime(python: Path, source_dir: Path) -> dict[str, list[str]]:
+    """再頒布可能な VC++ ランタイム DLL を python/ (アプリ ディレクトリ) へ置く。既存 (埋め込み Python が
+    持つ vcruntime140*) は上書きしない。source_dir に無いものは missing に記録する。"""
+    copied, kept, missing = [], [], []
+    for name in VC_RUNTIME_DLLS:
+        target = python / name
+        if target.is_file():
+            kept.append(name)
+        elif (source_dir / name).is_file():
+            shutil.copy2(source_dir / name, target)
+            copied.append(name)
+        else:
+            missing.append(name)
+    return dict(copied=copied, kept=kept, missing=missing)
+
+
+def install_onnx_runtime(python: Path, work: Path) -> list[str]:
+    """ONNX Runtime とその依存 wheel を展開する (ONNX バックエンド用。既定 OFF の機能の同梱)。"""
+    names: list[str] = []
+    for wheel in sorted((work / ONNX_WHEELHOUSE).glob('*.whl')):
+        if wheel.name.startswith(ONNX_WHEEL_PREFIXES):
+            with zipfile.ZipFile(wheel) as archive:
+                archive.extractall(python / SITE_PACKAGES)
+            names.append(wheel.name)
+    return names
+
+
+def remove_onnx_runtime(python: Path) -> None:
+    """--with-onnx 無しのビルドに、前回の ONNX Runtime を持ち越さない (reuse-python 時)。"""
+    site = python / SITE_PACKAGES
+    for pattern in ONNX_SITE_GLOBS:
+        for path in site.glob(pattern):
+            shutil.rmtree(path) if path.is_dir() else path.unlink()
+
+
+def export_onnx_files(bundle: Path, work: Path) -> list[Path]:
+    """app/models の CNN (.pt) を ONNX へ書き出し、生成物のパスを返す (MANIFEST 対象にするため)。
+    書き出しには onnx パッケージが要る (配布物には入れず、作業用 work/onnxtools から一時的に読む)。"""
+    code = ('import sys, runpy; sys.path[:0] = [%r, %r, %r]; sys.argv = [%r, %r]; runpy.run_path(%r, run_name="__main__")'
+            % (str(work / 'onnxtools'), str(bundle / 'app'), str(PACKAGING_DIR.parent), 'export_onnx.py',
+               str(bundle / 'app' / 'models'), str(PACKAGING_DIR / 'export_onnx.py')))
+    subprocess.run([str(bundle / 'python' / 'python.exe'), '-c', code], check=True, cwd=bundle / 'app')
+    return sorted((bundle / 'app' / 'models' / 'onnx').glob('*'))
+
+
+def build(work: Path, asset_root: Path, make_archive: bool, reuse_python: bool = False,
+          vc_runtime_dir: Path = DEFAULT_VC_RUNTIME_DIR, with_onnx: bool = False) -> dict:
     started = time.perf_counter()
     bundle = work / 'build' / BUNDLE_NAME
     prepare_bundle_dir(bundle, work, reuse_python)
+    native = install_native_wheel(bundle / 'python', work / 'native_build' / 'wheels')
+    vc_runtime = add_vc_runtime(bundle / 'python', vc_runtime_dir)
+    onnx_wheels = install_onnx_runtime(bundle / 'python', work) if with_onnx else None
+    if not with_onnx:
+        remove_onnx_runtime(bundle / 'python')
     files = copy_app(bundle, asset_root)
+    if with_onnx:
+        files += export_onnx_files(bundle, work)
     precompile(bundle / 'python', bundle / 'app')
     files += sorted((bundle / 'app').rglob('*.pyc'))  # unchecked-hash のため MANIFEST で完全性を担保する
     for name in SHIPPED_TEXT:
@@ -230,7 +306,7 @@ def build(work: Path, asset_root: Path, make_archive: bool, reuse_python: bool =
     licenses = copy_licenses(bundle)
     manifest = write_manifest(bundle, files)
     size = sum(path.stat().st_size for path in bundle.rglob('*') if path.is_file())
-    result = dict(bundle=str(bundle), files_in_manifest=len(manifest['files']), license_files=licenses,
+    result = dict(bundle=str(bundle), puyo_core_wheel=native, onnx_wheels=onnx_wheels, vc_runtime=vc_runtime, files_in_manifest=len(manifest['files']), license_files=licenses,
                   packages=len(manifest['packages']), bundle_bytes=size,
                   build_seconds=round(time.perf_counter() - started, 1))
     if make_archive:
@@ -247,11 +323,13 @@ def main() -> None:
     parser.add_argument('--download', action='store_true', help='埋め込み Python と wheel を取得して終了')
     parser.add_argument('--zip', action='store_true', help='組み立て後に zip 化')
     parser.add_argument('--reuse-python', action='store_true', help='python/ を作り直さず app 側だけ再構成')
+    parser.add_argument('--with-onnx', action='store_true', help='ONNX Runtime と CNN の ONNX を同梱 (既定 OFF の切替用)')
     options = parser.parse_args()
     if options.download:
         download_inputs(options.work)
         return
-    print(json.dumps(build(options.work, options.asset_root, options.zip, options.reuse_python),
+    print(json.dumps(build(options.work, options.asset_root, options.zip, options.reuse_python,
+                           with_onnx=options.with_onnx),
                      ensure_ascii=False, indent=1))
 
 

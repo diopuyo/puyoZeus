@@ -796,10 +796,22 @@ class CnnPatchClassifier(PatchClassifier):
     # 推論
     # ============================
 
+    def _forward(self, batch: "Any") -> "Any":
+        """畳み込み本体の logits。既定は torch (従来どおり)。環境変数 PUYO_CNN_BACKEND=onnx のときだけ
+        重みの内容ハッシュで引いた ONNX Runtime (CPU) に切り替える (src/cnn_onnx.py。対応 ONNX が無ければ例外)。"""
+        from src import cnn_onnx
+        if not cnn_onnx.backend_requested():
+            return self._model(batch)
+        digest = getattr(self, "_onnx_digest", None)
+        if digest is None:
+            digest = self._onnx_digest = cnn_onnx.state_digest(self._model.state_dict())
+        logits = cnn_onnx.run_logits(cnn_onnx.session_for(digest), batch.detach().cpu().numpy())
+        return self._torch.from_numpy(logits)
+
     def classify(self, bgr_patch: np.ndarray) -> int:
         tensor = self._patch_to_tensor(bgr_patch).to(self._device)
         with self._torch.no_grad():
-            logits = self._model(tensor)
+            logits = self._forward(tensor)
         idx = int(self._torch.argmax(logits, dim=1).item())
         return CLASS_INDEX_TO_COLOR[idx]
 
@@ -807,7 +819,7 @@ class CnnPatchClassifier(PatchClassifier):
         """各クラスの確率を返す (NUM_CLASSES,)。TTA / アンサンブル用。"""
         tensor = self._patch_to_tensor(bgr_patch).to(self._device)
         with self._torch.no_grad():
-            logits = self._model(tensor)
+            logits = self._forward(tensor)
             probs = self._torch.nn.functional.softmax(logits, dim=1)
         return probs[0].cpu().numpy()
 
@@ -828,7 +840,7 @@ class CnnPatchClassifier(PatchClassifier):
         tensors = [self._patch_to_tensor(p)[0] for p in bgr_patches]
         batch = torch.stack(tensors).to(self._device)
         with torch.no_grad():
-            logits = self._model(batch)
+            logits = self._forward(batch)
             probs = torch.nn.functional.softmax(logits, dim=1)
         return probs.cpu().numpy()
 

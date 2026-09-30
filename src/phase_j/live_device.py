@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 import time
 from typing import Any, Callable, Iterator
@@ -22,6 +23,8 @@ GRID_POSITION_TOLERANCE = 80
 BORDER_POSITION_TOLERANCE = 24
 BORDER_COVERAGE = 0.65
 CALIBRATION_ROOT = Path('config/device_calibration')
+# 保存先の切替 (任意)。未設定なら従来の CALIBRATION_ROOT のまま (配布ランチャーが設定から与える)。
+CALIBRATION_DIR_ENV = 'PUYO_CALIBRATION_DIR'
 
 
 @dataclass(frozen=True)
@@ -44,7 +47,8 @@ class DeviceConfig:
     @property
     def calibration_path(self) -> Path:
         identity = hashlib.sha256(f'{self.name}:{self.index}'.encode()).hexdigest()
-        return CALIBRATION_ROOT / (identity + '.json')
+        override = os.environ.get(CALIBRATION_DIR_ENV)
+        return (Path(override) if override else CALIBRATION_ROOT) / (identity + '.json')
 
 
 class PuyoScreenVerifier:

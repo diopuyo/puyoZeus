@@ -7,9 +7,12 @@
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 
+MANIFEST_NAME = 'MANIFEST.json'
+RUNTIME_GENERATED_PREFIXES = ('config/device_calibration/',)
 CODE_SUFFIXES = frozenset({'.py', '.pyc', '.pyd', '.dll', '.so'})
 
 
@@ -30,6 +33,20 @@ def is_under(path: Path, root: Path) -> bool:
         return False
 
 
+def report_manifest_gap(inside: list[Path], app: Path) -> None:
+    """読まれた非コード資産のうち MANIFEST に載っていない物を出す (第 3 引数に MANIFEST.json を渡したとき)。
+    実行時に生成される物 (機器別較正) は除外。0 件でも母数 (読まれた件数) を併記する。"""
+    if len(sys.argv) < 4:
+        return
+    files = set(json.loads(Path(sys.argv[3]).read_text(encoding='utf-8'))['files'])
+    gap = [rel for rel in (p.resolve().relative_to(app).as_posix() for p in inside)
+           if rel not in files and rel != MANIFEST_NAME and not rel.startswith(RUNTIME_GENERATED_PREFIXES)]
+    print(f'# MANIFEST 照合: 読まれた資産 {len(inside)} 件中 MANIFEST に無い物 {len(gap)} 件 '
+          f'(実行時生成として除外する接頭辞: {RUNTIME_GENERATED_PREFIXES})')
+    for rel in gap:
+        print('NOT_IN_MANIFEST', rel)
+
+
 def main() -> None:
     base, app = Path(sys.argv[1]), Path(sys.argv[2]).resolve()
     opened, processes = load_opens(base)
@@ -38,6 +55,7 @@ def main() -> None:
     used = {p.resolve() for p in inside}
     for path in inside:
         print('USED   ', path.resolve().relative_to(app).as_posix())
+    report_manifest_gap(inside, app)
     shipped = sorted(p for p in app.rglob('*') if p.is_file() and p.suffix not in CODE_SUFFIXES)
     for path in shipped:
         if path.resolve() not in used:

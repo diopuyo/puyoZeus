@@ -10,6 +10,10 @@
          PuyoLive.bat --list-devices
      を実行し、「映像あり 1920x1080」と出る index を device_index に書く。
      port を変える場合は OBS 側の URL も同じ番号にする。
+     機器別の色較正の保存先は "calibration_location" で選ぶ:
+         "app" (既定)   ... このフォルダの app\config\device_calibration
+         "localappdata" ... %LOCALAPPDATA%\PuyoLive\device_calibration
+     Program Files など書き込めない場所に置くときは "localappdata" にする。
 
 2. OBS 側
    - ボードのキャプチャ映像を「ソース出力」で仮想カメラに流す
@@ -28,5 +32,15 @@
    - 画面に判定が出ない: OBS の仮想カメラが開始済みか、映像がぷよぷよ画面 (1920x1080) か確認する。
    - ログと記録は output フォルダに出る。
 
-動作に必要なもの: Windows 10/11 (64bit)、Visual C++ 再頒布可能パッケージ (x64)。GPU は不要 (CPU のみで動作)。
-同梱ライブラリのライセンスは LICENSES フォルダを参照。
+動作に必要なもの: Windows 10/11 (64bit)。GPU は不要 (CPU のみで動作)。
+Visual C++ ランタイム (vcruntime140 / msvcp140 等) は python フォルダに同梱済み。
+不足の場合は起動時に [実行環境エラー] で案内が出る (公式: https://aka.ms/vs/17/release/vc_redist.x64.exe)。
+
+ライセンス・帰属表記
+  同梱ライブラリのライセンスは LICENSES フォルダを参照。
+  - 動画ファイル入力 (source=video) は OpenCV 同梱の FFmpeg 4.4.6 (LGPL-2.1-or-later、cv2\opencv_videoio_ffmpeg*.dll) を使う。
+    この DLL は差し替え可能な別ファイルのまま同梱している。対応するソース:
+      FFmpeg 4.4.6   https://ffmpeg.org/releases/ffmpeg-4.4.6.tar.xz
+      OpenCV         https://github.com/opencv/opencv-python
+  - Portions of this software are copyright (c) The FreeType Project (www.freetype.org). All rights reserved.
+  - Microsoft Visual C++ ランタイム DLL は Microsoft の再頒布可能コードとして同梱している。
