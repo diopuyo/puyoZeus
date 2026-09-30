@@ -14,7 +14,9 @@
          "app" (既定)   ... このフォルダの app\config\device_calibration
          "localappdata" ... %LOCALAPPDATA%\PuyoLive\device_calibration
      Program Files など書き込めない場所に置くときは "localappdata" にする。
-     色の行列補正 "dshow_color_correction" (任意、既定 "off" = 何も変えない):
+     色の行列補正 "dshow_color_correction" (任意。項目が無ければ "off" = 何も変えない)。
+     同梱の設定例は OBS 仮想カメラ + OBS 既定の色空間 (Rec.709) 向けに "601to709" にしてある。
+     OBS の 設定→詳細設定→色空間 を Rec.601 に変えている場合は "off" にすること:
          "off" ... 補正なし (従来どおり)
          "601to709" ... OBS 仮想カメラを OBS 既定 (Rec.709) で使うとき、Windows が 601 で
                         復号してしまう色のずれを戻す。OBS 側を Rec.601 にしている場合は使わない
