@@ -5008,3 +5008,14 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 - 出力同一の高速化 (既定ON): 応手全探索 15.7 倍 (274 呼出し、結果全文SHA不一致0)。保存記録5本の全51ファイルとリアルタイム由来3本がバイト一致。関連テスト 848 passed、新規 36 件。
 - 既定OFFの有界化を DECISIONS.md に事前登録して実走: B1 (early_exit + node 5000 + cap 256) は門通過だが zenchi 第11試合の死亡検出を1件失う。B2 (node 上限なし) は門通過・判定同一。b20 窓の最大 18.9 秒 → B2 0.62 秒 / B1 0.26 秒。**B2 を推奨、採否は判断待ち**。production_config 不変。
 - 依頼 (Codex 管理ファイル): なし。本番配線 (`--post-counter-early-exit` 等) は採否確定後。詳細 logs/multilanding_speed/RESULT.md。
+
+## 2026-09-30 配布物からゲーム画面の切り出し画像を削減 (rt / claude/realtime-packaging-20260930)
+- bundle_assets.txt: models/ui_templates をディレクトリ丸ごとから明示ファイル列挙へ。同梱は 40 → 19 枚 (score_digits 11 + match_end 2 + x_mark 6)。
+  除外: chain_count_digits 10 / ojama 6 / win_panel 1 / score_zero 2 / telop 2 / score_digits の .bak 10。
+- 注意 (測定器): packaging/audit_opens.py は Python の open() しか見ず cv2.imread を記録しない。cov_audit の ui_templates USED は
+  ランチャーの MANIFEST 照合 (全ファイル open) 由来で、実行時使用の証拠にならない。cv2.imread を記録する imread-trace で 23 枚のみと確定。
+- score_zero: 新フラグ score_zero_from_ocr (既定 OFF、env PUYO_SCORE_ZERO_FROM_OCR、配布ランチャのみ ON)。ScoreOcr の 8 桁全て 0 で判定。
+  6 窓 30,540 フレームでテンプレートとの不一致 866 (25 区間) は全て「OCR=ゼロ・テンプレート=非ゼロ」で目視上 OCR が正 (テンプレートは NCC 0.62-0.73 < 0.85 で取りこぼし)。逆方向 0。
+  認識パイプライン A/B: 確定盤面 409,188 セル差 0 (対照 A/A も 0)。
+- telop: 画像なしなら「テロップなし」。実テロップ入り 2 窓 (video_c109 30-110s / video_c14 300-360s) で確定盤面 636,636 セル差 0。ただし両窓ともテロップが盤面セルを 0 個しか被覆しない配置 (被覆する配置の実データは無く未検証)。
+- 検証道具: scripts/ab_ui_template_removal_20260930.py、成果物 D:/puyo_analyzer/packaging/ab_ui_2026-09-30/。

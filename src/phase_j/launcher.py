@@ -47,6 +47,10 @@ PIPELINE_FIXED = dict(verification_only=True, coalesce_features=True, cpu_thread
 # 継続確認は連続 3 回不合格で初めて hold (1 回で履歴・色較正を全リセットしない)。詳細は packaging/verifier_diag/FIX_RESULT.md。
 VERIFY_FAIL_STREAK = 3
 PIPELINE_FIXED['relaxed_verify'] = True
+# score_zero を ScoreOcr の「8 桁全て 0」で判定し、スコアゼロの画像テンプレート (ゲーム画面の切り出し) を配布しない
+# (user 決定 2026-09-30)。テンプレート方式との不一致は 6 窓 30,540 フレームのうち 866 フレーム (25 区間) が全て「テンプレートの取りこぼし」 (逆方向 0)、
+# 認識パイプラインの確定盤面は 116 秒窓 409,188 セルで差 0 (packaging/ab_ui_2026-09-30)。
+PIPELINE_FIXED['score_zero_from_ocr'] = True
 PIPELINE_FIXED['verify_fail_streak'] = VERIFY_FAIL_STREAK
 VIDEO_WARMUP_SEC = 1.0
 

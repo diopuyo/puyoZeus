@@ -360,7 +360,9 @@ from src.match_end_detector import MatchEndDetector
 from src.match_state import MatchState, MatchStateDetector
 from src.next_detector import NextDetector
 from src.online_hsv_calibrator import OnlineHsvCalibrator
-from src.score_zero import ScoreZeroDetector
+from src.score_zero import (
+    OcrScoreZeroDetector, ScoreZeroDetector, score_zero_from_ocr_enabled,
+)
 from src.telop_detector import TelopDetector, TelopResult
 from src.next_slide_detector import (
     NextSlideDetector,
@@ -778,6 +780,26 @@ def _apply_placement_cnn_veto(
 # ============================
 # Pipeline 本体
 # ============================
+
+
+def _build_score_zero_detector(
+    score_ocr: "ScoreOcr | None", from_ocr: bool,
+) -> "ScoreZeroDetector | OcrScoreZeroDetector | None":
+    """score_zero 判定器を作る。from_ocr=False は従来のテンプレート方式 (失敗は表示して None)。
+
+    from_ocr=True は ScoreOcr 由来。ScoreOcr が無ければ判定不能なので、黙って無効化せず
+    理由を表示して None を返す (score_zero_both は常に False になる)。
+    """
+    if not from_ocr:
+        try:
+            return ScoreZeroDetector.load_default()
+        except Exception as e:
+            print(f"[pipeline] score_zero load skipped: {e}")
+            return None
+    if score_ocr is None:
+        print("[pipeline] score_zero(OCR) unavailable: ScoreOcr not loaded -> score_zero disabled")
+        return None
+    return OcrScoreZeroDetector(score_ocr)
 
 
 class RecognitionPipeline:
@@ -2301,6 +2323,7 @@ class RecognitionPipeline:
         # 間引き時に流用する前回結果 (従来は update() 内で毎フレーム初期化していた)
         self._last_match_end_locked: bool = False
         self._last_telop_visible: bool = False
+        self._score_zero_error_count: int = 0  # score_zero 判定の例外件数 (母数は処理フレーム数)
         self._last_telop_result: "TelopResult | None" = None
         # 色→空 HSV 照合ガード (2026-07-30): _build_state_machine 呼び出し前に
         # 格納が必要 (引数として渡すため)。
@@ -3667,6 +3690,11 @@ class RecognitionPipeline:
         # (CHAIN/GRAVITY_SETTLE) が始まったら、連鎖前の履歴が混ざるため破棄する
         # (q第14試合1P 881.967秒の幻おじゃま9,9,9の根因B)。default False = bit-identical。
         enable_verification_pending_chain_expiry: bool = False,
+        # 2026-09-30: score_zero 判定を画像テンプレート (score_zero/*.png) でなく ScoreOcr の
+        # 「両サイド 8 桁全て 0」で行う (配布版でゲーム画面の切り出し画像を同梱しないため)。
+        # None = 環境変数 PUYO_SCORE_ZERO_FROM_OCR=1 の時だけ ON。default OFF = 従来の
+        # テンプレート方式のままで bit-identical (backwards compat)。
+        score_zero_from_ocr: bool | None = None,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3766,10 +3794,9 @@ class RecognitionPipeline:
         score_zero_det: ScoreZeroDetector | None = None
         match_end_det: MatchEndDetector | None = None
         telop_det: TelopDetector | None = None
-        try:
-            score_zero_det = ScoreZeroDetector.load_default()
-        except Exception as e:
-            print(f"[pipeline] score_zero load skipped: {e}")
+        score_zero_det = _build_score_zero_detector(
+            score, score_zero_from_ocr_enabled(score_zero_from_ocr),
+        )
         try:
             # match_end_ncc_threshold=None (default) は既定閾値 0.55 のまま
             # (bit-identical)。値指定時のみ上書き (2026-08-19、全消しテロップ
@@ -3784,6 +3811,8 @@ class RecognitionPipeline:
             print(f"[pipeline] match_end load skipped: {e}")
         try:
             telop_det = TelopDetector.load_default()
+            if telop_det.template_count == 0:
+                print("[pipeline] telop templates absent: telop detection disabled (no telop)")
         except Exception as e:
             print(f"[pipeline] telop load skipped: {e}")
         # Phase I.c: OnlineHsvCalibrator (動画別 HSV 自動学習).
@@ -4377,8 +4406,11 @@ class RecognitionPipeline:
             try:
                 sz = self._score_zero_detector.detect(frame)
                 score_zero_both = bool(sz.both_zero)
-            except Exception:
-                pass
+            except Exception as e:
+                # 従来は黙って False だった。挙動は同じまま、初回だけ表示し件数を残す (2026-09-30)。
+                self._score_zero_error_count += 1
+                if self._score_zero_error_count == 1:
+                    print(f"[pipeline] score_zero detect failed (counted, treated as False): {e!r}")
         match_end_locked = False
         if self._match_end_detector is not None:
             # 大 ROI 走査 (800x600) の間引き: 有効時は LARGE_ROI_THROTTLE_FRAMES に

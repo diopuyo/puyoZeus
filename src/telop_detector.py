@@ -87,6 +87,11 @@ class TelopDetector:
         self._coarse = {name: _shrink(value) for name, value in templates.items()} if self.fast else {}
         self.coarse_rejects = 0  # 予備判定で全解像度照合を省いた回数 (テンプレート単位。実測用)
 
+    @property
+    def template_count(self) -> int:
+        """読み込んだテンプレート数。0 なら detect は常に「テロップなし」を返す (配布版でテンプレート不在の状態)。"""
+        return len(self._templates)
+
     @classmethod
     def load_default(
         cls,

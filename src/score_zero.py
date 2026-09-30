@@ -17,9 +17,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
+
+if TYPE_CHECKING:  # 型注釈のみ (実行時 import しない = 既存の import 閉包を変えない)
+    from src.score_ocr import ScoreOcr
 
 # スコア領域（1920×1080 前提）
 SCORE_1P_REGION: tuple[int, int, int, int] = (890, 955, 200, 680)  # y1, y2, x1, x2
@@ -103,4 +107,48 @@ class ScoreZeroDetector:
             is_2p_zero=s2 >= self._threshold,
             score_1p=s1,
             score_2p=s2,
+        )
+
+
+# ============================
+# ScoreOcr 由来のゼロ判定 (配布版でスコアゼロ画像を同梱しないための代替、既定OFF)
+# ============================
+
+# 環境変数 PUYO_SCORE_ZERO_FROM_OCR=1 で有効 (spawn 子 process へ配布ランチャが伝える。他の PUYO_* フラグと同方式)
+FROM_OCR_ENV: str = "PUYO_SCORE_ZERO_FROM_OCR"
+ENV_ON_VALUE: str = "1"
+# ScoreOcr.read_side が返す score の「全桁 0」値 (8 桁全て読めて平均信頼度規則を満たした時のみ int で返る)
+SCORE_ZERO_VALUE: int = 0
+
+
+def score_zero_from_ocr_enabled(explicit: bool | None = None) -> bool:
+    """explicit=None は環境変数、明示指定はそれを優先 (既定 OFF = 従来のテンプレート方式と bit-identical)。"""
+    import os
+    if explicit is not None:
+        return bool(explicit)
+    return os.environ.get(FROM_OCR_ENV) == ENV_ON_VALUE
+
+
+class OcrScoreZeroDetector:
+    """ScoreOcr で読んだ両サイドのスコアが 8 桁全て 0 かどうかで判定する (画像テンプレート不要)。
+
+    ScoreZeroDetector と同じ detect(frame) -> ScoreZeroResult の口を持つ。ScoreOcr の既存の信頼度規則
+    (各桁 NCC 下限・1位2位の差・平均信頼度下限) を通った読取りだけがゼロと認められる。
+    読めない (None) フレームは「ゼロではない」側に倒す (従来のテンプレート方式が不一致時に False なのと同じ向き)。
+    ScoreZeroResult.score_1p/2p には ScoreOcr の信頼度 (0..1) を入れる。
+    """
+
+    def __init__(self, ocr: "ScoreOcr") -> None:
+        self._ocr = ocr
+
+    def detect(self, frame: np.ndarray) -> ScoreZeroResult:
+        if frame is None or frame.ndim != 3:
+            return ScoreZeroResult(False, False, 0.0, 0.0)
+        value_1p, conf_1p = self._ocr.read_side(frame, "1P")
+        value_2p, conf_2p = self._ocr.read_side(frame, "2P")
+        return ScoreZeroResult(
+            is_1p_zero=value_1p == SCORE_ZERO_VALUE,
+            is_2p_zero=value_2p == SCORE_ZERO_VALUE,
+            score_1p=float(conf_1p),
+            score_2p=float(conf_2p),
         )

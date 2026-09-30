@@ -78,7 +78,7 @@ def test_dshow_pipeline_config_matches_shipped_example(tmp_path: Path) -> None:
     # 配布だけ fast_terminal=True (決定同一を 491,928 フレームで確認済) と performance_cores=True (Windows 性能コア優先)・fast_telop=True (テロップ検出の縮小予備判定)。async_notice_queue は OFF のまま (キー無し)
     # 画面確認の緩和 (掛け算式許容+上辺免除) と連続 3 回不合格で初めて hold (packaging/verifier_diag/FIX_RESULT.md)
     assert config == dict(example, fast_terminal=True, performance_cores=True, fast_telop=True,
-                          relaxed_verify=True, verify_fail_streak=3)
+                          relaxed_verify=True, verify_fail_streak=3, score_zero_from_ocr=True)
     assert 'async_notice_queue' not in config
 
 

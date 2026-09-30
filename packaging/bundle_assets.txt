@@ -16,7 +16,33 @@ models/cnn_best.pt
 models/cnn_global_best.pt
 models/cnn_phase_b_large_v2.pt
 models/next_pair_centroid_v1.npz
-models/ui_templates
+# ゲーム画面の切り出し画像は再配布しない (user 決定 2026-09-30)。ディレクトリ丸ごとでなく実行時に読む物だけを列挙する。
+# 根拠: cv2.imread を記録した実行 (packaging/ab_ui_2026-09-30/trace.json) で読まれたのは 23 枚。うち下の 17 枚だけを同梱する。
+#   除外: chain_count_digits/ (10) ・ojama/ (6) ・win_panel/ (1) = import 閉包に読み手が無い (src.ojama_warning / src.win_panel は
+#   閉包外、ChainCountOcr は生成する呼び手が閉包内に無い)。score_digits/*.png.bak (学習時の退避) も読まれない。
+#   packaging/audit_opens.py は Python の open() しか記録せず cv2.imread を見ない。ここの判断は imread-trace を根拠にする。
+#   score_zero/ (2): 配布ランチャは score_zero_from_ocr=True で ScoreOcr 由来に置換 (テンプレートと不一致 0 件・下記 A/B)。
+#   telop_challenger* (2): 不在なら TelopDetector は「テロップなし」を返す。実データ 2 窓で確定盤面に差 0 (packaging/ab_ui_2026-09-30)。
+#   x_mark* は UiMaskMatcher が glob (x_mark*.png) で読むため、追加時はここへも足す (tests/test_bundle_asset_list.py が検知)。
+models/ui_templates/score_digits/digit_0.png
+models/ui_templates/score_digits/digit_1.png
+models/ui_templates/score_digits/digit_2.png
+models/ui_templates/score_digits/digit_3.png
+models/ui_templates/score_digits/digit_4.png
+models/ui_templates/score_digits/digit_5.png
+models/ui_templates/score_digits/digit_6.png
+models/ui_templates/score_digits/digit_7.png
+models/ui_templates/score_digits/digit_8.png
+models/ui_templates/score_digits/digit_9.png
+models/ui_templates/score_digits/formula_mult.png
+models/ui_templates/match_end_batan.png
+models/ui_templates/match_end_yatta.png
+models/ui_templates/x_mark.png
+models/ui_templates/x_mark_halo.png
+models/ui_templates/x_mark_video01.png
+models/ui_templates/x_mark_video01_b.png
+models/ui_templates/x_mark_video01_c.png
+models/ui_templates/x_mark_video02.png
 models/exchange_event_v1
 models/exchange_event_v2
 models/exchange_event_v3
