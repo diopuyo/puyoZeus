@@ -65,7 +65,10 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            prefire_stage_timeout: bool = False, prefire_stage_timeout_only: bool = False,
            prefire_origin_guard: bool = False, post_counter_death_bound: bool = False,
            single_death_proof_guard: bool = False,
-           single_death_proof_negative_only: bool = False) -> dict:
+           single_death_proof_negative_only: bool = False,
+           post_counter_early_exit: bool = False,
+           multilanding_node_limit: int | None = None,
+           hidden_scenario_cap: int | None = None) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -100,7 +103,9 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         prefire_origin_guard=prefire_origin_guard, prefire_match_gate=match_gate,
         post_counter_death_bound=post_counter_death_bound,
         single_death_proof_guard=single_death_proof_guard,
-        single_death_proof_negative_only=single_death_proof_negative_only)
+        single_death_proof_negative_only=single_death_proof_negative_only,
+        post_counter_early_exit=post_counter_early_exit,
+        multilanding_node_limit=multilanding_node_limit, hidden_scenario_cap=hidden_scenario_cap)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     for item in stream:

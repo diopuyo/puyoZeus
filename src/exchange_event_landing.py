@@ -29,6 +29,16 @@ RESPONSE_BEAM_WIDTH = 2 * BOARD_COLS + 2 * (BOARD_COLS - 1)
 # 端数列の最悪配置を死の確定根拠にせず、最低でも丸1段の超過を要求する。
 DEATH_OVERFLOW_ROWS = 1
 PUYO_COLORS = (1, 2, 3, 4, 5)
+# 出力同一の高速版グループ検出を近未来探索へ使う (2026-09-30)。False で従来の共有 simulator。
+EXACT_FAST_GROUPS = True
+# 連鎖しない子盤面の連結検出を省く出力同一の高速展開 (src/exchange_fast_expand.py)。False で従来経路。
+EXACT_FAST_EXPAND = True
+# 仮想着弾評価 (M0+D列+モデル) は入力が同じなら結果も同じ純関数。候補列挙で同じ入力が繰り返されるため
+# 結果を再利用する (出力同一)。False で従来どおり毎回計算。
+EXACT_GFE_CACHE = True
+GFE_CACHE_SIZE = 4096
+_FUTURE_SIMULATOR = ChainSimulator(exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+                                   fast_groups=True)
 
 
 def logit_mean(left: float, right: float) -> float:
@@ -63,7 +73,9 @@ def future_send(raw: bytes, shape: tuple, dtype: str, queue: tuple,
     level = hands - NEAR_FUTURE_KNOWN_HAND_SLOTS
     result = near_future_fire_power(board, queue[:2], queue[2:], elapsed_sec=elapsed,
                                     k_levels=(level,), resolve_before_death=True,
-                                    beam_width=RESPONSE_BEAM_WIDTH)
+                                    beam_width=RESPONSE_BEAM_WIDTH,
+                                    simulator=_FUTURE_SIMULATOR if EXACT_FAST_GROUPS else None,
+                                    fast_expand=EXACT_FAST_EXPAND)
     return result.values[level].raw
 
 
@@ -95,6 +107,8 @@ class ExchangeLandingProjection:
         from src.exchange_event_hands import LandingHandsObservation
         self.hands_observation = LandingHandsObservation() if hands_spec else None
         self.identity: tuple | None = None
+        self.gfe_cache: dict = {}
+        self.multilanding_node_limit: int | None = None  # None = 従来の MAX_SEARCH_NODES
         self.key: tuple | None = None
         self.drops = (0, 0)
         self.counts = [0, 0]
@@ -108,7 +122,8 @@ class ExchangeLandingProjection:
         self.rejected_boards: list[dict] = []
         self.evaluated_drops: tuple = ()
         self.busy = (False, False)
-        self.simulator = ChainSimulator(exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED)
+        self.simulator = ChainSimulator(exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+                                        fast_groups=EXACT_FAST_GROUPS)
 
     def update(self, overlay: Any, result: Any, snapshot: Any, t_sec: float) -> None:
         """両側の通知とSTABLE履歴の更新後、確定送り量が変われば再評価する。"""
@@ -354,9 +369,30 @@ class ExchangeLandingProjection:
         virtual = tuple(land_pending_ojama_onto_board(b, boards[1-i], incoming[i])[0]
                         for i, b in enumerate(boards))
         elapsed = t_sec - overlay._start
+        key = self._gfe_key(virtual, latest, elapsed, snapshot) if EXACT_GFE_CACHE else None
+        if key is not None and key in self.gfe_cache:
+            return self.gfe_cache[key]
         m0 = overlay._m0(np.stack([b._grid for b in virtual]), np.stack([s.queue for s in latest]))
         event = overlay._build_static(virtual, snapshot, elapsed, m0)
-        return evaluate_exchange_event(event, overlay.tracker.models)
+        value = evaluate_exchange_event(event, overlay.tracker.models)
+        if key is not None:
+            if len(self.gfe_cache) >= GFE_CACHE_SIZE:
+                self.gfe_cache.pop(next(iter(self.gfe_cache)))
+            self.gfe_cache[key] = value
+        return value
+
+    @staticmethod
+    def _gfe_key(virtual: tuple, latest: tuple, elapsed: float, snapshot: Any) -> tuple | None:
+        """仮想着弾評価の入力そのもの (盤面・NEXT・経過秒・D列に使う勘定)。同じ入力なら結果は同じ。
+
+        勘定の属性が無い入力 (テスト用の代役など) では入力の全体を把握できないので None (再利用しない)。
+        """
+        try:
+            ledger = (snapshot.net_balance_capped, snapshot.forecast_p1)
+        except AttributeError:
+            return None
+        return (virtual[0]._grid.tobytes(), virtual[1]._grid.tobytes(),
+                np.asarray(latest[0].queue).tobytes(), np.asarray(latest[1].queue).tobytes(), elapsed, *ledger)
 
     def _evaluate(self, overlay: Any, snapshot: Any, latest: tuple, incoming: list,
                   hands: tuple, base: dict, t_sec: float) -> dict:

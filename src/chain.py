@@ -41,6 +41,9 @@ NEIGHBOR_DELTAS: tuple[tuple[int, int], ...] = (
     (0, 1),   # 右
 )
 
+# グループを作らないセル値 (空・おじゃま・不明)
+_NON_GROUP_COLORS: frozenset[int] = frozenset({COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN})
+
 # Phase G: Monte Carlo サンプル数のデフォルト (確率版 simulate)
 PROBABILISTIC_DEFAULT_SAMPLES: int = 10
 # mean_score 算出時の消去数→スコア換算の除数 (簡易代理)
@@ -148,7 +151,11 @@ class ChainSimulator:
         self,
         cache_enabled: bool = True,
         exclude_hidden_row_from_pop: bool = False,
+        fast_groups: bool = False,
     ) -> None:
+        # 出力同一の高速版グループ検出を使う (2026-09-30、既定 False = 従来経路)。
+        # 全結果が `_find_groups_reference` と一致することを tests/test_chain_fast_groups.py で確認。
+        self._fast_groups = fast_groups
         # bytes キー (board._grid.tobytes()) → ChainResult のメモ化
         self._cache: dict[bytes, "ChainResult"] = {}
         self._cache_enabled = cache_enabled
@@ -193,6 +200,8 @@ class ChainSimulator:
 
     def _simulate_uncached(self, board: Board) -> ChainResult:
         """キャッシュ無し本体. simulate() から呼び出される。"""
+        if self._fast_groups:
+            return self._simulate_fast(board)
         work_board = board.copy()
         steps: list[ChainStep] = []
         total_erased = 0
@@ -231,6 +240,60 @@ class ChainSimulator:
             participating_cells=total_erased,
         )
 
+    def _simulate_fast(self, board: Board) -> ChainResult:
+        """`_simulate_uncached` と同じ結果 (消去・重力を配列操作にした高速版、fast_groups 時のみ)。"""
+        work_board = board.copy()
+        steps: list[ChainStep] = []
+        total_erased = total_ojama = 0
+        while True:
+            erasable = self._erasable_fast(work_board)
+            if not erasable:
+                break
+            board_before = work_board.copy()
+            erased_count = sum(g.size for g in erasable)
+            erased_ojama = self._erase_fast(work_board, erasable)
+            self._gravity_fast(work_board)
+            steps.append(ChainStep(
+                chain_index=len(steps) + 1, erased_groups=erasable, erased_ojama=erased_ojama,
+                erased_count=erased_count, board_before=board_before, board_after=work_board.copy(),
+            ))
+            total_erased += erased_count
+            total_ojama += erased_ojama
+        return ChainResult(
+            steps=steps, chain_count=len(steps), total_erased=total_erased, total_ojama=total_ojama,
+            final_board=work_board, participating_cells=total_erased,
+        )
+
+    def _erasable_fast(self, board: Board) -> list[PuyoGroup]:
+        """消去可能なグループ (size >= MIN_ERASE_COUNT) だけを、`find_erasable_groups` と同じ順序で返す。"""
+        return [g for g in self._find_groups_fast(board) if g.size >= MIN_ERASE_COUNT]
+
+    @staticmethod
+    def _erase_fast(board: Board, groups: list[PuyoGroup]) -> int:
+        """`_erase_groups` と同じ (配列へ直接書く)。消去したおじゃまの数を返す。"""
+        grid = board._grid
+        ojama: set[tuple[int, int]] = set()
+        for group in groups:
+            for row, col in group.cells:
+                grid[row, col] = COLOR_EMPTY
+            ojama |= group.ojama_adjacent
+        for row, col in ojama:
+            grid[row, col] = COLOR_EMPTY
+        return len(ojama)
+
+    def _gravity_fast(self, board: Board) -> None:
+        """`apply_gravity` と同じ (UNKNOWN があれば従来の分割処理へ戻す)。"""
+        grid = board._grid
+        if (grid == COLOR_UNKNOWN).any():
+            self.apply_gravity(board)
+            return
+        for col in range(BOARD_COLS):
+            column = grid[:, col]
+            filled = column[column != COLOR_EMPTY]
+            if 0 < len(filled) < BOARD_ROWS:
+                column[:] = COLOR_EMPTY
+                column[BOARD_ROWS - len(filled):] = filled
+
     def find_groups(self, board: Board) -> list[PuyoGroup]:
         """
         盤面上の全グループを検出する (サイズ問わず)。
@@ -249,6 +312,54 @@ class ChainSimulator:
         Returns:
             list[PuyoGroup]: 検出した全グループのリスト。
         """
+        if self._fast_groups:
+            return self._find_groups_fast(board)
+        return self._find_groups_reference(board)
+
+    def _find_groups_fast(self, board: Board) -> list[PuyoGroup]:
+        """`_find_groups_reference` と同じ集合・同じ順序を返す高速版 (セル参照を list 化)。
+
+        検出順 (行優先の起点順) と各グループの cells / ojama_adjacent は従来と同一。
+        """
+        grid = board._grid.tolist()
+        hidden = HIDDEN_ROWS if self._exclude_hidden_row_from_pop else 0
+        visited = [[False] * BOARD_COLS for _ in range(BOARD_ROWS)]
+        groups: list[PuyoGroup] = []
+        for row in range(BOARD_ROWS):
+            line = grid[row]
+            for col in range(BOARD_COLS):
+                color = line[col]
+                if color in _NON_GROUP_COLORS or row < hidden or visited[row][col]:
+                    continue
+                groups.append(self._fill_fast(grid, row, col, color, visited, hidden))
+        return groups
+
+    @staticmethod
+    def _fill_fast(grid: list, start_row: int, start_col: int, color: int,
+                   visited: list, hidden: int) -> PuyoGroup:
+        """`_flood_fill` と同じ規則の BFS (盤面は list の list)。"""
+        cells: set[tuple[int, int]] = set()
+        ojama_adjacent: set[tuple[int, int]] = set()
+        queue: deque[tuple[int, int]] = deque([(start_row, start_col)])
+        visited[start_row][start_col] = True
+        while queue:
+            row, col = queue.popleft()
+            cells.add((row, col))
+            for dr, dc in NEIGHBOR_DELTAS:
+                nr, nc = row + dr, col + dc
+                if not (0 <= nr < BOARD_ROWS and 0 <= nc < BOARD_COLS):
+                    continue
+                neighbor = grid[nr][nc]
+                if neighbor == color and not visited[nr][nc] and nr >= hidden:
+                    visited[nr][nc] = True
+                    queue.append((nr, nc))
+                elif neighbor == COLOR_OJAMA:
+                    ojama_adjacent.add((nr, nc))
+        return PuyoGroup(color=color, cells=frozenset(cells), size=len(cells),
+                         ojama_adjacent=frozenset(ojama_adjacent))
+
+    def _find_groups_reference(self, board: Board) -> list[PuyoGroup]:
+        """従来実装 (基準)。`find_groups` の既定経路であり、高速版の検証基準でもある。"""
         visited: list[list[bool]] = [
             [False] * BOARD_COLS for _ in range(BOARD_ROWS)
         ]

@@ -15,7 +15,10 @@ CACHE_LIMIT = 2048
 class PostCounterDeathBound:
     """盤面確率は変更せず、全候補の死亡証明と所要時間だけを保存する。"""
 
-    def __init__(self) -> None:
+    def __init__(self, early_exit: bool = False) -> None:
+        # 既定OFF (2026-09-30): 全候補が死ぬ場合だけ「死亡」と判定するので、最初に死なない候補が
+        # 見つかった時点で判定は確定する。ON では以降の候補の証明を省く (判定は同一、監査の proofs だけ短くなる)。
+        self.early_exit = early_exit
         self.colors = [MatchColorEvidence(), MatchColorEvidence()]
         self.cache: dict = {}
         self.board_cache: dict = {}
@@ -86,6 +89,8 @@ class PostCounterDeathBound:
                     self.board_cache.pop(next(iter(self.board_cache)))
                 self.board_cache[key] = prove_post_counter(board, queue, incoming, hands, elapsed, palette)
             proofs.append(self.board_cache[key])
+            if self.early_exit and not proofs[-1]['dead']:
+                break
         return proofs
 
     def evaluate(self, projection: Any, overlay: Any, latest: tuple, hands: tuple,

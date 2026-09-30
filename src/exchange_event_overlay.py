@@ -79,7 +79,10 @@ class ExchangeEventOverlay:
                  prefire_origin_guard: bool = False, prefire_match_gate: Any = None,
                  post_counter_death_bound: bool = False,
                  single_death_proof_guard: bool = False,
-                 single_death_proof_negative_only: bool = False) -> None:
+                 single_death_proof_negative_only: bool = False,
+                 post_counter_early_exit: bool = False,
+                 multilanding_node_limit: int | None = None,
+                 hidden_scenario_cap: int | None = None) -> None:
         self._initialize_layers(models, live_count, e16, count_sync, death_guard,
                                 evaluation_layers, completion_check, confirmed_death_hold)
         self._build_static, self._signal_factory = build_static, signal_factory
@@ -98,12 +101,22 @@ class ExchangeEventOverlay:
             single_death_proof_guard=single_death_proof_guard,
             single_death_proof_negative_only=single_death_proof_negative_only)
         self._initialize_post_counter(post_counter_death_bound,
-            multi_landing_death and death_pending_ledger and confirmed_death_hold)
+            multi_landing_death and death_pending_ledger and confirmed_death_hold, post_counter_early_exit)
         self._initialize_prediction_guards(death_candidate_guard, death_formula_guard,
             midchain_completion, hidden_row_death, midchain_single_observation)
         self._initialize_prefire(prefire_candidates, prefire_snapshot, hidden_row_belief,
                                  prefire_stage_timeout, prefire_stage_timeout_only)
         self._initialize_origin_guard(prefire_origin_guard, prefire_snapshot, prefire_match_gate)
+        self._initialize_latency_bounds(multilanding_node_limit, hidden_scenario_cap)
+
+    def _initialize_latency_bounds(self, node_limit: int | None, scenario_cap: int | None) -> None:
+        """遅延対策の決定的な予算 (既定 None = 従来どおり無制限)。壁時計ではなく件数で打ち切る。"""
+        self._landing_projection.multilanding_node_limit = node_limit
+        if scenario_cap is not None:
+            belief = getattr(self.tracker, 'hidden_row_belief', None)
+            if belief is None:
+                raise ValueError('隠し段候補の上限には--hidden-row-beliefが必要')
+            belief.scenario_cap = scenario_cap
 
     def _initialize_layers(self, models: ExchangeModels, live_count: bool, e16: bool,
                            count_sync: bool, death_guard: bool, evaluation_layers: bool,
@@ -132,14 +145,15 @@ class ExchangeEventOverlay:
         self._last_formula: list[float | None] = [None, None]
         self._last_displayed: list[float | None] = [None, None]
 
-    def _initialize_post_counter(self, enabled: bool, production_ready: bool) -> None:
+    def _initialize_post_counter(self, enabled: bool, production_ready: bool,
+                                 early_exit: bool = False) -> None:
         """E35の打ち返し後死亡上限を、本番構成の前提が揃うときだけ有効にする。"""
         self._landing_projection.post_counter_bound = None
         if enabled:
             if not production_ready:
                 raise ValueError('E35には複数着弾・死亡台帳・死亡保持（本番構成）が必要')
             from src.exchange_post_counter_bound import PostCounterDeathBound
-            self._landing_projection.post_counter_bound = PostCounterDeathBound()
+            self._landing_projection.post_counter_bound = PostCounterDeathBound(early_exit=early_exit)
 
     def _initialize_origin_guard(self, enabled: bool, prefire_snapshot: bool,
                                  match_gate: Any) -> None:
