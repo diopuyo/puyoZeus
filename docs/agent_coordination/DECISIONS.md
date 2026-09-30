@@ -3023,3 +3023,14 @@ G3 の合格条件6項目の結果、残っている実害3件 (列まるごと�
 - 診断: 実際に撃つ側を hazard が当てたのは 94/181 (52%)、撃った側の枝の向きの一致は 65/125 (52%)。予測層の所要は平均 54ms / P95 291ms (構成B) で、予算 10ms を超える。
 - 詳細: `wt_prefire/logs/prefire_prediction/PHASE2.md`。フラグは既定 OFF のまま。
 - 更新 (同日 user「とりあえず公開で進めて」「もどして」): puyoZeus を PUBLIC に戻した。履歴のゲーム画面PNG消去とテンプレ置換は宿題として継続。
+
+## 2026-10-01 事前登録: NEXT 意味ずれの学習側補正 (補正queueで再学習 + 提供側整列 `--exchange-event-queue-align`、既定OFF) — 再学習の指標・再生の採点を見る前に固定
+- 作業場所: worktree `D:/puyo_analyzer/wt_nextfix`、branch `claude/next-shift-train-fix-20261001` (exev 70969f8 起点)。背景は exev `logs/next_shift/RESULT.md` (提供側だけの整列 R3/R1/R3L2 は旧モデルでは悪化)。
+- 補正queue (T方式、既存148動画の原票から作る。再収集なし): 行 r の (P_k, P_{k+1}) = 次の2回のきれいな設置 (盤面差分が色ぷよちょうど2個) の組を、**時刻 t 以前に NEXT/DNEXT 枠で読めた組 (今の行+直前2行) の中から**選ぶ。選べない枠は因果規則 (連鎖・おじゃま・複数手の後で直前行から1手繰り上がっていれば (直前 next, 今の next)、それ以外は元の読み)。出力の色は必ず t 以前の表示の読み。打ち切り再生 (表示の読みを r まで・盤面を r+2 までに切る) で全体計算との不一致 0/867,165。
+- 再学習 (元と同じ行・fold・seed・パラメータ。差し替えは queue 列だけ): M0 = T03 入れ子CV (3seed×5外側×6本) + 最終 (train_exchange_event_m0 と同じ) / G_fe = E1 手順 (seed0 外側OOF) / S1′・S3′ (+light) = E15 v3 手順。保存先 `models/exchange_event_v5` (S′) + `models/exchange_event_v5_common` (G_fe・M0、manifest の shared_directory で参照。キーの無い既存 manifest は従来どおり)。
+- 構成 N (採点対象はこれ1つ): 現本番 (run_e36b.options = e36b_on と同じ) + `queue_alignment=True` (提供側 R3、exev 診断 Frozen(2) と乱数列 108,040 step で出力一致) + モデル v5。
+- 台の確認: R0 (v3・整列なし・同じ再生器) が e36b_on と display/events バイト一致すること。一致しなければ採点しない。
+- 門 (全部満たせば合格): q log loss ≤ .507567 + 5e-7 (6,526行) / zenchi hits ≥ 7,671 (8,333中) / 誤った負け確定 0/37 / 3:00場面 ≤ 2766.0 秒 / q 第14試合の誤確定 0 / **かつ** 改善: q log loss ≤ .505567 (−.002) または q AUC ≥ .78525 (+.01)。
+- リーク監視: S′ の148動画CVで AUC がオラクル上限 .722 を超えたら (v3 の既存規則) 採用前に停止して監査する。
+- 副次 (合否に含めない・報告する): 148動画の動画単位CV (元と同じ行・fold) で新旧の S1′/S3′(+light)・G_fe・M0(A) の AUC/LL、構成 N_noalign (v5・整列なし) の再生、状況別 (通常/連鎖後/おじゃま後) の queue 一致率。
+- 合格時: user の事前承認 (9/30) に従い production_config へ登録 (`--exchange-event-model-dir models/exchange_event_v5` + `--exchange-event-queue-align`、採用日+根拠)。不合格なら登録せず理由を報告する。
