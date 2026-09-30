@@ -18,6 +18,9 @@ from .live_eval_recovery import commit_history, failure_kind
 
 FAILURE_LIMIT = 3
 REPLY_TIMEOUT_SEC = 30.0
+# 再起動時の試合journal再実行は件数に比例して時間がかかる。1通知あたり評価P95 (B18実測
+# 25.9ms) の約2倍を足し、長い試合の再実行で応答期限を超えて再起動を繰り返さない。
+REPLAY_TIMEOUT_PER_COMMAND_SEC = 0.05
 STARTUP_TIMEOUT_SEC = 120.0
 JOIN_TIMEOUT_SEC = 2.0
 NOTICE_PREFIX_SIZE = 4
@@ -165,7 +168,9 @@ class SupervisedOverlay:
         request = dict(request, request_id=self.request_id)
         try:
             self.connection.send(request)
-            reply = self.receive(request_id=self.request_id, operation=request['op'])
+            replay = len(request.get('commands', ())) if request.get('reset') else 0
+            reply = self.receive(timeout=REPLY_TIMEOUT_SEC+replay*REPLAY_TIMEOUT_PER_COMMAND_SEC,
+                                 request_id=self.request_id, operation=request['op'])
         except (OSError, EOFError, TimeoutError) as error:
             reply = dict(kind='error', exception_type=type(error).__name__, message=str(error),
                          stack=traceback.format_exc(), pid=self.process.pid)
