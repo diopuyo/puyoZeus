@@ -2939,3 +2939,8 @@ G3 の合格条件6項目の結果、残っている実害3件 (列まるごと�
 - user「問題なし」: 認識CNN・撃ち合い評価モデル等の学習済みモデルを配布物に同梱して再配布してよい。
 - 配布ブランチ: claude/realtime-packaging-20260930 (計画書 docs/PHASE_J_PACKAGING_PLAN_2026-09-30.md)。ONNX化は未決 (認識結果が変わりうるため設計合意後)。
 - 追記 (同日 user): ONNX化は「品質変化がなければok」。門は事前に固定する: 4動画各1,000フレーム以上でCNN全セルのargmaxがtorch版と完全一致 + 同区間の盤面記録・勝率・イベント記録の行単位差分0件。1件でも差が出たら不採用とし、torch同梱を維持する。
+
+## 2026-09-30 事前登録: `--verification-pending-chain-expiry` 全長ゲート (実走前に固定)
+- 構成: 現本番 (R1b + `--next-recolor-pair-guard` + E35 + D5 + D5b) + 本フラグ。
+- 門 (現本番 = logs/c65_guard/e36b_on/SUMMARY.json より悪化しないこと): q log loss ≤ .507567 + 5e-7 / zenchi hits ≥ 7,671 (8,333中) / 誤った負け確定 0 / 3:00場面 ≤ 2766.0秒 / q第14試合の誤確定 0。
+- 影子測定 (logs/pending_expiry/RESULT.md): 4動画で書込セル悪化0・改善73。
