@@ -1,0 +1,57 @@
+{
+ "version": "prefire_hazard_v1",
+ "file": "hazard.joblib",
+ "sha256": "8fdcd17f5663fbd3be3f867699f7f11b87257cb10eb4168b10edc8bafeb533f6",
+ "columns": [
+  "own_send1",
+  "own_send2",
+  "own_chain1",
+  "own_chain2",
+  "own_can1",
+  "own_can2",
+  "own_forced",
+  "opp_send1",
+  "opp_send2",
+  "opp_can1",
+  "opp_forced",
+  "own_occupancy",
+  "opp_occupancy",
+  "own_ojama",
+  "opp_ojama",
+  "own_death_col",
+  "opp_death_col",
+  "elapsed"
+ ],
+ "horizon_placements": 4,
+ "fire_match_fraction": 0.5,
+ "params": {
+  "max_iter": 300,
+  "learning_rate": 0.05,
+  "max_leaf_nodes": 31,
+  "min_samples_leaf": 200,
+  "l2_regularization": 1.0,
+  "random_state": 20260930
+ },
+ "training": "148動画 (boards_lean_phase_l_2026-08-11)、撃たないと窒息の行は除外",
+ "cv": {
+  "hgb": {
+   "auc": 0.9404068034439318,
+   "log_loss": 0.0287840749435854,
+   "brier": 0.0066677966049330205,
+   "ece": 0.00033124792833856526
+  },
+  "logistic": {
+   "auc": 0.9071449944211568,
+   "log_loss": 0.033294029219156224,
+   "brier": 0.006893714147072553,
+   "ece": 8.857248460191493e-05
+  },
+  "constant": {
+   "auc": 0.4848198711581546,
+   "log_loss": 0.042933552225907785,
+   "brier": 0.007194481748984845,
+   "ece": 6.929339281354016e-07
+  }
+ },
+ "production_enabled": false
+}

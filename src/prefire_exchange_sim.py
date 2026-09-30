@@ -53,6 +53,7 @@ class SideFireOptions:
     best2: FireOption | None
     forced: bool
     queue_known: bool
+    board_stable: bool = True
 
     def best(self) -> FireOption | None:
         """得点最大の発火 (同点なら早い手)。"""
@@ -61,6 +62,7 @@ class SideFireOptions:
 
 
 NO_OPTIONS = SideFireOptions(None, None, False, False)
+UNSTABLE_BOARD = SideFireOptions(None, None, False, True, board_stable=False)
 
 
 def queue_valid(queue: tuple[int, ...]) -> bool:
@@ -93,12 +95,13 @@ def _as_option(hand: int, placement) -> FireOption:
                       placement.placed_board._grid.astype(np.int8).tobytes())
 
 
-def _split(placements: list) -> tuple[list, list]:
-    """生き残る発火と、生き残る非発火に分ける。発火は連鎖後、非発火は設置直後で窒息を判定する。"""
+def _split(placements: list) -> tuple[list, list, bool]:
+    """生き残る発火・生き残る非発火・非発火の配置が1つでもあるか。発火は連鎖後、非発火は設置直後で窒息を判定する。"""
     fires = [p for p in placements if p.chain_result.chain_count > 0
              and not _dead(p.chain_result.final_board._grid)]
-    quiet = [p for p in placements if p.chain_result.chain_count == 0 and not _dead(p.placed_board._grid)]
-    return fires, quiet
+    quiet_any = [p for p in placements if p.chain_result.chain_count == 0]
+    quiet = [p for p in quiet_any if not _dead(p.placed_board._grid)]
+    return fires, quiet, bool(quiet_any)
 
 
 @lru_cache(maxsize=CACHE_SIZE)
@@ -107,15 +110,22 @@ def fire_options(raw: bytes, queue: tuple[int, ...]) -> SideFireOptions:
     if not queue_valid(queue):
         return NO_OPTIONS
     first, second = (int(queue[0]), int(queue[1])), (int(queue[2]), int(queue[3]))
-    fires1, quiet1 = _split(_placements(_board(raw), first))
+    board = _board(raw)
+    if _dead(board._grid):
+        return UNSTABLE_BOARD   # 置く前から窒息セルが埋まっている盤面 (誤読・終局) は探索しない
+    if native.simulate_chain(board, exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED).chain_count > 0:
+        return UNSTABLE_BOARD   # 置く前から消える群がある盤面は STABLE ではない (誤読・連鎖途中)。探索しない
+    fires1, quiet1, has_quiet = _split(_placements(board, first))
     best1 = max(fires1, key=lambda p: p.chain_result.exact_score, default=None)
     best2 = None
     for placed in quiet1:
-        fires2, _ = _split(_placements(placed.placed_board, second))
+        fires2, _, _ = _split(_placements(placed.placed_board, second))
         top = max(fires2, key=lambda p: p.chain_result.exact_score, default=None)
         if top is not None and (best2 is None or top.chain_result.exact_score > best2.chain_result.exact_score):
             best2 = top
-    forced = bool(fires1) and not quiet1   # 撃たないと窒息 = 生き残る非発火配置がない (user 規則)
+    # 撃たないと窒息 (user 規則) = 撃たない置き方はあるが全部窒息し、生き残る発火がある。
+    # どこに置いても消える盤面は「選んで撃つ」ではないので含めない。
+    forced = bool(fires1) and has_quiet and not quiet1
     return SideFireOptions(_as_option(1, best1) if best1 is not None else None,
                            _as_option(2, best2) if best2 is not None else None, forced, True)
 

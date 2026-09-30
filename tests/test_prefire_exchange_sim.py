@@ -46,11 +46,12 @@ def test_second_hand_fire_uses_dnext() -> None:
 
 
 def test_forced_when_every_quiet_placement_dies() -> None:
-    """3列目以外は隠し段まで埋まり、3列目に赤3個。赤ペアは3列目に縦置きしかできず、置けば可視4個で消える。"""
+    """3列目以外は隠し段まで埋まり、3列目に赤3個。赤青ペアは3列目に縦置きしかできない。
+    赤を下にすれば可視4個で消えて生き残り、青を下にすれば消えずに窒息する (= 撃たないと窒息)。"""
     grid = np.full((BOARD_ROWS, BOARD_COLS), COLOR_OJAMA, dtype=np.int8)
     grid[0:2, 2] = 0
     grid[2:5, 2] = RED
-    options = sim.fire_options(raw(grid), (RED, RED, BLUE, BLUE))
+    options = sim.fire_options(raw(grid), (RED, BLUE, BLUE, BLUE))
     assert options.best1 is not None
     assert options.forced
 
@@ -69,3 +70,30 @@ def test_fire_options_is_pure_and_cached() -> None:
     first = sim.fire_options(raw(grid), (RED, RED, BLUE, GREEN))
     assert np.array_equal(grid, three_reds())          # 入力を破壊しない
     assert sim.fire_options(raw(grid), (RED, RED, BLUE, GREEN)) is first
+
+
+def test_board_that_already_pops_is_not_searched() -> None:
+    """置く前から4個つながっている盤面 (誤読・連鎖途中) は、どの配置も「発火」に見えるので探索しない。"""
+    grid = empty()
+    grid[9:13, 0] = RED
+    options = sim.fire_options(raw(grid), (BLUE, GREEN, BLUE, GREEN))
+    assert options == sim.UNSTABLE_BOARD and options.best() is None and not options.forced
+
+
+def test_already_dead_board_is_not_forced() -> None:
+    """窒息セルが既に埋まった盤面では、どの非発火配置も「窒息」に見える。撃たないと窒息とは言えないので探索しない。"""
+    grid = three_reds()
+    grid[1:13, 2] = [BLUE if r % 2 else GREEN for r in range(1, 13)]   # 縦に交互 (消える群は作らない)
+    options = sim.fire_options(raw(grid), (RED, RED, BLUE, GREEN))
+    assert options == sim.UNSTABLE_BOARD and not options.forced
+
+
+def test_every_placement_pops_is_not_forced() -> None:
+    """どこに置いても消える (選択ではない) 盤面は「撃たないと窒息」ではない。"""
+    grid = empty()
+    grid[12, 1:4] = RED
+    grid[10:13, 5] = RED
+    grid[10:12, 0] = RED
+    grid[11:13, 4] = BLUE
+    options = sim.fire_options(raw(grid), (RED, RED, BLUE, GREEN))
+    assert options.best1 is not None and not options.forced
