@@ -30,7 +30,7 @@ def fake_overlay(source: str = 'G_fe', probability: float = 0.4, current=None) -
 @pytest.fixture
 def fixed_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     """S3 の評価を固定値にして、混合と状態管理だけを検査する (1P が撃てば .9、2P が撃てば .1)。"""
-    monkeypatch.setattr(layer_module, 'branch_value', lambda overlay, latest, a, option, elapsed: .9 if a == 0 else .1)
+    monkeypatch.setattr(layer_module, 'branch_value', lambda overlay, latest, a, option, elapsed, *rest: .9 if a == 0 else .1)
 
 
 def test_mix_without_branches_is_identity() -> None:

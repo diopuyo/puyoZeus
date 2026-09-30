@@ -170,3 +170,49 @@ def hazard_features(own: SideFireOptions, opp: SideFireOptions, own_grid: np.nda
 def effective_rate(elapsed_sec: float) -> int:
     """おじゃま1個あたりの得点 (マージンタイム込み)。応手量を得点へ戻すときに使う。"""
     return int(compute_effective_rate(elapsed_sec))
+
+
+COUNTER_ROLLOUTS = 8          # 受け側の応手を見積もる未来ツモの標本数 (NEXT/NEXT2 より先は未知)
+COUNTER_BEAM_WIDTH = 8        # 応手探索のビーム幅 (既存の近未来火力 NEAR_FUTURE_BEAM_WIDTH と同じ)
+MAX_COUNTER_HANDS = 16        # 応手探索の深さ上限 (最大級の連鎖演出でも着弾までに置ける手数の上限)
+
+
+def _rollout_pairs(rng: np.random.Generator, known: tuple[int, ...], hands: int,
+                   colors: tuple[int, ...]) -> list[tuple[int, int]]:
+    """既知の NEXT/NEXT2 の後ろへ、試合で見えた色から等確率の仮ツモを足す (1標本分)。"""
+    pairs = [(int(known[0]), int(known[1])), (int(known[2]), int(known[3]))][:hands]
+    while len(pairs) < hands:
+        pairs.append((int(rng.choice(colors)), int(rng.choice(colors))))
+    return pairs
+
+
+def counter_scores(raw: bytes, queue: tuple[int, ...], hands: int, colors: tuple[int, ...],
+                   seed: int) -> np.ndarray:
+    """受け側が hands 手以内に撃てる最大得点を、未来ツモの標本ごとに返す (最善応手・割り引きなし)。
+
+    未知のツモは人のミスではなく運なので標本で扱う (user 決定 9/30: 探索の不確かさだけを扱う)。
+    NEXT が未読・盤面が不正なら 0 点 (応手なしの欠測、楽観で埋めない)。seed は盤面から決まる (再現可能)。
+    """
+    if not queue_valid(queue) or not colors or fire_options(raw, queue) is UNSTABLE_BOARD:
+        return np.zeros(COUNTER_ROLLOUTS)
+    board, depth = _board(raw), int(min(max(1, hands), MAX_COUNTER_HANDS))
+    rng = np.random.default_rng(seed)
+    out = np.zeros(COUNTER_ROLLOUTS)
+    for i in range(COUNTER_ROLLOUTS):
+        result = native.beam_search(board, _rollout_pairs(rng, queue, depth, colors), COUNTER_BEAM_WIDTH,
+                                    exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED, use_exact_score=True)
+        out[i] = float(result.best_score)
+    return out
+
+
+def seen_colors(grids: list[np.ndarray], queues: list[tuple[int, ...]]) -> tuple[int, ...]:
+    """時刻 t までに盤面と NEXT で見えた色 (試合は4色、memory reference_four_colors_per_match)。"""
+    values = {int(v) for g in grids for v in np.unique(g)} | {int(v) for q in queues for v in q}
+    return tuple(sorted(v for v in values if v in PLAYABLE_COLORS))
+
+
+def stable_seed(*parts: bytes | tuple | int) -> int:
+    """盤面・NEXT・手数から決まる乱数の種 (同じ入力なら同じ標本)。"""
+    import hashlib
+    digest = hashlib.sha256(repr(parts).encode()).digest()
+    return int.from_bytes(digest[:8], 'little')

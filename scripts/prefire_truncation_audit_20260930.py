@@ -51,17 +51,18 @@ def compare_prefix(full: Path, cut: Path, cut_sec: float) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cut', type=float, required=True)
+    parser.add_argument('--variant', default='on', choices=('on', 'on_mc'))
     args = parser.parse_args()
     from scripts import d5_runtime
-    d5_runtime.OUT = REPLAY / 'runtime'
+    d5_runtime.OUT = REPLAY / f'runtime_audit_{args.variant}_{args.cut:g}'
     d5_runtime.install()
     from scripts.replay_exchange_event_20260926 import replay
-    root = AUDIT / f'cut_{args.cut:g}'
+    root = AUDIT / f'{args.variant}_cut_{args.cut:g}'
     root.mkdir(parents=True, exist_ok=True)
     record = root / f'{SOURCE}.jsonl.gz'
     frames = truncate(args.cut, record)
-    replay(record, root, Path('models/exchange_event_v3'), True, None, **options('on'))
-    result = dict(cut_sec=args.cut, frames=frames, **compare_prefix(REPLAY / 'on' / SOURCE, root, args.cut))
+    replay(record, root, Path('models/exchange_event_v3'), True, None, **options(args.variant))
+    result = dict(cut_sec=args.cut, frames=frames, **compare_prefix(REPLAY / args.variant / SOURCE, root, args.cut))
     (root / 'AUDIT.json').write_text(json.dumps(result, indent=1))
     record.unlink()
     print(json.dumps(result), flush=True)

@@ -18,6 +18,7 @@ from scripts.run_prefire_replay_20260930 import BASELINE, BASELINE_DIRS, OUT as 
 
 ON = REPLAY / 'on'
 REPORT = Path('logs/prefire_prediction/GATE.json')
+# 構成は --variant で選ぶ (on=構成A、on_mc=構成B)。出力は GATE_<variant>.json
 Q_SOURCE, ZENCHI, REVIEW = 'q_7gc4TgFig', 'zenchi', 'review'
 Q_MAX, Q_IMPROVED = .507567, .507567 - .002
 PREFIRE_LL_MAX = .7308 - .035
@@ -136,6 +137,12 @@ def timing() -> dict:
 
 
 def main() -> None:
+    import argparse
+    global ON, REPORT
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--variant', default='on', choices=('on', 'on_mc'))
+    variant = parser.parse_args().variant
+    ON, REPORT = REPLAY / variant, REPORT.with_name(f'GATE_{variant}.json')
     displays = {'off': {s: load(dirs(s)[0], s) for s in BASELINE_DIRS},
                 'on': {s: load(dirs(s)[1], s) for s in BASELINE_DIRS}}
     rows = {s: fixed_rows(s)[1] for s in BASELINE_DIRS}

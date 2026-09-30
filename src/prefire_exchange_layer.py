@@ -94,37 +94,69 @@ def counter_send(receiver: Any, option: sim.FireOption, elapsed: float) -> float
 
 
 def branch_value(overlay: Any, latest: tuple, attacker: int, option: sim.FireOption,
-                 elapsed: float) -> float:
+                 elapsed: float, counters: np.ndarray | None = None,
+                 feature_cache: dict | None = None) -> float:
     """側 attacker が option を撃ち、受け側が最善応手で返した撃ち合いの S3 勝率 (1P)。
 
     入力は現在の確定盤面・NEXT だけ (時刻 t 以前)。S3 の入力の作り方は overlay._fire と同じで、
-    得点だけを探索結果で与える。
+    得点だけを探索結果で与える。counters (受け側の応手得点の標本) を与えれば標本ごとの S3 を平均する。
+    None なら既存の future_send (理想ツモ) の応手1点で評価する (構成A)。
     """
     from src.exchange_event_count_features import CountObservation
     from src.exchange_event_evaluator import ExchangeEndInput, FiringInput, evaluate_exchange_event
-    from src.exchange_event_features import prefire_side_features
     from src.exchange_event_overlay import UNUSED_S1_M0
     receiver = 1 - attacker
-    counter = counter_send(latest[receiver], option, elapsed)
-    scores = np.zeros(2)
-    scores[attacker] = option.score
-    scores[receiver] = counter * sim.effective_rate(elapsed)
+    if counters is None:
+        counters = np.asarray([counter_send(latest[receiver], option, elapsed) * sim.effective_rate(elapsed)])
     snapshot = overlay._snapshots[-1][1]
     static = overlay._build_static(tuple(s.board for s in latest), snapshot, elapsed, UNUSED_S1_M0)
-    prefire = np.stack([prefire_side_features(s.board._grid, s.queue, elapsed) for s in latest])
+    prefire = np.stack([side_features_cached(overlay, s, elapsed, feature_cache) for s in latest])
     models = overlay.tracker.models
     count = (CountObservation(np.stack([s.board._grid for s in latest]), np.stack([s.queue for s in latest]),
                               elapsed) if getattr(models, 'count_features', False) else None)
-    firing = tuple(bool(idx == attacker or scores[idx] > 0) for idx in SIDES)
-    event = ExchangeEndInput(FiringInput(static, prefire, firing, count), np.zeros(2), scores, elapsed)
-    return evaluate_exchange_event(event, models)
+    values = []
+    for counter in counters:
+        scores = np.zeros(2)
+        scores[attacker], scores[receiver] = option.score, counter
+        firing = tuple(bool(idx == attacker or scores[idx] > 0) for idx in SIDES)
+        event = ExchangeEndInput(FiringInput(static, prefire, firing, count), np.zeros(2), scores, elapsed)
+        values.append(evaluate_exchange_event(event, models))
+    return float(np.mean(values))
+
+
+def side_features_cached(overlay: Any, side: Any, elapsed: float, cache: dict | None) -> np.ndarray:
+    """発火前の側特徴。overlay と同じ鍵 (盤面・NEXT・換算率) で、overlay の表は読むだけにする。"""
+    from src.exchange_event_features import prefire_side_features
+    from src.scoring import compute_effective_rate
+    grid = side.board._grid
+    key = (grid.tobytes(), grid.dtype.str, side.queue.tobytes(), compute_effective_rate(elapsed))
+    shared = getattr(overlay, '_feature_cache', {})
+    if key in shared:
+        return shared[key]
+    if cache is None:
+        return prefire_side_features(grid, side.queue, elapsed)
+    if key not in cache:
+        cache[key] = prefire_side_features(grid, side.queue, elapsed)
+    return cache[key]
+
+
+def mc_counters(latest: tuple, receiver: int, option: sim.FireOption, colors: tuple[int, ...]) -> np.ndarray:
+    """構成B: 受け側の応手得点を未来ツモの標本で求める (既知 NEXT/NEXT2 + 見えた色の等確率ツモ)。"""
+    from src.exchange_event_landing import remaining_hands
+    side = latest[receiver]
+    grid = np.asarray(side.board._grid, dtype=np.int8)
+    hands = remaining_hands(option.chain_count, 0.0, 0.0) + option.hand - 1
+    seed = sim.stable_seed(grid.tobytes(), _queue(side), hands, option.placed)
+    return sim.counter_scores(grid.tobytes(), _queue(side), hands, colors, seed)
 
 
 class PrefireExchangeLayer:
     """表示の直前だけ発火前予測を混ぜる外部 wrapper (評価器の状態は持たない・変えない)。"""
 
-    def __init__(self, hazard: HazardModel) -> None:
+    def __init__(self, hazard: HazardModel, counter_mc: bool = False) -> None:
         self.hazard = hazard
+        self.counter_mc = counter_mc          # False=構成A (future_send 理想ツモ)、True=構成B (未来ツモ標本)
+        self._features: dict = {}
         self._written: tuple[float, float, str] | None = None   # (書いた値, 元の値, 元の由来)
         self._cache: dict[tuple, tuple] = {}
         self.trace: list[tuple] = []
@@ -173,6 +205,7 @@ class PrefireExchangeLayer:
         """両側の発火候補・hazard・枝の勝率を求める。"""
         grids = [np.asarray(s.board._grid, dtype=np.int8) for s in latest]
         options = [sim.fire_options(g.tobytes(), _queue(s)) for g, s in zip(grids, latest)]
+        colors = sim.seen_colors(grids, [_queue(s) for s in latest])
         result = []
         for a in SIDES:
             best = options[a].best()
@@ -182,7 +215,8 @@ class PrefireExchangeLayer:
             features = sim.hazard_features(options[a], options[1 - a], grids[a], grids[1 - a], elapsed)
             weight = 1.0 if options[a].forced else self.hazard.predict(features)
             try:
-                value = branch_value(overlay, latest, a, best, elapsed)
+                counters = mc_counters(latest, 1 - a, best, colors) if self.counter_mc else None
+                value = branch_value(overlay, latest, a, best, elapsed, counters, self._features)
             except (ValueError, TypeError, FloatingPointError):
                 result.append(None)   # 評価入力が作れない枝は混ぜない (欠測を推測で埋めない)
                 continue

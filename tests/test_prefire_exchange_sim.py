@@ -97,3 +97,19 @@ def test_every_placement_pops_is_not_forced() -> None:
     grid[11:13, 4] = BLUE
     options = sim.fire_options(raw(grid), (RED, RED, BLUE, GREEN))
     assert options.best1 is not None and not options.forced
+
+
+def test_counter_scores_reproducible_and_missing_is_zero() -> None:
+    grid = three_reds()
+    colors = (RED, BLUE, GREEN, YELLOW)
+    first = sim.counter_scores(raw(grid), (RED, RED, BLUE, GREEN), 3, colors, seed=7)
+    again = sim.counter_scores(raw(grid), (RED, RED, BLUE, GREEN), 3, colors, seed=7)
+    assert first.shape == (sim.COUNTER_ROLLOUTS,) and np.array_equal(first, again)
+    assert (first > 0).all()     # 既知 NEXT の赤ペアで必ず消せる = 最善応手は全標本で撃つ
+    assert not sim.counter_scores(raw(grid), (9, 9, 9, 9), 3, colors, seed=7).any()
+
+
+def test_seen_colors_only_playable() -> None:
+    grid = three_reds()
+    grid[12, 5] = COLOR_OJAMA
+    assert sim.seen_colors([grid], [(BLUE, GREEN, 9, 9)]) == (RED, BLUE, GREEN)

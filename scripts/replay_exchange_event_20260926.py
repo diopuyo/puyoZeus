@@ -66,7 +66,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            prefire_origin_guard: bool = False, post_counter_death_bound: bool = False,
            single_death_proof_guard: bool = False,
            single_death_proof_negative_only: bool = False,
-           prefire_exchange_prediction: bool = False) -> dict:
+           prefire_exchange_prediction: bool = False,
+           prefire_counter_mc: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -107,7 +108,7 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
     prefire_layer = None
     if prefire_exchange_prediction:
         from src.prefire_exchange_layer import FileHazardModel, PrefireExchangeLayer
-        prefire_layer = PrefireExchangeLayer(FileHazardModel.load())
+        prefire_layer = PrefireExchangeLayer(FileHazardModel.load(), counter_mc=prefire_counter_mc)
     for item in stream:
         if item["kind"] == "update":
             inputs = item["args"]
@@ -203,6 +204,8 @@ def main() -> None:
     parser.add_argument("--confirmed-death-hold", action="store_true", default=False)
     parser.add_argument("--prefire-exchange-prediction", action="store_true", default=False,
                         help="発火前の撃ち合い予測を表示へ混ぜる (既定OFF、models/prefire_hazard_v1)")
+    parser.add_argument("--prefire-counter-mc", action="store_true", default=False,
+                        help="発火前予測の受け側応手を未来ツモ標本で求める (構成B、既定OFF=理想ツモ future_send)")
     parser.add_argument("--landing-counter-prob", action="store_true", default=False)
     for name in ("count-sync", "death-guard", "evaluation-layers", "completion-check"):
         parser.add_argument("--exchange-event-" + name, action="store_true", default=False)
@@ -234,7 +237,8 @@ def main() -> None:
                     post_counter_death_bound=options.post_counter_death_bound,
                     single_death_proof_guard=options.single_death_proof_guard,
                     single_death_proof_negative_only=options.single_death_proof_negative_only,
-                    prefire_exchange_prediction=options.prefire_exchange_prediction)
+                    prefire_exchange_prediction=options.prefire_exchange_prediction,
+                    prefire_counter_mc=options.prefire_counter_mc)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))
