@@ -58,7 +58,10 @@ SKIP_DIRS = frozenset({'__pycache__'})
 PRUNE_DIR_NAMES = frozenset({'tests'})
 PRUNE_PATHS = ('torch/include',)
 # torch/lib の *.lib は C++ 拡張をリンクする時だけ必要 (dnnl.lib 653MB 等、実測で torch の約 7 割)
-PRUNE_FILE_GLOBS = ('torch/lib/*.lib',)
+# FFmpeg (LGPL) を配布物から外す (user 決定 2026-09-30: 配布版は動画ファイル入力を持たない)。
+# cv2 の DirectShow 入力は FFmpeg プラグインに依存しない (PE 走査と実行で確認、docs §12)。
+FFMPEG_GLOB = 'cv2/opencv_videoio_ffmpeg*.dll'
+PRUNE_FILE_GLOBS = ('torch/lib/*.lib', FFMPEG_GLOB)
 FINISHED_MARK = '.puyo_finished'
 DEFAULT_VC_RUNTIME_DIR = Path('C:/Windows/System32')  # VC++ 再頒布可能パッケージが入れた DLL の取得元
 # Microsoft の再頒布可能コード (VC++ 2015-2022 CRT/C++ 標準ライブラリ)。packaging/scan_dll_deps.py の走査で
@@ -324,6 +327,9 @@ def build(work: Path, asset_root: Path, make_archive: bool, reuse_python: bool =
     files += sorted((bundle / 'app').rglob('*.pyc'))  # unchecked-hash のため MANIFEST で完全性を担保する
     for name in SHIPPED_TEXT:
         shutil.copy2(PACKAGING_DIR / name, bundle / name)
+    shutil.copy2(ROOT / 'LICENSE', bundle / 'LICENSE')  # 利用者が最初に見る場所 (MIT、user 決定 2026-09-30)
+    shutil.copy2(ROOT / 'LICENSE', bundle / 'app' / 'LICENSE')  # 完全性検査 (MANIFEST) の対象
+    files.append(bundle / 'app' / 'LICENSE')
     licenses = copy_licenses(bundle)
     manifest = write_manifest(bundle, files)
     size = sum(path.stat().st_size for path in bundle.rglob('*') if path.is_file())

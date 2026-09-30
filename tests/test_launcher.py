@@ -53,7 +53,7 @@ def test_defaults_for_dshow(tmp_path: Path) -> None:
 ])
 def test_invalid_config_reports_the_key(tmp_path: Path, data: object, needle: str) -> None:
     with pytest.raises(LauncherConfigError, match=needle):
-        parse_user_config(data, tmp_path)
+        parse_user_config(data, tmp_path, allow_video=True)
 
 
 def test_load_errors_are_actionable(tmp_path: Path) -> None:
@@ -67,7 +67,7 @@ def test_load_errors_are_actionable(tmp_path: Path) -> None:
 
 def test_relative_paths_follow_config_file_location(tmp_path: Path) -> None:
     path = write_json(tmp_path / 'puyo_live.json', dict(source='video', video_path='clips/a.mp4', output_dir='out'))
-    user = load_user_config(path)
+    user = load_user_config(path, allow_video=True)
     assert user.video_path == (tmp_path / 'clips/a.mp4').resolve() and user.output_dir == (tmp_path / 'out').resolve()
 
 
@@ -79,13 +79,13 @@ def test_dshow_pipeline_config_matches_shipped_example(tmp_path: Path) -> None:
 
 
 def test_video_pipeline_config_keeps_window(tmp_path: Path) -> None:
-    user = parse_user_config(dict(source='video', video_path='a.mp4', start_sec=10, end_sec=20.5), tmp_path)
+    user = parse_user_config(dict(source='video', video_path='a.mp4', start_sec=10, end_sec=20.5), tmp_path, allow_video=True)
     config = build_pipeline_config(user)
     assert (config['realtime'], config['start_sec'], config['end_sec'], config['name']) == (True, 10.0, 20.5, 'a')
 
 
 def test_argv_maps_to_existing_cli(tmp_path: Path) -> None:
-    user = parse_user_config(dict(source='video', video_path='a.mp4'), tmp_path)
+    user = parse_user_config(dict(source='video', video_path='a.mp4'), tmp_path, allow_video=True)
     argv = build_pipeline_argv(user, tmp_path / 'p.json')
     assert argv == ['--config', str(tmp_path / 'p.json'), '--output', str(user.output_dir),
                     '--video', str(user.video_path)]
@@ -112,7 +112,7 @@ def test_dshow_argv_is_accepted_by_real_pipeline_parser(tmp_path: Path, monkeypa
 
 @pytest.mark.usefixtures('isolated_environ')
 def test_video_argv_is_accepted_by_real_pipeline_parser(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    user = parse_user_config(dict(source='video', video_path='clip.mp4', start_sec=5, end_sec=15), tmp_path)
+    user = parse_user_config(dict(source='video', video_path='clip.mp4', start_sec=5, end_sec=15), tmp_path, allow_video=True)
     config_path = write_json(tmp_path / PIPELINE_CONFIG_NAME, build_pipeline_config(user))
     options = parse_with_pipeline(monkeypatch, build_pipeline_argv(user, config_path))
     assert options.source == 'video' and options.video == user.video_path and options.realtime
@@ -195,3 +195,22 @@ def test_tampered_bundle_stops_launch(tmp_path: Path, monkeypatch: pytest.Monkey
         prepare(launcher_args(path))
     err = capsys.readouterr().err
     assert info.value.code == EXIT_MANIFEST and 'SHA256 不一致' in err and 'models/m.pt' in err
+
+
+def test_video_source_is_rejected_in_distribution(tmp_path: Path) -> None:
+    """配布版 (既定) は source=video を受け付けず、日本語で案内する。開発用の許可は明示引数のみ。"""
+    data = dict(source='video', video_path='a.mp4')
+    with pytest.raises(LauncherConfigError, match='OBS 仮想カメラ等の入力'):
+        parse_user_config(data, tmp_path)
+    with pytest.raises(LauncherConfigError, match='DirectShow'):
+        load_user_config(write_json(tmp_path / 'c.json', data))
+    assert parse_user_config(data, tmp_path, allow_video=True).source == 'video'
+
+
+def test_prepare_rejects_video_unless_dev_flag(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = write_json(tmp_path / 'c.json', dict(source='video', video_path='a.mp4', output_dir=str(tmp_path / 'o')))
+    with pytest.raises(SystemExit) as info:
+        prepare(launcher_args(path, '--skip-manifest'))
+    assert info.value.code == EXIT_CONFIG and 'OBS 仮想カメラ等の入力' in capsys.readouterr().err
+    user, _ = prepare(launcher_args(path, '--skip-manifest', '--dev-allow-video'))
+    assert user.source == 'video'

@@ -57,7 +57,10 @@ def stop_tree(process: subprocess.Popen) -> None:
 def run(bundle: Path, config: Path, seconds: float) -> dict:
     command = [str(bundle / 'python' / 'python.exe'), '-m', 'src.phase_j.launcher',
                '--config', str(config), '--require-manifest']
-    port = json.loads(config.read_text(encoding='utf-8')).get('port', 8765)
+    settings = json.loads(config.read_text(encoding='utf-8'))
+    port = settings.get('port', 8765)
+    if settings.get('source') == 'video':  # 配布版は video を受け付けない。開発用フラグ (動画デコーダのある環境でのみ動く)
+        command.append('--dev-allow-video')
     url = f'http://127.0.0.1:{port}/latest'
     result: dict = dict(command=command, transitions=[])
     last: list = [None]

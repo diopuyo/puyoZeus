@@ -391,3 +391,52 @@ python packaging/build_bundle.py --download      # 埋め込み Python と wheel
 python packaging/build_bundle.py --zip           # 組み立て + zip (初回 約 12 分)
 python packaging/smoke_launch.py <PuyoLive> <puyo_live.json>   # 起動段階の実測
 ```
+
+## 12. 2026-09-30 夜 FFmpeg (LGPL) と動画入力の除去、ライセンス MIT
+
+user 決定 (2026-09-30): 配布版から動画ファイル入力 (`source=video`) と同梱の FFmpeg を外す。ツール自身は MIT。
+
+### 12-1. 変更
+
+- 配布物から `cv2/opencv_videoio_ffmpeg4130_64.dll` を除去 (`build_bundle.py: FFMPEG_GLOB`)。配布物内の `ffmpeg` / `avcodec` を名前に持つファイルは **0 件**
+  (他の FFmpeg 由来は無い: `cv2.pyd` に FFmpeg コードなし、Pillow の `_avif` は libavif/aom で FFmpeg ではない)。
+- ランチャーは `source=video` を受け付けず、終了コード 2 と
+  「配布版は OBS 仮想カメラ等の入力 (DirectShow) のみ対応です。動画ファイル入力 (source="video") は使えません。…」を出す。
+  開発用の `--dev-allow-video` (CLI のみ、設定ファイルには無い) は残る。`src` の既存の動画入力経路は無変更 (WSL の開発環境はそのまま)。
+- `config/live_video.example.json` を配布物から除外。`LICENSE` (MIT) をリポジトリ直下・配布物直下・`app/LICENSE` (MANIFEST 対象) に置いた。
+- README_ja.txt: MIT の日本語要約 (正式条文は英語の LICENSE)、モデルも同条件、非公式・セガとは無関係・登録商標の表記、無保証。
+
+### 12-2. サイズの変化 (ONNX なしの既定ビルド同士、バイト数から換算)
+
+| | FFmpeg あり (第 2 段末) | FFmpeg なし | 差 |
+|---|---|---|---|
+| 展開後 | 802,810,581 B (802.8 MB) | 774,236,330 B (774.2 MB) | −28.6 MB |
+| zip | 270,993,649 B (271.0 MB) | 258,826,465 B (258.8 MB) | −12.2 MB |
+
+ONNX 同梱ビルドは今回再ビルドしていない (差は同程度の見込み、推定)。
+
+### 12-3. DirectShow 入力が FFmpeg なしで動くことの確認
+
+- **PE 依存走査** (`scan_dll_deps.py`、DLL 除去後 319 ファイル・import 59 種): FFmpeg 系 (ffmpeg / avcodec / avformat / avutil / swscale / swresample) の
+  import は **0 件**。`cv2.pyd` は FFmpeg を import テーブルに持たず、`opencv_videoio_*` プラグイン名を文字列として持ち実行時に探す方式
+  (`cv2.getBuildInformation()` の「FFMPEG: YES (prebuilt binaries)」はそのプラグインの意味。DirectShow は「YES」で組込み)。
+  **注**: PE 走査だけでは実行時ロードは分からないので、次の実行で補った。
+- **実行 (1) 動画は開けなくなった**: 除去後、`cv2.VideoCapture('….mp4').isOpened()` は False (期待どおり)。
+- **実行 (2) DirectShow の列挙・開閉・取得は動く**: `--list-devices` で index 0〜4 が「映像あり」(640x480 / 720x480 等)、5〜8 は開けない。
+  `CAP_DSHOW` + 1920x1080 指定では 幅1920 x 高さ1080 のフレームを 5 デバイス中 4 つで取得 (残り 1 つは 1280x720) (Web カメラ・NVIDIA Broadcast 等)。
+- **実行 (3) OBS 仮想カメラ経由の通し**: この PC に OBS Studio が入っていた。専用のシーン (v29 の保存動画をループ再生する
+  メディアソース、1920x1080) を一時的に作り、`--startvirtualcam` で仮想カメラに流した。OBS Virtual Camera は index 4 (1920x1080、
+  ぷよぷよ画面が映ることを画像で確認)。FFmpeg なしの配布版で `source=dshow`、`device_index=4` を起動:
+  `入力確認中` (起動 15.0 秒) → `ぷよ画面なし` (25.5 秒、動画の冒頭) → `色を較正中 30%` (29.6 秒) → `ready` (31.1 秒) →
+  **評価 `available` (33.2 秒)**。実行後に OBS を終了し、作った一時シーンを削除、`global.ini` / `user.ini` を退避コピーから復元した
+  (利用者の既存シーンコレクション「無題」は未変更)。
+- 制約: OBS の出力は動画のデコード結果で、実キャプチャボードの色・遅延特性とは異なる。1 回の実行で、長時間運転・遅延は未測定。
+
+### 12-4. 残り
+
+- §9 の未了項目 (WSL 版との同値確認、クリーンな Windows、インストーラ・署名 等) は変わらない。
+- 動画入力を使う開発用ツール (`smoke_launch.py` の video 設定、`run_coverage.py`、`verify_onnx_parity.py`) は、**FFmpeg のある環境**
+  (開発用に退避した `D:\puyo_analyzer\packaging\dev_ffmpeg\opencv_videoio_ffmpeg4130_64.dll` を cv2 フォルダへ戻す、または WSL) でだけ動く。
+  配布版の検査は dshow で行う。
+- 過去の実測 (§7、§11) の動画入力による数値は、FFmpeg あり配布物での結果であり、除去後に取り直してはいない
+  (認識・評価のコードは無変更で、デコード経路のみが異なる)。

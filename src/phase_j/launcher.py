@@ -108,8 +108,13 @@ def _resolve(base: Path, value: str) -> Path:
     return path if path.is_absolute() else (base / path).resolve()
 
 
-def parse_user_config(data: Any, base_dir: Path) -> UserConfig:
-    """辞書を検証して UserConfig にする。相対パスは設定ファイルの場所が基準。"""
+VIDEO_REJECTED_MESSAGE = ('配布版は OBS 仮想カメラ等の入力 (DirectShow) のみ対応です。動画ファイル入力 (source="video") は'
+                          '使えません。"source" を "dshow" にして device_name / device_index を指定してください')
+
+
+def parse_user_config(data: Any, base_dir: Path, allow_video: bool = False) -> UserConfig:
+    """辞書を検証して UserConfig にする。相対パスは設定ファイルの場所が基準。
+    動画入力 (source=video) は配布版では受け付けない (FFmpeg を同梱しないため)。allow_video は開発用。"""
     if not isinstance(data, dict):
         raise LauncherConfigError('設定ファイルの最上位は { ... } のオブジェクトにしてください')
     unknown = sorted(set(data) - USER_KEYS)
@@ -118,6 +123,8 @@ def parse_user_config(data: Any, base_dir: Path) -> UserConfig:
     source = data.get('source', SOURCE_DSHOW)
     if source not in (SOURCE_DSHOW, SOURCE_VIDEO):
         raise LauncherConfigError(f'"source" は "{SOURCE_DSHOW}" か "{SOURCE_VIDEO}" です (現在: {source!r})')
+    if source == SOURCE_VIDEO and not allow_video:
+        raise LauncherConfigError(VIDEO_REJECTED_MESSAGE)
     name, video = data.get('device_name'), data.get('video_path')
     if source == SOURCE_DSHOW and (not isinstance(name, str) or not name.strip()):
         raise LauncherConfigError('"device_name" (例: "OBS Virtual Camera") を指定してください。'
@@ -136,7 +143,7 @@ def parse_user_config(data: Any, base_dir: Path) -> UserConfig:
         calibration_location=_calibration_location(data))
 
 
-def load_user_config(path: Path) -> UserConfig:
+def load_user_config(path: Path, allow_video: bool = False) -> UserConfig:
     """設定ファイルを読む。無い・壊れている場合は直し方つきで LauncherConfigError。"""
     if not path.is_file():
         raise LauncherConfigError(f'設定ファイルがありません: {path}\n'
@@ -146,7 +153,7 @@ def load_user_config(path: Path) -> UserConfig:
     except json.JSONDecodeError as error:
         raise LauncherConfigError(f'設定ファイルの JSON が不正です: {path} '
                                   f'({error.lineno}行{error.colno}列: {error.msg})') from error
-    return parse_user_config(data, path.resolve().parent)
+    return parse_user_config(data, path.resolve().parent, allow_video)
 
 
 def build_pipeline_config(user: UserConfig) -> dict[str, Any]:
@@ -228,6 +235,7 @@ def parse_launcher_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument('--require-manifest', action='store_true', help='MANIFEST 無しを失敗にする (配布版)')
     parser.add_argument('--skip-manifest', action='store_true', help='完全性照合を省く (開発用)')
     parser.add_argument('--check-only', action='store_true', help='設定と完全性だけ確認して終了')
+    parser.add_argument('--dev-allow-video', action='store_true', help='開発用: source=video を許可 (配布版では動画デコーダが無く動かない)')
     parser.add_argument('--list-devices', action='store_true', help='機器 index ごとの映像有無を表示して終了')
     return parser.parse_args(argv)
 
@@ -235,7 +243,7 @@ def parse_launcher_args(argv: Sequence[str] | None) -> argparse.Namespace:
 def prepare(options: argparse.Namespace) -> tuple[UserConfig, list[str]]:
     """設定検証→完全性照合→パイプライン設定の書き出し。失敗は SystemExit(終了コード)。"""
     try:
-        user = load_user_config(options.config)
+        user = load_user_config(options.config, options.dev_allow_video)
     except LauncherConfigError as error:
         print(f'[設定エラー] {error}', file=sys.stderr)
         raise SystemExit(EXIT_CONFIG) from error

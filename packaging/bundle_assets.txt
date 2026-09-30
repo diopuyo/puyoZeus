@@ -4,7 +4,6 @@
 config/live_defaults.json
 config/live_evaluation.json
 config/live_dshow.example.json
-config/live_video.example.json
 # asset_hashes() (run_live_pipeline_20260928.py:51) が import されないソースも名前で読んでハッシュする
 # (live_evaluation.py 等)。閉包から漏れるため src/phase_j は丸ごと入れる (overlay.html も含む)。
 src/phase_j

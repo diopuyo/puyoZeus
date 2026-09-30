@@ -36,11 +36,17 @@
 Visual C++ ランタイム (vcruntime140 / msvcp140 等) は python フォルダに同梱済み。
 不足の場合は起動時に [実行環境エラー] で案内が出る (公式: https://aka.ms/vs/17/release/vc_redist.x64.exe)。
 
+本ツールのライセンス (MIT)
+  正式な条文は同梱の英語の LICENSE (MIT License, Copyright (c) 2026 diopuyo)。以下は日本語の要約で、条文が優先される。
+  - 誰でも無料で、使用・複製・改変・公開・配布・再許諾・販売ができる。
+  - その際、上記の著作権表示と許諾表示 (LICENSE) をすべての複製に含めること。
+  - 学習済みモデル (models フォルダ) も同じ条件 (MIT) で提供する。
+  - 本ツールは「現状のまま」提供され、明示・黙示を問わず一切の保証 (商品性・特定目的への適合性・権利非侵害を含む) はない。
+    本ツールの使用で生じた損害について、作者・著作権者は責任を負わない。
+  - 本ツールは非公式であり、株式会社セガとは無関係です。ぷよぷよは株式会社セガの登録商標です。
+
 ライセンス・帰属表記
   同梱ライブラリのライセンスは LICENSES フォルダを参照。
-  - 動画ファイル入力 (source=video) は OpenCV 同梱の FFmpeg 4.4.6 (LGPL-2.1-or-later、cv2\opencv_videoio_ffmpeg*.dll) を使う。
-    この DLL は差し替え可能な別ファイルのまま同梱している。対応するソース:
-      FFmpeg 4.4.6   https://ffmpeg.org/releases/ffmpeg-4.4.6.tar.xz
-      OpenCV         https://github.com/opencv/opencv-python
+  - この配布版は動画ファイル入力を持たず、FFmpeg は同梱していない (OBS 仮想カメラ等の DirectShow 入力のみ)。
   - Portions of this software are copyright (c) The FreeType Project (www.freetype.org). All rights reserved.
   - Microsoft Visual C++ ランタイム DLL は Microsoft の再頒布可能コードとして同梱している。
