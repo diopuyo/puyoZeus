@@ -177,16 +177,16 @@ def install_post_counter_hook() -> None:
                          lambda a, k, r: dict(t_sec=float(a[5])))
 
 
-def replay_record(record: Path, dest: Path) -> None:
-    """任意の記録を E36b と同じ構成 (モデル v3・live_count) で再生する。"""
-    from scripts import run_e36b
+def replay_record(record: Path, dest: Path, variant: str = 'exact') -> None:
+    """任意の記録を E36b と同じ構成 (モデル v3・live_count) で再生する。variant は gate と同じ名前。"""
+    from scripts import run_multilanding_speed_gate as gate
     from scripts import replay_exchange_event_20260926 as replay_module
     from scripts import d5_runtime
     dest.mkdir(parents=True, exist_ok=True)
     d5_runtime.OUT = dest.parent.parent / 'runtime'
     d5_runtime.install()
     result = replay_module.replay(record, dest, Path('models/exchange_event_v3'), True, None,
-                                  **run_e36b.options())
+                                  **gate.options(variant))
     print(json.dumps(result, ensure_ascii=False, default=str), flush=True)
 
 
@@ -199,6 +199,8 @@ def main() -> None:
                         help='この通知時刻 (秒、カンマ区切り) の _evaluate だけを cProfile で保存する')
     parser.add_argument('--head-modules', action='store_true',
                         help='E35 の証明器を固定版 (0f28a04) でなく現行 src (E35b 高速版) で読む')
+    parser.add_argument('--variant', default='exact', choices=('exact', 'bounded', 'bounded2'),
+                        help='--record の再生オプション (run_multilanding_speed_gate と同じ名前)')
     parser.add_argument('--record', type=Path, default=None,
                         help='リアルタイム実行が保存した inputs.jsonl.gz など任意の記録を直接再生する')
     args = parser.parse_args()
@@ -226,7 +228,7 @@ def main() -> None:
         if args.record is None:
             base.replay(args.source)
         else:
-            replay_record(args.record, args.out / 'on' / args.source)
+            replay_record(args.record, args.out / 'on' / args.source, args.variant)
     finally:
         args.out.mkdir(parents=True, exist_ok=True)
         path = args.out / f'profile_{args.source}.jsonl'

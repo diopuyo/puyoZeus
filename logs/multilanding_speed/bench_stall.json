@@ -1,0 +1,56 @@
+[
+ {
+  "source": "live_b18_stall",
+  "old_sec": 0.1836108600255102,
+  "new_sec": 0.050375103019177914,
+  "nodes": 123,
+  "reason": "all_responses_dead",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 1.3204776130151004,
+  "new_sec": 0.10434783389791846,
+  "nodes": 852,
+  "reason": "all_responses_dead",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 1.3735093499999493,
+  "new_sec": 0.09943829907570034,
+  "nodes": 852,
+  "reason": "all_responses_dead",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 0.41865085100289434,
+  "new_sec": 0.057487583020702004,
+  "nodes": 0,
+  "reason": "optimistic_cancel",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 2.2864102609455585,
+  "new_sec": 0.02569351892452687,
+  "nodes": 20001,
+  "reason": "node_limit",
+  "match": true,
+  "sha_checked": false
+ },
+ {
+  "source": "live_b18_stall",
+  "old_sec": 2.469395892927423,
+  "new_sec": 0.8836087250383571,
+  "nodes": 20001,
+  "reason": "node_limit",
+  "match": true,
+  "sha_checked": false
+ }
+]

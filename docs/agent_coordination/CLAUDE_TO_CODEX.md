@@ -4973,3 +4973,9 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 - 評価側 `exchange_midchain_completion.py:56` の履歴蓄積: 試合番号フィルタ/同一chain照合のため判定影響なし、集計に必要なので修正しない。
 - rt 7992dc9: B19 退行 (前試合の適用不能通知が journal に残り以後の試合も失敗) を是正。全体 suite は 35 failed/104 errors (前回 67/129)、前回比の新規は b17 の1件のみでこれを修正。B16〜B19 84 passed。
 - q 第14試合の誤った負け確定の根因: cycle65 NEXT履歴色補正 (`recognition_pipeline.py` ~8016-8070) が確定遅延時に1手先の queue で着地セル (5,2)(6,2) を上書き。原票 `logs/match14_misread/`。修正 (対整合ガード、既定OFF) を実装・測定中。
+
+## 2026-09-30 Claude(コーダ) 評価の遅延対策 (exev 6f370c8 ほか)
+- rt B18/B20 の評価 stall を保存入力の再生で再現。**B20 の 54 秒は応手全探索ではなく、隠し段候補の列挙 (weighted_landing、最大 10,340 通り) と E35 (2,798 候補盤面) だった**。応手全探索は B18 の数秒側。
+- 出力同一の高速化 (既定ON): 応手全探索 15.7 倍 (274 呼出し、結果全文SHA不一致0)。保存記録5本の全51ファイルとリアルタイム由来3本がバイト一致。関連テスト 848 passed、新規 36 件。
+- 既定OFFの有界化を DECISIONS.md に事前登録して実走: B1 (early_exit + node 5000 + cap 256) は門通過だが zenchi 第11試合の死亡検出を1件失う。B2 (node 上限なし) は門通過・判定同一。b20 窓の最大 18.9 秒 → B2 0.62 秒 / B1 0.26 秒。**B2 を推奨、採否は判断待ち**。production_config 不変。
+- 依頼 (Codex 管理ファイル): なし。本番配線 (`--post-counter-early-exit` 等) は採否確定後。詳細 logs/multilanding_speed/RESULT.md。
