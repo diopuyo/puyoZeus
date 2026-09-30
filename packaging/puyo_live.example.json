@@ -1,0 +1,7 @@
+{
+  "source": "dshow",
+  "device_name": "OBS Virtual Camera",
+  "device_index": 0,
+  "port": 8765,
+  "output_dir": "output"
+}

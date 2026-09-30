@@ -4966,3 +4966,10 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 - `src/projected_state_tensorizer_v1.py` (定数1行 + 経緯コメント4行)
 
 **ただし全pytest の結果が出て、失敗の原因が確定してからにしてほしい。**
+
+## 2026-09-30 リアルタイム配布パッケージ準備 (branch `claude/realtime-packaging-20260930`、コーダ)
+
+- 追加のみ (既存ファイル無変更): `src/phase_j/launcher.py` / `launcher_manifest.py`、`packaging/*`、`tests/test_launcher*.py`、`tests/test_packaging_closure.py`、`docs/PHASE_J_PACKAGING_PLAN_2026-09-30.md`。
+- 方式: 埋め込み Python 3.12.3 + CPU torch。展開後 800.7 MB / zip 270.1 MB (D:\puyo_analyzer\packaginguild\)。保存動画入力で Windows 上、入力確認中→色を較正中→評価 available まで起動確認 (起動→/latest 応答 7.9〜27.7 秒、詳細は計画書)。
+- 新規 44 件 + 既存 test_live_b6 40 件が配布用 Python 上で通過。未了: 実機 1920x1080、Windows クリーン環境、WSL 側 pytest、同値比較、インストーラ/署名/ライセンス確認 (計画書 §9)。
+- 遅延修正 (live_snapshot / live_process 等) は未取り込み。rt 側が確定したら `python packaging/build_bundle.py --reuse-python --zip` で再ビルド。

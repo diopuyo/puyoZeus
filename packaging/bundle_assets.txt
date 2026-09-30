@@ -1,0 +1,36 @@
+# 配布物 app/ へ入れる非 .py 資産 (リポジトリ相対パス。ディレクトリは再帰)。
+# 取得元: リポジトリ内 → 無ければ --asset-root (git 管理外のモデル・データ)。
+# ここは packaging/audit_opens.py の実測 (実行時に open されたファイル) で決める。推測で足さない。
+config/live_defaults.json
+config/live_evaluation.json
+config/live_dshow.example.json
+config/live_video.example.json
+# asset_hashes() (run_live_pipeline_20260928.py:51) が import されないソースも名前で読んでハッシュする
+# (live_evaluation.py 等)。閉包から漏れるため src/phase_j は丸ごと入れる (overlay.html も含む)。
+src/phase_j
+# 公開 DTO の検証スキーマ (src/phase_j/validator.py:24 が docs/schemas を実行時に読む)
+docs/schemas/puyo_overlay_snapshot_v1.schema.json
+docs/schemas/puyo_overlay_health_v1.schema.json
+docs/schemas/puyo_overlay_enums_v1.json
+models/calibration_video01.json
+models/cnn_best.pt
+models/cnn_global_best.pt
+models/cnn_phase_b_large_v2.pt
+models/next_pair_centroid_v1.npz
+models/ui_templates
+models/exchange_event_v1
+models/exchange_event_v2
+models/exchange_event_v3
+models/exchange_event_v4
+models/landing_counter_prob_v1
+data/indicators_v2/phase_platt_calibration.json
+data/indicators_v2/platt_calibration.json
+data/indicators_v2/winprob_calib.json
+data/per_video_hsv_ranges
+data/puyo_profiles
+data/verify/chain_length_conditional_2026-08-13.json
+data/verify/chain_tracker_calibration.json
+data/verify/hidden_row_calibration.json
+data/verify/match_boundaries_v5
+data/verify/retrain148_2026-08-14/feature_cols_full.json
+data/verify/retrain148_2026-08-14/model_full148_full_features.joblib
