@@ -2944,3 +2944,7 @@ G3 の合格条件6項目の結果、残っている実害3件 (列まるごと�
 - 構成: 現本番 (R1b + `--next-recolor-pair-guard` + E35 + D5 + D5b) + 本フラグ。
 - 門 (現本番 = logs/c65_guard/e36b_on/SUMMARY.json より悪化しないこと): q log loss ≤ .507567 + 5e-7 / zenchi hits ≥ 7,671 (8,333中) / 誤った負け確定 0 / 3:00場面 ≤ 2766.0秒 / q第14試合の誤確定 0。
 - 影子測定 (logs/pending_expiry/RESULT.md): 4動画で書込セル悪化0・改善73。
+
+## 2026-09-30 配布版から動画ファイル入力 (source=video) と同梱 FFmpeg (LGPL) を外す (user決定)
+- user「外して良い」。配布版の入力は OBS 仮想カメラ等の DirectShow のみ。動画ファイル入力は開発環境 (WSL) の検証用に残す。
+- 条件: FFmpeg DLL を除いた配布物で DirectShow 入力が起動→較正→判定まで動くことを確認してから確定する。
