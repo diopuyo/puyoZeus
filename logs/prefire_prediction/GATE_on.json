@@ -1,0 +1,102 @@
+{
+ "off": {
+  "q": {
+   "all": {
+    "frames": 6526,
+    "log_loss": 0.5075669993215693,
+    "auc": 0.7752487506069708
+   },
+   "prefire3s": {
+    "frames": 573,
+    "log_loss": 0.7307605608482143,
+    "auc": 0.28232144611454957
+   }
+  },
+  "anticipation": {
+   "hits": 23,
+   "denominator": 133
+  },
+  "gate2": false,
+  "gate3": false,
+  "gate4": false
+ },
+ "on": {
+  "q": {
+   "all": {
+    "frames": 6526,
+    "log_loss": 0.5075039985578875,
+    "auc": 0.7754847709410303
+   },
+   "prefire3s": {
+    "frames": 573,
+    "log_loss": 0.7307405834196605,
+    "auc": 0.2825916101778171
+   }
+  },
+  "anticipation": {
+   "hits": 23,
+   "denominator": 131
+  },
+  "gate2": false,
+  "gate3": false,
+  "gate4": false
+ },
+ "placebo": {
+  "q": {
+   "all": {
+    "frames": 6526,
+    "log_loss": 0.5076504301409398,
+    "auc": 0.7757609158061647
+   },
+   "prefire3s": {
+    "frames": 573,
+    "log_loss": 0.731626903005276,
+    "auc": 0.2808478239512722
+   }
+  },
+  "anticipation": {
+   "hits": 23,
+   "denominator": 134
+  },
+  "gate2": false,
+  "gate3": false,
+  "gate4": false
+ },
+ "gate1": {
+  "q": {
+   "frames": 6526,
+   "matches": 4,
+   "log_loss": 0.5075039985578875,
+   "auc": 0.7754847709410303
+  },
+  "zenchi": {
+   "hits": 7672,
+   "frames": 8333,
+   "agreement": 0.920676827073083
+  },
+  "events_identical": {
+   "q_7gc4TgFig": true,
+   "fcXG83vInDY": true,
+   "mia8KCjr52g": true,
+   "review": true,
+   "zenchi": true
+  },
+  "scene_first_sec": 2760.383333333333,
+  "flips": {
+   "off": 345,
+   "on": 347
+  },
+  "passed": true
+ },
+ "gate5_placebo_failed": true,
+ "leak_suspect": false,
+ "timing_ms": {
+  "n": 60426,
+  "p50": 0.16516649723052979,
+  "p95": 1178.0778786838055,
+  "p99": 1709.4265464246273,
+  "max": 3336.443995952606,
+  "mean": 169.79051676799844
+ },
+ "passed": false
+}
