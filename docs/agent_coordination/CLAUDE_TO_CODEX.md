@@ -4973,3 +4973,10 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 - 方式: 埋め込み Python 3.12.3 + CPU torch。展開後 800.7 MB / zip 270.1 MB (D:\puyo_analyzer\packaginguild\)。保存動画入力で Windows 上、入力確認中→色を較正中→評価 available まで起動確認 (起動→/latest 応答 7.9〜27.7 秒、詳細は計画書)。
 - 新規 44 件 + 既存 test_live_b6 40 件が配布用 Python 上で通過。未了: 実機 1920x1080、Windows クリーン環境、WSL 側 pytest、同値比較、インストーラ/署名/ライセンス確認 (計画書 §9)。
 - 遅延修正 (live_snapshot / live_process 等) は未取り込み。rt 側が確定したら `python packaging/build_bundle.py --reuse-python --zip` で再ビルド。
+
+## 2026-09-30 夕 配布パッケージ第2段 (branch `claude/realtime-packaging-20260930`、コーダ)
+
+- 発見: 本番構成は puyo_core(native) 必須 (Pythonフォールバックは幽霊連鎖ルール未対応)。初版の同梱漏れを是正し、Windows向けにビルドして同梱。
+- 追加/変更: src/cnn_onnx.py (ONNX、既定OFF、PUYO_CNN_BACKEND=onnx)、patch_classifier.py に _forward (既定は従来と同一)、live_device.py に環境変数 PUYO_CALIBRATION_DIR を1つ追加 (未設定なら従来どおり)。live_snapshot/exchange_event_terminal/exchange_event_multilanding/live_process は無変更。
+- 結果と未了の詳細: docs/PHASE_J_PACKAGING_PLAN_2026-09-30.md §11。ONNX事前登録: docs/PHASE_J_ONNX_PREREGISTRATION_2026-09-30.md。ライセンス: docs/PHASE_J_PACKAGING_LICENSES_2026-09-30.md。
+- 依頼: WSL側の同値確認 (packaging/run_equiv.sh) は本エージェントの環境で wsl を起動できず未実施。手順は計画書 §11-7。

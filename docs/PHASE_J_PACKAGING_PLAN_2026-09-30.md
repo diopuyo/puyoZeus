@@ -73,12 +73,16 @@ venv も PyInstaller も使わない。`PuyoLive.bat` → `python\python.exe -m 
 ### 2.2 実際に必要な Python 依存 (live 経路の import 閉包)
 
 静的解析 (関数内 import 含む、`packaging/import_closure.py`): **内部 154 モジュール (src/scripts、ソース 4.3 MB)**。
-外部: `numpy, torch, cv2, pandas, PIL, sklearn, joblib, jsonschema`、任意 `puyo_core` (Rust)、`tests` (後述)。
+外部: `numpy, torch, cv2, pandas, PIL, sklearn, joblib, jsonschema`、`puyo_core` (Rust、必須。下記の訂正)、`tests` (後述)。
 matplotlib / statsmodels / lightgbm / yt-dlp / torchvision は **不要** (リポジトリ全体の requirements とは別物)。
 開発 venv (CUDA 版 torch + nvidia-* = 約 4.3 GB) との比較で、配布物は CPU 版で 1/5 以下。
 
-- `puyo_core` (Rust): 認識の HSV 分類の高速化 (1.19 倍、認識結果は bit-identical。`production_config.py:683`)。
-  未ビルド環境では黙って Python 経路に落ちる。**配布物には入れない** (Windows 向け wheel の用意が別作業)。
+- **【訂正 2026-09-30 夕】`puyo_core` (Rust) は任意ではなく必須。** 初版は「HSV 分類の高速化のみで未ビルドでも黙って
+  Python 経路に落ちる」(`production_config.py:683`) を根拠に同梱しなかったが、**本番構成は幽霊連鎖ルール ON**
+  (`exclude_hidden_row_from_pop=True`) で、Python フォールバックはこれに未対応
+  (`src/puyo_core_bridge.py:221` が `NotImplementedError`)。実測: puyo_core なしの配布版は、zenchi 265 秒付近
+  (連鎖の先読み探索) で落ちた。初版の起動確認 (冒頭 30〜160 秒) はこの経路に到達しておらず、見逃した。
+  → Windows 向けにビルドして同梱した (§11-1)。
   `tests` は `src/patch_classifier.py:501` の関数内フォールバックで、ライブ経路では到達しない。
 
 ### 2.3 必要な非コード資産 (実行時に open された実測)
@@ -210,8 +214,10 @@ CPU のみ (`cnn_device=cpu`)・`cpu_threads=1`・`evaluation_nice=10`・`coales
 
 ## 9. 範囲外・未了 (実リリース前に必要なもの)
 
+> **2026-09-30 夕の更新**: 項目 1・3(Windows 内)・4・6・7・10(puyo_core) は §11 で対応/測定した。残りは §11-7 を参照。
+
 1. **通し試験の被覆拡大** (最優先): 複数試合 (開始・終了・全消し・おじゃま・別ティア動画) を含む区間で MISSING=0 を確認。
-   現状の監査は約 60 秒。`match_boundaries_v4` 等を読む経路が別にある可能性。
+   現状の監査は約 60 秒。`match_boundaries_v4` 等を読む経路が別にある可能性。→ §11-2 で実施 (全消しの通過は未確認)。
 2. **実機 1920×1080 入力の通し試験**: OBS 仮想カメラ/キャプチャボードでの認識・較正 (OBS 変換で 1.08% セル誤読の B3 実測あり)。
    遅延・CPU 使用率も未測定 (他エージェントが遅延修正中の `live_snapshot.py` / `live_process.py` は本ブランチで無変更)。
 3. **数値の同値確認**: 配布版 (Windows・CPU torch・numpy 2.4.4・`puyo_core` なし) と開発環境 (WSL) で
@@ -233,6 +239,143 @@ CPU のみ (`cnn_device=cpu`)・`cpu_threads=1`・`evaluation_nice=10`・`coales
    切り替える場合は torch のローカル版 (`+cpu`) の解決を要確認。
 10. `puyo_core` (Rust) の Windows ビルド同梱 (認識 1.19 倍)、GPU 版・ONNX 化 (§1.2) は範囲外。
 11. 出力 (`output/`) を配布版の起動ごとに掃除しない。長時間運転 (B15 1 時間運転相当) は配布版で未実施。
+
+## 11. 2026-09-30 夕 第 2 段 (同値確認・被覆・VC++・較正保存先・ライセンス・ONNX)
+
+指示: coordinator の追加依頼 5 項目 + ONNX (user 承認、条件は「品質が変わらないこと」)。数値の単位・条件を併記する。
+
+### 11-1. puyo_core (Rust) の Windows 同梱 — 初版の見落としの是正
+
+- 経緯: 同値確認のため zenchi 226〜340 秒を流したところ、265 秒付近で `NotImplementedError`
+  (幽霊連鎖ルール ON に Python フォールバックが未対応、§2.2 の訂正参照) で落ちた。
+- 対処: Windows 向け wheel を新規にビルドして同梱した。Rust 1.98.1 (windows-gnu)・maturin 1.15.0・zig 0.16.0 (リンカ)。
+  ツールはすべて `D:\puyo_analyzer\packaging\` 配下 (rust / native_build / devtools)。`native/puyo_core` のソースは無改変
+  (ビルド用コピー側の Cargo.toml だけ `pyo3` に `generate-import-lib` feature を足した。実行環境に Python 開発ファイルが無いため)。
+  ビルド 5 分 17 秒、`puyo_core-0.1.0-cp312-cp312-win_amd64.whl`。.pyd の import は kernel32 / ntdll / bcryptprimitives / UCRT の API セット / python312.dll のみ (PE 走査。VC ランタイム・mingw 系 DLL への依存なし)。
+- **検証の限界**: `tests/test_puyo_core_parity.py` は評価データ (`boards_lean_phase_l_*`) が worktree に無く 15 件すべて skip。
+  Windows 版 native の正しさは §11-1 下の同値確認 (native を使うパイプライン全体の torch/ONNX 一致・run 間一致) と、
+  クリーンな WSL 版との比較 (未実施、§11-7) に依存する。**native (Windows ビルド) と WSL の Linux ビルドの一致は未確認。**
+
+### 11-2. 通し試験の被覆 (§9-1)
+
+実行時に open されたファイルを、全プロセス (spawn した子を含む) で記録 (`packaging/run_coverage.py` + `audit_opens.py`)。
+
+| シナリオ | 動画・区間 | 内容 | 所要 (6 並列・監査フック付き) |
+|---|---|---|---|
+| zenchi_m3_m4 | zenchi 226〜340 秒 | 試合 2 の終了 (228 秒)・試合 3 (231〜274)・次の試合開始・試合 4 途中 | 901 秒 |
+| zenchi_m3_m4_onnx | 同上 (`PUYO_CNN_BACKEND=onnx`) | 同上 | 901 秒 |
+| q_m2_m4 | q 590〜760 秒 | 試合 2・3・4 (3 試合連続) | 1,072 秒 |
+| fcXG_m1_m2 | fcXG83vInDY 175〜385 秒 | 試合 1 の開始・終了・試合 2 | 1,306 秒 |
+| mia8_m2_m3 | mia8KCjr52g 180〜350 秒 | 試合 2・3 | 1,019 秒 |
+| v40_clip | evaluation_videos の v40 (別系統) 0〜120 秒 | 境界ファイルなし (ゲートなし) | 1,166 秒 |
+| launcher_video (2 回) | v29 (`source=video`, realtime, `calibration_location=localappdata`) | 入力確認→較正→ready→評価 (161 秒で available) | 100 秒 + 240 秒 |
+| launcher_dshow | 実機 index 0 (ぷよ画面ではないカメラ) | 入力確認→ぷよ画面なし | 60 秒 |
+
+- **合算: 31 プロセス、総 open 2,556 件 (プロセスごとの重複除去後)、app 内で読まれた非コード資産 296 件。**
+  **MANIFEST に無い物 0 件** (実行時生成の `config/device_calibration/` は除外する定義)。**app 内で存在しないパスへの open 0 件**。
+  **同梱したのに一度も読まれなかった資産 0 件** (ONNX 同梱ビルドでの集計。全部がいずれかのシナリオで読まれた)。
+- **モード依存に注意**: 非 realtime の CLI シナリオだけでは読まれた資産が 19 件しかなく、`data/per_video_hsv_ranges` や
+  `data/puyo_profiles` 等 (計 277 件) はランチャー (lifecycle) 経路でだけ読まれた。**どちらか一方の被覆では足りない**ことが実測で分かった。
+- **通っていない可能性のある経路**: 全消し (テロップ)・おじゃまの大量降下・試合の勝敗パネル (WIN★) 等は、区間に含まれたかを
+  個別には確認していない (選び出さず、試合を含む区間を流しただけ)。資産の読込は初期化時にまとめて行われるため、
+  読込漏れは検出できるが、その経路の**判定の正しさ**は本試験の対象外。
+- 処理した動画時間は延べ約 1,000 秒 (CLI 6 本 = 114×2+170+210+170+120、ランチャー 90 秒)。
+
+### 11-3. VC++ ランタイム (§9-4) — 依存関係の走査結果
+
+`packaging/scan_dll_deps.py` (pefile で PE ヘッダの import テーブル + delay import を走査)。対象 320 ファイル (dll/pyd/exe)、
+import される DLL は延べ 64 種。
+
+| 分類 | 件数 | 内容 |
+|---|---|---|
+| 配布物内で解決 (importer の同居/アプリ ディレクトリ/パッケージ同梱 libs) | 21 | torch 系 DLL、libiomp5md、OpenBLAS、vcomp140 (sklearn/.libs) 等 |
+| OS の API セット (`api-ms-win-*`) | 16 | UCRT。**Windows 10 以降の OS 標準** (Windows 10/11 のみ対象) |
+| Windows 標準 (System32) | 27 | kernel32、user32、advapi32 等 |
+| **VC++ ランタイムで配布物内に無い** | **1 (走査時点)** | **`msvcp140.dll`** (torch の `fbgemm.dll`、`functorch/_C.pyd`、`protoc.exe` ほか 6 ファイル) |
+
+- `vcruntime140.dll` / `vcruntime140_1.dll` は埋め込み Python が同梱。`msvcp140.dll` は sklearn/.libs と numpy.libs にハッシュ付きの別名があるが、
+  **torch からは見えない** (importer 別に判定しないと見落とす。初版の集計は名前だけで「同梱済み」と誤判定していた)。
+- 対処: 再頒布可能な `msvcp140.dll` `msvcp140_1.dll` `msvcp140_2.dll` `concrt140.dll` を `python/` へ同梱
+  (`build_bundle.py: VC_RUNTIME_DLLS`、取得元は System32)。走査の再実行で VC ランタイムの未解決は 0 になった。
+- 起動前チェック (`src/phase_j/launcher_runtime.py`): `vcruntime140` / `vcruntime140_1` / `msvcp140` が python/ に無く OS からもロードできなければ、
+  日本語で不足名と公式ダウンロード先 (`https://aka.ms/vs/17/release/vc_redist.x64.exe`) を出して終了コード 4。Windows 以外は対象外。
+  **未導入 PC での実動作は再現できていない** (この PC は導入済み)。走査結果と単体試験 (注入した「ロード不可」で 3 DLL 全部不足を報告) で示した。
+- 再頒布の可否: これらは Microsoft の再頒布可能コードに該当する DLL 群。条件の原文確認は未 (`docs/PHASE_J_PACKAGING_LICENSES_2026-09-30.md` §3-5)。
+
+### 11-4. 機器別較正の保存先 (§9-7)
+
+- `calibration_location`: `"app"` (既定、従来どおり `config/device_calibration`) / `"localappdata"` (`%LOCALAPPDATA%\PuyoLive\device_calibration`)。
+- 変更は最小: `live_device.py` に環境変数 `PUYO_CALIBRATION_DIR` を 1 つ足しただけ (未設定なら従来のパスと同一。試験で固定)。
+  ランチャーが設定から環境変数を設定し、spawn 子へ継承される。
+- 実測: `localappdata` (LOCALAPPDATA を D: の検証用ディレクトリへ差し替えて) で v29 を流し、較正ファイルが
+  `…\PuyoLive\device_calibration\b110fe….json` に保存され、`app/config/device_calibration/` は空のままだった。
+
+### 11-5. ライセンス (§9-6)
+
+`docs/PHASE_J_PACKAGING_LICENSES_2026-09-30.md` に一覧と配布条件を整理。要点: FFmpeg 4.4.6 (LGPL-2.1+、動的 DLL のまま同梱、
+ソース入手先を README に記載)、GCC ランタイム (GPL+例外)、FreeType (FTL 謝辞)、MS 再頒布可能コード。
+**モデルの再配布は user 承認済み (2026-09-30)**、自身のライセンス表記は user 判断待ち。
+
+### 11-6. ONNX (CNN) — 合否結果
+
+事前登録 `docs/PHASE_J_ONNX_PREREGISTRATION_2026-09-30.md` (評価前に固定)。既定 OFF、`PUYO_CNN_BACKEND=onnx` で切替、torch 版は残す。
+
+**(a) CNN 全セル argmax 完全一致: 合格 (不一致 0 件)。**
+- 母集団: 4 動画 x 各 1,200 フレーム (fcXG のみ重複除去で 1,199) = 4,799 フレーム、x 144 セル = **691,056 セル/モデル**、3 モデル
+  (`cnn_phase_b_large_v2` / `cnn_global_best` / `cnn_best`) で **延べ 2,073,168 セル、argmax 不一致 0**。
+- 確率の最大絶対差: 1.67e-6 (phase_b_large_v2) / 6.91e-6 (global_best) / 3.84e-6 (best)。
+- **境界例** (torch の上位 2 クラス確率差): 差 < 1e-3: 49 / 29 / 34 件、< 1e-4: 3 / 5 / 1 件、**< 1e-5: 0 / 1 / 1 件**、< 1e-6: 0 件。
+  境界例 (< 1e-5) は延べ 2,073,168 セル中 2 件 (別々のモデル)。これらも確率差が上位差を超えず反転しなかった。
+  割れ得る領域は実在するが、今回の標本では反転 0 件。
+- 注: mia8 は末尾 3 秒を除外 (最終フレーム付近が読めない実測。評価前の標本区間の機械的な補正であり、基準の変更ではない)。
+
+**(b) 同一区間のパイプライン全体の一致: 合格 (差 0 件)。**
+- 区間: zenchi 226〜340 秒 (試合 2 終了・試合 3・試合 4 の一部を含む)、非 realtime、配布版 Windows・CPU。
+- 比較母数: `display.npz` 3,420 行、`settled.npz` 1,982 行、`events.jsonl` 5 行、`inputs.jsonl.gz` 9,143 行、
+  `review_data.csv` 3,420 行 = **680,580 セル**。
+- torch 版 2 回 (A: 旧コード、T2: 新コード) の差 = **0 件** (測定器の底が 0、かつ既定 OFF の bit-identical をパイプライン全体で確認)。
+- torch 版 (T2) 対 ONNX 版 (O1、O2 の 2 回): **どちらも 0 件**。O2 は ONNX の使用実績を終了時ログで確認
+  (`[cnn_onnx] sessions=2 calls=9551 patches=349743`。torch 版のログには 0 件)。
+- 比較器の陽性対照 (差を入れたら必ず検出、行数差・欠落を不合格扱い) は `tests/test_compare_outputs.py` の 7 件で固定。
+- 制約: `events.jsonl` は 5 行と少ない (原因は未調査)。イベント記録の一致の検定力は限定的。
+
+**採用判断**: (a)(b) とも合格のため **不採用条件には該当しない**。ただし現状は torch を外せないため、サイズ削減の効果はまだ無い (下記)。
+
+| 項目 | torch 版 (既定) | ONNX 同梱 (既定 OFF で切替可) | 差 |
+|---|---|---|---|
+| 展開後サイズ | 802.8 MB | 848.1 MB | +45.3 MB |
+| zip サイズ | 271.0 MB | 287.0 MB | +16.0 MB |
+| 起動→`/latest` 応答 (秒、3 回) | 5.3〜6.4 | 4.3〜4.8 (torch 経路) / 3.9〜5.3 (ONNX 経路) | 有意差なし (CNN 読込前に応答するため) |
+| CNN 推論のみ (torch 1 スレッド、標本 1 フレームあたり 144 パッチのバッチ、400 フレーム、ms/フレーム) | phase_b 22.8 / global_best 12.6 / best 16.4 | 17.5 / 11.8 / 15.4 | −23% / −6% / −6% |
+| 同 (1 パッチあたり ms) | 0.158 / 0.087 / 0.114 | 0.122 / 0.082 / 0.107 | 同 |
+| パイプライン 1 フレームの「読出し開始→認識完了」P50 (ms、3,420 フレーム、torch と ONNX を同時並走) | 139.3 | 131.7 | −5.5% |
+
+- **CNN 時間の割り算**: 各モデルの総 `predict_proba_batch` 壁時計 ÷ 標本フレーム数 (144 パッチ/フレーム) と ÷ パッチ数。デコード・前処理 (パッチ切出し) は含まない。
+  torch は `set_num_threads(1)` (本番の cpu_threads=1 と同条件)、ONNX は `intra_op=1`。閑散時の測定。
+  (スレッド数を揃えない初回測定 (torch 既定スレッド) では torch のほうが速く出た。条件を揃えて再測定した値を採る。)
+- パイプライン P50 は 2 本並走・他ジョブ稼働中のため**目安**。認識 1 フレーム = 動画 1 フレーム (30fps 正規化) あたり。
+- **torch を外した場合の見込み (推定、未測定)**: torch 352 MB + sympy 39 MB + networkx 7 MB 等の依存を除いて展開後 約 430 MB 前後。
+  **現状は外せない**: `recognition_pipeline.py` の `torch.load` / `nn.Module` 構築 (ONNX の重みハッシュ算出も torch のテンソルを使う)、
+  `exchange_event_m0.py` (M0 の `model.pt`)、`state_pipeline.py`、`next_pair_classifier.py`、`ojama_cnn.py`、
+  `phase_j/live_cpu.py`・`live_process.py` の `import torch` が残る。M0 の ONNX 化・torch なしの重み読込・`live_process.py` の改修
+  (別エージェントが編集中) が要る。
+- **重要 (別件の実測)**: Windows・1 スレッドでの認識は 1 フレーム P50 約 131〜141 ms。30Hz の予算 (33 ms) の 4 倍で、
+  realtime 入力では取りこぼしが出る前提になる。遅延修正 (別エージェント) の設計前提と突き合わせること。
+
+### 11-7. 未了・依頼事項
+
+1. **WSL 版との比較 (同値確認の本命) は未実施。** 本エージェントの環境では `wsl` コマンドが実行できなかった
+   (隔離ハーネスが拒否)。Windows 内の比較 (torch 対 torch、torch 対 ONNX) は完了。
+   **依頼**: `packaging/run_equiv.sh` を WSL で実行 (配布版 `app/` をそのまま使うため、ソース・資産・CLI が Windows 側と同一になる):
+   `wsl -d Ubuntu -- bash /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/.claude/worktrees/agent-ac71f2c4855be6bef/packaging/run_equiv.sh wslA /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4 226 340`
+   (約 10〜20 分)。その後 Windows 側で
+   `python packaging/compare_outputs.py D:\puyo_analyzer\packaging\equiv\winT2 D:\puyo_analyzer\packaging\equiv\wslA`。
+   **注意**: `winT2` は現ビルドの torch 版と同一コード。ビルドを更新した場合は再度 T2 相当を取り直すこと。
+   WSL は puyo_core が Linux ビルド、torch は cu121 (CPU 強制)、Windows は windows-gnu ビルド + CPU torch。差が出たら分類: (i) torch/oneDNN の数値差、
+   (ii) puyo_core (Rust) の OS 間差、(iii) パス区切りなど無関係な文字列 (比較器が `path_separator_only` として別計上)。
+2. Windows 版 puyo_core と WSL 版の**直接の同値確認** (`tests/test_puyo_core_parity.py` を評価データありの環境で)。
+3. 実機 1920×1080 入力、クリーンな Windows 起動、インストーラ・署名、`output/` 肥大・長時間運転、全消し等の通過確認は §9 のとおり未了。
+4. `torch` を外す作業 (§11-6) は M0 の ONNX 化等が要り、別エージェントが触るファイルにも及ぶため、着手前に調整が要る。
 
 ## 10. ファイル一覧 (本ブランチで追加)
 

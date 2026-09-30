@@ -65,6 +65,8 @@ DEFAULT_VC_RUNTIME_DIR = Path('C:/Windows/System32')  # VC++ 再頒布可能パ�
 # 必須と出たのは msvcp140.dll (torch)。同系の補助 DLL も先回りで同梱する。
 VC_RUNTIME_DLLS = ('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'msvcp140_1.dll',
                    'msvcp140_2.dll', 'concrt140.dll')
+ONNXRUNTIME_REQUIREMENT = 'onnxruntime==1.30.0'  # 2026-09-30 の合否評価 (docs/PHASE_J_ONNX_PREREGISTRATION) と同版
+ONNXRUNTIME_DEPENDENCIES = ('flatbuffers', 'protobuf', 'packaging')
 ONNX_WHEELHOUSE = Path('downloads/wheelhouse_onnx')
 ONNX_WHEEL_PREFIXES = ('onnxruntime-', 'flatbuffers-', 'protobuf-', 'packaging-')
 ONNX_SITE_GLOBS = ('onnxruntime', 'onnxruntime-*.dist-info', 'flatbuffers', 'flatbuffers-*.dist-info', 'google',
@@ -85,6 +87,25 @@ def download_inputs(work: Path) -> None:
                         '--only-binary=:all:', '--python-version', '3.12', '--platform', 'win_amd64',
                         '--index-url', TORCH_CPU_INDEX, '--extra-index-url', PYPI_INDEX,
                         '-d', str(wheelhouse)], check=True)
+    fetch_onnx_inputs(work, downloads)
+
+
+def fetch_onnx_inputs(work: Path, downloads: Path) -> None:
+    """--with-onnx 用: ONNX Runtime (同梱) と、書き出しにだけ使う onnx (work/onnxtools。配布物には入れない)。
+    puyo_core の Windows wheel は別途ビルドする (docs/PHASE_J_PACKAGING_PLAN §11-1、work/native_build/wheels)。"""
+    onnx_house = downloads / 'wheelhouse_onnx'
+    if not any(onnx_house.glob('onnxruntime-*.whl')):
+        subprocess.run([sys.executable, '-m', 'pip', 'download', ONNXRUNTIME_REQUIREMENT, '--no-deps',
+                        '--only-binary=:all:', '--python-version', '3.12', '--platform', 'win_amd64',
+                        '-d', str(onnx_house)], check=True)
+        for extra in ONNXRUNTIME_DEPENDENCIES:
+            subprocess.run([sys.executable, '-m', 'pip', 'download', extra, '--no-deps', '--only-binary=:all:',
+                            '--python-version', '3.12', '--platform', 'win_amd64', '-d', str(onnx_house)], check=True)
+    tools = work / 'onnxtools'
+    if not tools.is_dir():
+        subprocess.run([sys.executable, '-m', 'pip', 'install', 'onnx', 'ml_dtypes', '--no-deps', '--only-binary=:all:',
+                        '--python-version', '3.12', '--platform', 'win_amd64', '--implementation', 'cp',
+                        '--target', str(tools), '--no-compile'], check=True)
 
 
 def stage_python(bundle: Path, work: Path) -> None:

@@ -163,6 +163,9 @@ def main() -> None:
     from src import cnn_onnx
     original = cnn_onnx.session_for
     cnn_onnx.session_for = lambda digest, root=onnx_dir, optimization=None: original(digest, root, optimization)
+    if config.get('torch_threads'):  # 本番は cpu_threads=1。ONNX 側 (intra_op=1) と条件を揃えた時間比較用
+        import torch
+        torch.set_num_threads(int(config['torch_threads']))
     classifiers = {name: load_classifier(models_dir / name) for name in config['models']}
     report: dict[str, Any] = dict(videos={}, config=config)
     for video in config['videos']:
