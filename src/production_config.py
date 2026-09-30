@@ -1448,6 +1448,10 @@ PLACEMENT_RECONCILE_ADOPTED: tuple[AdoptedFlag, ...] = (
         '--next-recolor-pair-guard', "2026-09-30",
         'cycle65 NEXT履歴色補正の対整合ガード (d3c5b0d)。確定遅延時に1手先のqueueで着地セルを上書きする誤りを止める (根因: logs/match14_misread/DIAGNOSIS.md)。 c65全長検収 (R1b+E35+D5+D5b+本ガード、E36事前登録門): q .507567 (門 .508040) / zenchi 92.06% (7,671/8,333、門7,671) / 誤発火0/37 (門1/35) / 3:00場面 2760.38秒 (門2766.0秒) / 第14試合1P 884秒の誤確定0。E36b本番比 q +0.000002 / zenchi -5フレーム / 誤発火 1→0。影子測定 4動画 書換セル正解 269→581/584 (悪化1セル zenchi 3155.75秒)。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/c65_guard/e36b_on、logs/c65_guard/RESULT.md。',
     ),
+    AdoptedFlag(
+        '--verification-pending-chain-expiry', "2026-09-30",
+        '連鎖後答え合わせの pending を新しい連鎖開始で失効 (0c0c338)。q第14試合の幻おじゃま (1,5)(2,5)(3,5) の根因B (logs/match14_misread/DIAGNOSIS.md)。 影子測定 4動画: 答え合わせ248件中失効10、書込セル正解 1,106→1,179/1,467 (悪化0・改善73)。 全長ゲート (事前登録 e9e1912、現本番比非悪化): q .507567 / zenchi 7,671/8,333 / 誤発火0/37 / 3:00場面 2760.38秒 / 第14試合誤確定0 — 評価出力は現本番と同一 (認識記録は q 693行・fc 1,365行が変化、盤面品質のみ改善)。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/pending_expiry/e36b_on、logs/pending_expiry/RESULT.md。',
+    ),
 )
 
 

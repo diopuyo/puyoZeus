@@ -152,7 +152,8 @@ def test_production_flags_equal_e36b_configuration() -> None:
     assert e36b_cli_flags() == replay_side
     # 認識側の描画専用枠: R1b (e36b) + cycle65 対整合ガード (c65全長検収 2026-09-30)。
     assert set(shlex.split(config.placement_reconcile_flags())) == {
-        "--placement-signal-reconcile", "--next-recolor-pair-guard"}
+        "--placement-signal-reconcile", "--next-recolor-pair-guard",
+        "--verification-pending-chain-expiry"}
     assert "--placement-signal-reconcile-ojama" not in config.placement_reconcile_flags()
 
 
@@ -163,6 +164,7 @@ def test_render_production_enables_r1b_and_replay_does_not_receive_it(
     assert render["placement_signal_reconcile"] is True
     assert render["placement_signal_reconcile_ojama"] is False
     assert render["next_recolor_pair_guard"] is True
+    assert render["verification_pending_chain_expiry"] is True
     for name in ("post_counter_death_bound", "single_death_proof_guard",
                  "single_death_proof_negative_only"):
         assert render[name] is True
@@ -172,3 +174,4 @@ def test_render_production_enables_r1b_and_replay_does_not_receive_it(
     plain = cli_options(RENDER, [], monkeypatch)
     assert plain["placement_signal_reconcile"] is False and plain["post_counter_death_bound"] is False
     assert plain["next_recolor_pair_guard"] is False
+    assert plain["verification_pending_chain_expiry"] is False
