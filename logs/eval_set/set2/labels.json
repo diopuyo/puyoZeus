@@ -1,0 +1,1249 @@
+{
+ "games": [
+  {
+   "game": 1,
+   "winner": "2P",
+   "start": 3412.2,
+   "end": 3626.0,
+   "part": "s0",
+   "panel_before": [
+    28,
+    29
+   ],
+   "panel_after": [
+    28,
+    30
+   ],
+   "evidence": "gap_0.jpg: 3475秒28–29、3485秒28–30"
+  },
+  {
+   "game": 2,
+   "winner": "2P",
+   "start": 3626.0,
+   "end": 3673.033,
+   "panel_before": [
+    0,
+    0
+   ],
+   "panel_after": [
+    0,
+    1
+   ],
+   "part": "s1",
+   "next30_game": 1
+  },
+  {
+   "game": 3,
+   "winner": "1P",
+   "start": 3673.033,
+   "end": 3744.7,
+   "panel_before": [
+    0,
+    1
+   ],
+   "panel_after": [
+    1,
+    1
+   ],
+   "part": "s1",
+   "next30_game": 2
+  },
+  {
+   "game": 4,
+   "winner": "1P",
+   "start": 3744.7,
+   "end": 3801.833,
+   "panel_before": [
+    1,
+    1
+   ],
+   "panel_after": [
+    2,
+    1
+   ],
+   "part": "s1",
+   "next30_game": 3
+  },
+  {
+   "game": 5,
+   "winner": "2P",
+   "start": 3801.833,
+   "end": 3893.966,
+   "panel_before": [
+    2,
+    1
+   ],
+   "panel_after": [
+    2,
+    2
+   ],
+   "part": "s1",
+   "next30_game": 4
+  },
+  {
+   "game": 6,
+   "winner": "1P",
+   "start": 3893.966,
+   "end": 3993.3,
+   "panel_before": [
+    2,
+    2
+   ],
+   "panel_after": [
+    3,
+    2
+   ],
+   "part": "s1",
+   "next30_game": 5
+  },
+  {
+   "game": 7,
+   "winner": "1P",
+   "start": 3993.3,
+   "end": 4035.7,
+   "panel_before": [
+    3,
+    2
+   ],
+   "panel_after": [
+    4,
+    2
+   ],
+   "part": "s1",
+   "next30_game": 6
+  },
+  {
+   "game": 8,
+   "winner": "2P",
+   "start": 4035.7,
+   "end": 4084.566,
+   "panel_before": [
+    4,
+    2
+   ],
+   "panel_after": [
+    4,
+    3
+   ],
+   "part": "s1",
+   "next30_game": 7
+  },
+  {
+   "game": 9,
+   "winner": "2P",
+   "start": 4084.566,
+   "end": 4142.4,
+   "panel_before": [
+    4,
+    3
+   ],
+   "panel_after": [
+    4,
+    4
+   ],
+   "part": "s1",
+   "next30_game": 8
+  },
+  {
+   "game": 10,
+   "winner": "2P",
+   "start": 4142.4,
+   "end": 4218.566,
+   "panel_before": [
+    4,
+    4
+   ],
+   "panel_after": [
+    4,
+    5
+   ],
+   "part": "s1",
+   "next30_game": 9
+  },
+  {
+   "game": 11,
+   "winner": "2P",
+   "start": 4218.566,
+   "end": 4293.2,
+   "panel_before": [
+    4,
+    5
+   ],
+   "panel_after": [
+    4,
+    6
+   ],
+   "part": "s1",
+   "next30_game": 10
+  },
+  {
+   "game": 12,
+   "winner": "1P",
+   "start": 4293.2,
+   "end": 4379.5,
+   "panel_before": [
+    4,
+    6
+   ],
+   "panel_after": [
+    5,
+    6
+   ],
+   "part": "s2",
+   "next30_game": 11
+  },
+  {
+   "game": 13,
+   "winner": "2P",
+   "start": 4379.5,
+   "end": 4452.866,
+   "panel_before": [
+    5,
+    6
+   ],
+   "panel_after": [
+    5,
+    7
+   ],
+   "part": "s2",
+   "next30_game": 12
+  },
+  {
+   "game": 14,
+   "winner": "2P",
+   "start": 4452.866,
+   "end": 4550.366,
+   "panel_before": [
+    5,
+    7
+   ],
+   "panel_after": [
+    5,
+    8
+   ],
+   "part": "s2",
+   "next30_game": 13
+  },
+  {
+   "game": 15,
+   "winner": "2P",
+   "start": 4550.366,
+   "end": 4623.633,
+   "panel_before": [
+    5,
+    8
+   ],
+   "panel_after": [
+    5,
+    9
+   ],
+   "part": "s2",
+   "next30_game": 14
+  },
+  {
+   "game": 16,
+   "winner": "1P",
+   "start": 4623.633,
+   "end": 4660.3,
+   "panel_before": [
+    5,
+    9
+   ],
+   "panel_after": [
+    6,
+    9
+   ],
+   "part": "s2",
+   "next30_game": 15
+  },
+  {
+   "game": 17,
+   "winner": "2P",
+   "start": 4660.3,
+   "end": 4730.0,
+   "panel_before": [
+    6,
+    9
+   ],
+   "panel_after": [
+    6,
+    10
+   ],
+   "part": "s2",
+   "next30_game": 16
+  },
+  {
+   "game": 18,
+   "winner": "1P",
+   "start": 4730.0,
+   "end": 4762.5,
+   "panel_before": [
+    6,
+    10
+   ],
+   "panel_after": [
+    7,
+    10
+   ],
+   "part": "s2",
+   "next30_game": 17
+  },
+  {
+   "game": 19,
+   "winner": "2P",
+   "start": 4762.5,
+   "end": 4818.266,
+   "panel_before": [
+    7,
+    10
+   ],
+   "panel_after": [
+    7,
+    11
+   ],
+   "part": "s2",
+   "next30_game": 18
+  },
+  {
+   "game": 20,
+   "winner": "1P",
+   "start": 4818.266,
+   "end": 4866.233,
+   "panel_before": [
+    7,
+    11
+   ],
+   "panel_after": [
+    8,
+    11
+   ],
+   "part": "s2",
+   "next30_game": 19
+  },
+  {
+   "game": 21,
+   "winner": "2P",
+   "start": 4866.233,
+   "end": 4924.033,
+   "panel_before": [
+    8,
+    11
+   ],
+   "panel_after": [
+    8,
+    12
+   ],
+   "part": "s2",
+   "next30_game": 20
+  },
+  {
+   "game": 22,
+   "winner": "1P",
+   "start": 4924.033,
+   "end": 4976.366,
+   "panel_before": [
+    8,
+    12
+   ],
+   "panel_after": [
+    9,
+    12
+   ],
+   "part": "s3",
+   "next30_game": 21
+  },
+  {
+   "game": 23,
+   "winner": "2P",
+   "start": 4976.366,
+   "end": 5026.833,
+   "panel_before": [
+    9,
+    12
+   ],
+   "panel_after": [
+    9,
+    13
+   ],
+   "part": "s3",
+   "next30_game": 22
+  },
+  {
+   "game": 24,
+   "winner": "2P",
+   "start": 5026.833,
+   "end": 5061.7,
+   "panel_before": [
+    9,
+    13
+   ],
+   "panel_after": [
+    9,
+    14
+   ],
+   "part": "s3",
+   "next30_game": 23
+  },
+  {
+   "game": 25,
+   "winner": "1P",
+   "start": 5061.7,
+   "end": 5127.433,
+   "panel_before": [
+    9,
+    14
+   ],
+   "panel_after": [
+    10,
+    14
+   ],
+   "part": "s3",
+   "next30_game": 24
+  },
+  {
+   "game": 26,
+   "winner": "1P",
+   "start": 5127.433,
+   "end": 5189.566,
+   "panel_before": [
+    10,
+    14
+   ],
+   "panel_after": [
+    11,
+    14
+   ],
+   "part": "s3",
+   "next30_game": 25
+  },
+  {
+   "game": 27,
+   "winner": "2P",
+   "start": 5189.566,
+   "end": 5255.6,
+   "panel_before": [
+    11,
+    14
+   ],
+   "panel_after": [
+    11,
+    15
+   ],
+   "part": "s3",
+   "next30_game": 26
+  },
+  {
+   "game": 28,
+   "winner": "1P",
+   "start": 5255.6,
+   "end": 5283.166,
+   "panel_before": [
+    11,
+    15
+   ],
+   "panel_after": [
+    12,
+    15
+   ],
+   "part": "s3",
+   "next30_game": 27
+  },
+  {
+   "game": 29,
+   "winner": "2P",
+   "start": 5283.166,
+   "end": 5366.133,
+   "panel_before": [
+    12,
+    15
+   ],
+   "panel_after": [
+    12,
+    16
+   ],
+   "part": "s3",
+   "next30_game": 28
+  },
+  {
+   "game": 30,
+   "winner": "2P",
+   "start": 5366.133,
+   "end": 5425.0,
+   "panel_before": [
+    12,
+    16
+   ],
+   "panel_after": [
+    12,
+    17
+   ],
+   "part": "s3",
+   "next30_game": 29
+  },
+  {
+   "game": 31,
+   "winner": "1P",
+   "start": 5425.0,
+   "end": 5482.066,
+   "panel_before": [
+    12,
+    17
+   ],
+   "panel_after": [
+    13,
+    17
+   ],
+   "part": "s3",
+   "next30_game": 30
+  },
+  {
+   "game": 32,
+   "winner": "1P",
+   "start": 5482.066,
+   "end": 5525.433,
+   "panel_before": [
+    13,
+    17
+   ],
+   "panel_after": [
+    14,
+    17
+   ],
+   "part": "s4",
+   "next30_game": 31
+  },
+  {
+   "game": 33,
+   "winner": "2P",
+   "start": 5525.433,
+   "end": 5605.933,
+   "panel_before": [
+    14,
+    17
+   ],
+   "panel_after": [
+    14,
+    18
+   ],
+   "part": "s4",
+   "next30_game": 32
+  },
+  {
+   "game": 34,
+   "winner": "1P",
+   "start": 5605.933,
+   "end": 5641.366,
+   "panel_before": [
+    14,
+    18
+   ],
+   "panel_after": [
+    15,
+    18
+   ],
+   "part": "s4",
+   "next30_game": 33
+  },
+  {
+   "game": 35,
+   "winner": "1P",
+   "start": 5641.366,
+   "end": 5739.866,
+   "panel_before": [
+    15,
+    18
+   ],
+   "panel_after": [
+    16,
+    18
+   ],
+   "part": "s4",
+   "next30_game": 34
+  },
+  {
+   "game": 36,
+   "winner": "1P",
+   "start": 5739.866,
+   "end": 5783.8,
+   "panel_before": [
+    16,
+    18
+   ],
+   "panel_after": [
+    17,
+    18
+   ],
+   "part": "s4",
+   "next30_game": 35
+  },
+  {
+   "game": 37,
+   "winner": "1P",
+   "start": 5783.8,
+   "end": 5827.566,
+   "panel_before": [
+    17,
+    18
+   ],
+   "panel_after": [
+    18,
+    18
+   ],
+   "part": "s4",
+   "next30_game": 36
+  },
+  {
+   "game": 38,
+   "winner": "1P",
+   "start": 5827.566,
+   "end": 5893.566,
+   "panel_before": [
+    18,
+    18
+   ],
+   "panel_after": [
+    19,
+    18
+   ],
+   "part": "s4",
+   "next30_game": 37
+  },
+  {
+   "game": 39,
+   "winner": "2P",
+   "start": 5893.566,
+   "end": 5935.733,
+   "panel_before": [
+    19,
+    18
+   ],
+   "panel_after": [
+    19,
+    19
+   ],
+   "part": "s4",
+   "next30_game": 38
+  },
+  {
+   "game": 40,
+   "winner": "1P",
+   "start": 5935.733,
+   "end": 6000.933,
+   "panel_before": [
+    19,
+    19
+   ],
+   "panel_after": [
+    20,
+    19
+   ],
+   "part": "s4",
+   "next30_game": 39
+  },
+  {
+   "game": 41,
+   "winner": "1P",
+   "start": 6000.933,
+   "end": 6066.6,
+   "panel_before": [
+    20,
+    19
+   ],
+   "panel_after": [
+    21,
+    19
+   ],
+   "part": "s4",
+   "next30_game": 40
+  },
+  {
+   "game": 42,
+   "winner": "1P",
+   "start": 6066.6,
+   "end": 6131.633,
+   "panel_before": [
+    21,
+    19
+   ],
+   "panel_after": [
+    22,
+    19
+   ],
+   "part": "s5",
+   "next30_game": 41
+  },
+  {
+   "game": 43,
+   "winner": "2P",
+   "start": 6131.633,
+   "end": 6204.733,
+   "panel_before": [
+    22,
+    19
+   ],
+   "panel_after": [
+    22,
+    20
+   ],
+   "part": "s5",
+   "next30_game": 42
+  },
+  {
+   "game": 44,
+   "winner": "2P",
+   "start": 6204.733,
+   "end": 6281.566,
+   "panel_before": [
+    22,
+    20
+   ],
+   "panel_after": [
+    22,
+    21
+   ],
+   "part": "s5",
+   "next30_game": 43
+  },
+  {
+   "game": 45,
+   "winner": "1P",
+   "start": 6281.566,
+   "end": 6399.333,
+   "panel_before": [
+    22,
+    21
+   ],
+   "panel_after": [
+    23,
+    21
+   ],
+   "part": "s5",
+   "next30_game": 44
+  },
+  {
+   "game": 46,
+   "winner": "1P",
+   "start": 6399.333,
+   "end": 6451.3,
+   "panel_before": [
+    23,
+    21
+   ],
+   "panel_after": [
+    24,
+    21
+   ],
+   "part": "s5",
+   "next30_game": 45
+  },
+  {
+   "game": 47,
+   "winner": "2P",
+   "start": 6451.3,
+   "end": 6522.366,
+   "panel_before": [
+    24,
+    21
+   ],
+   "panel_after": [
+    24,
+    22
+   ],
+   "part": "s5",
+   "next30_game": 46
+  },
+  {
+   "game": 48,
+   "winner": "1P",
+   "start": 6522.366,
+   "end": 6562.866,
+   "panel_before": [
+    24,
+    22
+   ],
+   "panel_after": [
+    25,
+    22
+   ],
+   "part": "s5",
+   "next30_game": 47
+  },
+  {
+   "game": 49,
+   "winner": "2P",
+   "start": 6562.866,
+   "end": 6631.8,
+   "panel_before": [
+    25,
+    22
+   ],
+   "panel_after": [
+    25,
+    23
+   ],
+   "part": "s5",
+   "next30_game": 48
+  },
+  {
+   "game": 50,
+   "winner": "2P",
+   "start": 6631.8,
+   "end": 6664.166,
+   "panel_before": [
+    25,
+    23
+   ],
+   "panel_after": [
+    25,
+    24
+   ],
+   "part": "s5",
+   "next30_game": 49
+  },
+  {
+   "game": 51,
+   "winner": "1P",
+   "start": 6664.166,
+   "end": 6724.333,
+   "panel_before": [
+    25,
+    24
+   ],
+   "panel_after": [
+    26,
+    24
+   ],
+   "part": "s6",
+   "next30_game": 50
+  },
+  {
+   "game": 52,
+   "winner": "2P",
+   "start": 6724.333,
+   "end": 6755.4,
+   "panel_before": [
+    26,
+    24
+   ],
+   "panel_after": [
+    26,
+    25
+   ],
+   "part": "s6",
+   "next30_game": 51
+  },
+  {
+   "game": 53,
+   "winner": "2P",
+   "start": 6755.4,
+   "end": 6788.466,
+   "panel_before": [
+    26,
+    25
+   ],
+   "panel_after": [
+    26,
+    26
+   ],
+   "part": "s6",
+   "next30_game": 52
+  },
+  {
+   "game": 54,
+   "winner": "2P",
+   "start": 6788.466,
+   "end": 6832.9,
+   "panel_before": [
+    26,
+    26
+   ],
+   "panel_after": [
+    26,
+    27
+   ],
+   "part": "s6",
+   "next30_game": 53
+  },
+  {
+   "game": 55,
+   "winner": "2P",
+   "start": 6832.9,
+   "end": 6874.366,
+   "panel_before": [
+    26,
+    27
+   ],
+   "panel_after": [
+    26,
+    28
+   ],
+   "part": "s6",
+   "next30_game": 54
+  },
+  {
+   "game": 56,
+   "winner": "1P",
+   "start": 6874.366,
+   "end": 6931.733,
+   "panel_before": [
+    26,
+    28
+   ],
+   "panel_after": [
+    27,
+    28
+   ],
+   "part": "s6",
+   "next30_game": 55
+  },
+  {
+   "game": 57,
+   "winner": "2P",
+   "start": 6931.733,
+   "end": 6972.933,
+   "panel_before": [
+    27,
+    28
+   ],
+   "panel_after": [
+    27,
+    29
+   ],
+   "part": "s6",
+   "next30_game": 56
+  },
+  {
+   "game": 58,
+   "winner": "2P",
+   "start": 6972.933,
+   "end": 7033.6,
+   "panel_before": [
+    27,
+    29
+   ],
+   "panel_after": [
+    27,
+    30
+   ],
+   "part": "s6",
+   "next30_game": 57
+  }
+ ],
+ "checks": {
+  "panel_match": 58,
+  "panel_total": 58,
+  "set1_overlap_games": 0,
+  "unlabelled_games": 0
+ },
+ "training": {
+  "input_videos": 148,
+  "training_videos": 148,
+  "exchange_videos": 144,
+  "overlap_ids": [],
+  "names": [
+   "video_29",
+   "video_30",
+   "video_31",
+   "video_32",
+   "video_33",
+   "video_34",
+   "video_35",
+   "video_36",
+   "video_37",
+   "video_38",
+   "video_39",
+   "video_40",
+   "video_51",
+   "video_52",
+   "video_c1",
+   "video_c10",
+   "video_c100",
+   "video_c101",
+   "video_c102",
+   "video_c103",
+   "video_c104",
+   "video_c105",
+   "video_c106",
+   "video_c107",
+   "video_c108",
+   "video_c109",
+   "video_c11",
+   "video_c110",
+   "video_c111",
+   "video_c112",
+   "video_c113",
+   "video_c114",
+   "video_c115",
+   "video_c116",
+   "video_c117",
+   "video_c118",
+   "video_c119",
+   "video_c12",
+   "video_c120",
+   "video_c121",
+   "video_c122",
+   "video_c123",
+   "video_c124",
+   "video_c125",
+   "video_c126",
+   "video_c127",
+   "video_c128",
+   "video_c129",
+   "video_c13",
+   "video_c130",
+   "video_c131",
+   "video_c132",
+   "video_c133",
+   "video_c134",
+   "video_c135",
+   "video_c136",
+   "video_c137",
+   "video_c138",
+   "video_c139",
+   "video_c14",
+   "video_c140",
+   "video_c141",
+   "video_c142",
+   "video_c143",
+   "video_c144",
+   "video_c15",
+   "video_c16",
+   "video_c17",
+   "video_c18",
+   "video_c19",
+   "video_c2",
+   "video_c20",
+   "video_c21",
+   "video_c22",
+   "video_c23",
+   "video_c24",
+   "video_c25",
+   "video_c26",
+   "video_c27",
+   "video_c28",
+   "video_c29",
+   "video_c3",
+   "video_c30",
+   "video_c31",
+   "video_c32",
+   "video_c33",
+   "video_c34",
+   "video_c35",
+   "video_c36",
+   "video_c37",
+   "video_c4",
+   "video_c40",
+   "video_c41",
+   "video_c42",
+   "video_c43",
+   "video_c44",
+   "video_c45",
+   "video_c46",
+   "video_c47",
+   "video_c48",
+   "video_c49",
+   "video_c5",
+   "video_c50",
+   "video_c51",
+   "video_c52",
+   "video_c53",
+   "video_c54",
+   "video_c55",
+   "video_c56",
+   "video_c57",
+   "video_c58",
+   "video_c59",
+   "video_c6",
+   "video_c60",
+   "video_c61",
+   "video_c62",
+   "video_c63",
+   "video_c64",
+   "video_c65",
+   "video_c66",
+   "video_c67",
+   "video_c68",
+   "video_c69",
+   "video_c7",
+   "video_c70",
+   "video_c71",
+   "video_c72",
+   "video_c73",
+   "video_c74",
+   "video_c75",
+   "video_c76",
+   "video_c77",
+   "video_c78",
+   "video_c79",
+   "video_c8",
+   "video_c80",
+   "video_c81",
+   "video_c82",
+   "video_c83",
+   "video_c84",
+   "video_c9",
+   "video_c95",
+   "video_c96s1",
+   "video_c96s2",
+   "video_c96s3",
+   "video_c97",
+   "video_c98",
+   "video_c99"
+  ],
+  "youtube_ids": [
+   "xX4qC3im26w",
+   "HtCsJm9uwyA",
+   "YgYh8sXFHFE",
+   "fhlUO3xhvr4",
+   "IohzpJf4qD0",
+   "Du64HhfN6iI",
+   "JvMRe830fQE",
+   "c2ZJSOOA2qk",
+   "bQ_BO0umm_0",
+   "Pl804jhzOl8",
+   "RNUJjULeHJI",
+   "54ohUB70Koo",
+   "175kntUk2xA",
+   "3DhPCYMdlAE",
+   "kETyIUk_Vb8",
+   "m2qfYVCQzDQ",
+   "cwj247CtYtw",
+   "04hTIbmuhl0",
+   "oFra5QBFxUU",
+   "MA2Xq6smpbY",
+   "-w9ziMGve40",
+   "hJezrrCbkDg",
+   "ABm5FumO_vQ",
+   "DAGNxVGFsE4",
+   "F5UyYct4veI",
+   "OUkub5_6Zts",
+   "AccHEU_5024",
+   "zB8d1FuCStU",
+   "d1i38E4gE1s",
+   "iZZyNGtJ3G8",
+   "kOWy50IddfI",
+   "scbjMU8m7QA",
+   "QzVwMcD2U3k",
+   "KmuHx9_EFm0",
+   "7pYaBQjlyCU",
+   "gBLtkwkPQxU",
+   "8PpIsMkQEAg",
+   "ioXOuiCztJQ",
+   "p7Yd9r4RUUA",
+   "1707CzKmXPg",
+   "kfIfWQZksNk",
+   "TkvXHB-Bqcw",
+   "-_bVIlk0nVw",
+   "9uLeoQeZ73s",
+   "-J6inVQlV8k",
+   "-yJuHp62gT8",
+   "XPGPLXyKoak",
+   "SHUxfLEUngg",
+   "sxIU0Cr_iSQ",
+   "OjGK19LpVs0",
+   "MjmYdYM5QIU",
+   "_qJod5PzH3s",
+   "jVsu05HNgFo",
+   "6ViO4xH70gQ",
+   "DWllSSML7YY",
+   "hqpoHjN4Lx0",
+   "56l3ooNJfs8",
+   "Z-VMWHmxeao",
+   "Dgla5UVL1DY",
+   "1fGg0yjkrlw",
+   "Be0HyETJ47w",
+   "R7vU1wQ4BxI",
+   "7J1VkyPLsi8",
+   "Lz1nXzQh9pc",
+   "mlXw2lyptuE",
+   "JbKPscv0njs",
+   "qpyaqOUkl1U",
+   "7wehbuHr74U",
+   "sOkUhL3cdHM",
+   "q5Kz8GzF3kQ",
+   "Lw6Z8Nzguo4",
+   "LzZUb8JnECE",
+   "mAUBFZANAZM",
+   "l2yAlnzMIDo",
+   "I8kNracPWCA",
+   "GJMvphfqs6U",
+   "Ei_Uu8B8KE8",
+   "FW5FWAP8nQ4",
+   "LNsVtiZHalo",
+   "VOH8TuaUIf0",
+   "k-k2zImnp8U",
+   "fIIDFPCD2w0",
+   "X9uQ6eZy8is",
+   "80W5JXVxM7U",
+   "3ImrF1TrjIo",
+   "hboIZroeCbc",
+   "al2ayeqbxyI",
+   "JvvJQcL7iR4",
+   "GqBH999cQyU",
+   "enHxRrKeAAs",
+   "wouZ3tbIC5c",
+   "y2L18kd4yHg",
+   "QHLwBYhUppg",
+   "YdMfDXC9tyM",
+   "CxAc3ARv-kw",
+   "iR75tB73Pps",
+   "CalCkF7vmGM",
+   "aMS7lXLjWOY",
+   "UeL0qoCwIV4",
+   "8pVEmxvEQ18",
+   "EvOgrAMBmfM",
+   "BxP6e4i353k",
+   "DSsxaZk2ckI",
+   "gzDjjWFL_Qo",
+   "g_bFvlXeJks",
+   "krlszUFRO-Y",
+   "x5q4BbkKlH0",
+   "wYzxAjo-hi4",
+   "YBKSpohPIxg",
+   "YuF9QarQra4",
+   "MLQuKjTWrdw",
+   "Y40eVLrnwE4",
+   "la1eciFIodo",
+   "DuEjyy3w3CI",
+   "7GzyjbnMJYs",
+   "Ju76d7CJ46U",
+   "uvHXyP5V4-8",
+   "h1GpiHbFgR4",
+   "1QoAmAQsROs",
+   "cYiFD-jlFBc",
+   "lGFYrIe65ps",
+   "DBfHe3dA244",
+   "-mCImzUDQkQ",
+   "Aqa3k4-lU7k",
+   "z_HaEPhxdVU",
+   "lcMK9XEFx5o",
+   "CoZ-kfMhF88",
+   "HSy0Kj8HNoI",
+   "QCx3EPE8yEA",
+   "mkvVJmt309A",
+   "H9uHCNGqBqk",
+   "dWchqPaeEc4",
+   "IrCNnxwWa1o",
+   "Hl2QlK8dAwo",
+   "6C0koGRlXu0",
+   "6asLcTglLQI",
+   "UsMva_S3LAQ",
+   "04Lb9BZCpP0",
+   "UpnGj22itdA",
+   "GDfVPnyrfwU",
+   "mtNoLwHSg1A",
+   "lWmBXteEbeg",
+   "KmRmSHe7DPg",
+   "KmRmSHe7DPg",
+   "KmRmSHe7DPg",
+   "qQPN_WH0rsE",
+   "11yd57NnD3k",
+   "AUkdmRo3cA4"
+  ],
+  "inputs_sha256": "538f9e38ad654bce16b258dc00ae5c840de84bb94c8293bf9702a8cc0a542796",
+  "tier_sha256": "5a9b03ceafccc916e15efed51b476d6d7dbe83e67e8bfc949e0c3c270df5524c",
+  "model_sha256": "5a239cc95b2e35dc40eac35852b3e26143cdfea5f24704da62b189ae4762c762"
+ },
+ "terminal_evidence": "tail_0.jpg: 7022〜7028秒 WIN 27–30",
+ "boundary_note": "事前登録の3412秒以降の公式試合すべてを優先。前セット最終戦1+次セット57。窓はセット1と同じく前試合終了=次試合開始。セット間メニューもs0の窓に含む。"
+}

@@ -1,0 +1,12 @@
+{
+    "exit_code":  null,
+    "source":  "check",
+    "completed":  true,
+    "sha256":  "24ae36be704b99a8e8f127ccc0c8a786314b461c3d7e84441e246081ac22e424",
+    "process_absent":  true,
+    "reason":  "実行中にjob.shを更新したため終了通知のみ未保存。収集完了票・SHA・gzip終端を照合",
+    "terminal":  {
+                     "kind":  "complete",
+                     "frames":  4470
+                 }
+}

@@ -1,0 +1,571 @@
+{
+ "records": 5,
+ "deaths": {
+  "total": 37,
+  "false": 0,
+  "unresolved": 0,
+  "same_cases": true
+ },
+ "scene": {
+  "first_display_sec": 2760.116666666667,
+  "legacy_metric_sec": 2760.383333333333,
+  "passed": true
+ },
+ "game14_false_times": [],
+ "passed": true,
+ "rows": [
+  {
+   "source": "q_7gc4TgFig",
+   "game": 2,
+   "side": "1P",
+   "first_sec": 232.56666666666666,
+   "bound": false,
+   "observed_death_sec": 236.46666666666667,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 3.9000000000000057
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 3,
+   "side": "1P",
+   "first_sec": 270.0,
+   "bound": false,
+   "observed_death_sec": 277.43333333333334,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 7.433333333333337
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 4,
+   "side": "2P",
+   "first_sec": 322.0,
+   "bound": true,
+   "observed_death_sec": 344.26666666666665,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 22.26666666666665
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 5,
+   "side": "2P",
+   "first_sec": 394.23333333333335,
+   "bound": false,
+   "observed_death_sec": 396.06666666666666,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 1.8333333333333144
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 6,
+   "side": "1P",
+   "first_sec": 441.3333333333333,
+   "bound": false,
+   "observed_death_sec": 443.43333333333334,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 2.1000000000000227
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 7,
+   "side": "1P",
+   "first_sec": 498.73333333333335,
+   "bound": false,
+   "observed_death_sec": 515.0,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 16.26666666666665
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 8,
+   "side": "2P",
+   "first_sec": 581.8666666666667,
+   "bound": false,
+   "observed_death_sec": 583.7,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 1.8333333333333712
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 9,
+   "side": "1P",
+   "first_sec": 656.0666666666667,
+   "bound": false,
+   "observed_death_sec": 663.1666666666666,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 7.099999999999909
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 10,
+   "side": "1P",
+   "first_sec": 692.8666666666667,
+   "bound": false,
+   "observed_death_sec": 695.5666666666667,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 2.7000000000000455
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 11,
+   "side": "1P",
+   "first_sec": 741.5333333333333,
+   "bound": false,
+   "observed_death_sec": 745.2666666666667,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 3.7333333333333485
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 12,
+   "side": "2P",
+   "first_sec": 782.7666666666667,
+   "bound": true,
+   "observed_death_sec": 786.8,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 4.033333333333303
+  },
+  {
+   "source": "q_7gc4TgFig",
+   "game": 13,
+   "side": "1P",
+   "first_sec": 848.3666666666667,
+   "bound": true,
+   "observed_death_sec": 852.6,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 4.2333333333333485
+  },
+  {
+   "source": "fcXG83vInDY",
+   "game": 1,
+   "side": "1P",
+   "first_sec": 218.23333333333332,
+   "bound": false,
+   "observed_death_sec": 239.93333333333334,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 21.700000000000017
+  },
+  {
+   "source": "fcXG83vInDY",
+   "game": 2,
+   "side": "1P",
+   "first_sec": 309.0,
+   "bound": false,
+   "observed_death_sec": 311.6,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 2.6000000000000227
+  },
+  {
+   "source": "fcXG83vInDY",
+   "game": 3,
+   "side": "2P",
+   "first_sec": 366.0,
+   "bound": false,
+   "observed_death_sec": 370.93333333333334,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 4.933333333333337
+  },
+  {
+   "source": "fcXG83vInDY",
+   "game": 5,
+   "side": "2P",
+   "first_sec": 474.2,
+   "bound": false,
+   "observed_death_sec": 537.8666666666667,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 63.666666666666686
+  },
+  {
+   "source": "fcXG83vInDY",
+   "game": 6,
+   "side": "1P",
+   "first_sec": 626.7333333333333,
+   "bound": true,
+   "observed_death_sec": 631.0,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 4.2666666666666515
+  },
+  {
+   "source": "fcXG83vInDY",
+   "game": 9,
+   "side": "2P",
+   "first_sec": 763.6,
+   "bound": false,
+   "observed_death_sec": 767.5,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 3.8999999999999773
+  },
+  {
+   "source": "fcXG83vInDY",
+   "game": 10,
+   "side": "1P",
+   "first_sec": 824.1,
+   "bound": false,
+   "observed_death_sec": 827.0333333333333,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 2.9333333333332803
+  },
+  {
+   "source": "fcXG83vInDY",
+   "game": 11,
+   "side": "2P",
+   "first_sec": 874.9333333333333,
+   "bound": false,
+   "observed_death_sec": 879.8666666666667,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 4.933333333333394
+  },
+  {
+   "source": "review",
+   "game": 0,
+   "side": "1P",
+   "first_sec": 2573.2166666666667,
+   "bound": false,
+   "observed_death_sec": 2576.983333333333,
+   "opponent_death_sec": null,
+   "winners": [],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 3.766666666666424
+  },
+  {
+   "source": "review",
+   "game": 1,
+   "side": "2P",
+   "first_sec": 2629.3166666666666,
+   "bound": false,
+   "observed_death_sec": 2634.75,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 5.433333333333394
+  },
+  {
+   "source": "review",
+   "game": 3,
+   "side": "2P",
+   "first_sec": 2760.116666666667,
+   "bound": true,
+   "observed_death_sec": 2773.7833333333333,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 13.666666666666515
+  },
+  {
+   "source": "zenchi",
+   "game": 0,
+   "side": "1P",
+   "first_sec": 2573.2166666666667,
+   "bound": false,
+   "observed_death_sec": 2576.983333333333,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 3.766666666666424
+  },
+  {
+   "source": "zenchi",
+   "game": 1,
+   "side": "2P",
+   "first_sec": 2629.3166666666666,
+   "bound": false,
+   "observed_death_sec": 2634.75,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 5.433333333333394
+  },
+  {
+   "source": "zenchi",
+   "game": 3,
+   "side": "2P",
+   "first_sec": 2760.116666666667,
+   "bound": true,
+   "observed_death_sec": 2773.7833333333333,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 13.666666666666515
+  },
+  {
+   "source": "zenchi",
+   "game": 4,
+   "side": "1P",
+   "first_sec": 2808.1833333333334,
+   "bound": false,
+   "observed_death_sec": 2810.8166666666666,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 2.633333333333212
+  },
+  {
+   "source": "zenchi",
+   "game": 5,
+   "side": "2P",
+   "first_sec": 2860.983333333333,
+   "bound": false,
+   "observed_death_sec": 2863.6833333333334,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 2.700000000000273
+  },
+  {
+   "source": "zenchi",
+   "game": 6,
+   "side": "1P",
+   "first_sec": 2892.2833333333333,
+   "bound": false,
+   "observed_death_sec": 2896.15,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 3.866666666666788
+  },
+  {
+   "source": "zenchi",
+   "game": 7,
+   "side": "1P",
+   "first_sec": 2929.116666666667,
+   "bound": false,
+   "observed_death_sec": 2943.9166666666665,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 14.799999999999727
+  },
+  {
+   "source": "zenchi",
+   "game": 8,
+   "side": "2P",
+   "first_sec": 2978.6833333333334,
+   "bound": true,
+   "observed_death_sec": 2979.516666666667,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 0.8333333333334849
+  },
+  {
+   "source": "zenchi",
+   "game": 9,
+   "side": "2P",
+   "first_sec": 3015.5833333333335,
+   "bound": false,
+   "observed_death_sec": 3017.95,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 2.366666666666333
+  },
+  {
+   "source": "zenchi",
+   "game": 11,
+   "side": "2P",
+   "first_sec": 3109.516666666667,
+   "bound": false,
+   "observed_death_sec": 3115.7166666666667,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 6.199999999999818
+  },
+  {
+   "source": "zenchi",
+   "game": 12,
+   "side": "1P",
+   "first_sec": 3162.45,
+   "bound": false,
+   "observed_death_sec": 3169.2166666666667,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 6.766666666666879
+  },
+  {
+   "source": "zenchi",
+   "game": 15,
+   "side": "2P",
+   "first_sec": 3321.7833333333333,
+   "bound": false,
+   "observed_death_sec": 3323.616666666667,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 1.833333333333485
+  },
+  {
+   "source": "zenchi",
+   "game": 16,
+   "side": "1P",
+   "first_sec": 3351.65,
+   "bound": false,
+   "observed_death_sec": 3353.883333333333,
+   "opponent_death_sec": null,
+   "winners": [
+    "2P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 2.233333333333121
+  },
+  {
+   "source": "zenchi",
+   "game": 17,
+   "side": "2P",
+   "first_sec": 3406.6833333333334,
+   "bound": false,
+   "observed_death_sec": 3409.983333333333,
+   "opponent_death_sec": null,
+   "winners": [
+    "1P"
+   ],
+   "false": false,
+   "unresolved": false,
+   "lead_sec": 3.299999999999727
+  }
+ ]
+}

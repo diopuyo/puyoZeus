@@ -1,0 +1,2287 @@
+{
+ "labels": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/set2/labels.json",
+ "games": 58,
+ "bootstrap": {
+  "n": 10000,
+  "seed": 0
+ },
+ "metrics": {
+  "m_time": {
+   "paired": {
+    "diff": -0.0015189332993140736,
+    "ci95": [
+     -0.004123507325998435,
+     0.0008348203227321281
+    ],
+    "se": 0.0012774922693768523,
+    "mdd": 0.003579003179502149
+   },
+   "prod": {
+    "value": 0.5647329715550387,
+    "ci95": [
+     0.5276545697163026,
+     0.6023786359429956
+    ]
+   },
+   "e19": {
+    "value": 0.5632140382557246,
+    "ci95": [
+     0.5270278281449547,
+     0.6003652173976557
+    ]
+   }
+  },
+  "m_agree": {
+   "paired": {
+    "diff": -0.002734202386212914,
+    "ci95": [
+     -0.008202193347558454,
+     0.0013407999375406885
+    ],
+    "se": 0.0024433937851043833,
+    "mdd": 0.006845375377441664
+   },
+   "prod": {
+    "value": 0.85320923552806,
+    "ci95": [
+     0.8004825256052398,
+     0.9007732883453575
+    ]
+   },
+   "e19": {
+    "value": 0.8504750331418471,
+    "ci95": [
+     0.7967826512439907,
+     0.8984247654499696
+    ]
+   }
+  }
+ },
+ "summaries": {
+  "prod": {
+   "games": 58,
+   "frames": 108644,
+   "m_time": 0.5647329715550387,
+   "m_cp25": 0.7046522910389817,
+   "m_cp50": 0.7527952750730129,
+   "m_cp75": 0.46456018307889757,
+   "m_cp": 0.6406692497302974,
+   "m_agree": 0.85320923552806,
+   "agree_hits": 30893,
+   "agree_frames": 36208,
+   "m_frame": 0.5567813227232115
+  },
+  "e19": {
+   "games": 58,
+   "frames": 108644,
+   "m_time": 0.5632140382557246,
+   "m_cp25": 0.7018834377171532,
+   "m_cp50": 0.7355034022555053,
+   "m_cp75": 0.4763853488372024,
+   "m_cp": 0.6379240629366203,
+   "m_agree": 0.8504750331418471,
+   "agree_hits": 30794,
+   "agree_frames": 36208,
+   "m_frame": 0.5540345744101028
+  }
+ },
+ "deaths": {
+  "prod": {
+   "cases": 48,
+   "false": 6,
+   "unlabelled": 0,
+   "outside_window_values": 12,
+   "rows": [
+    {
+     "game": 1,
+     "side": "1P",
+     "first_sec": 3474.4666666666667,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 3,
+     "side": "2P",
+     "first_sec": 3735.2,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 4,
+     "side": "2P",
+     "first_sec": 3795.0666666666666,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 6,
+     "side": "2P",
+     "first_sec": 3941.9666666666667,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 8,
+     "side": "1P",
+     "first_sec": 4073.3333333333335,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 9,
+     "side": "1P",
+     "first_sec": 4135.0,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 10,
+     "side": "1P",
+     "first_sec": 4179.9,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 11,
+     "side": "1P",
+     "first_sec": 4271.666666666667,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 12,
+     "side": "2P",
+     "first_sec": 4342.866666666667,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 13,
+     "side": "2P",
+     "first_sec": 4417.4,
+     "winner": "2P",
+     "false": true
+    },
+    {
+     "game": 13,
+     "side": "1P",
+     "first_sec": 4441.0,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 14,
+     "side": "1P",
+     "first_sec": 4537.2,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 15,
+     "side": "2P",
+     "first_sec": 4598.033333333334,
+     "winner": "2P",
+     "false": true
+    },
+    {
+     "game": 15,
+     "side": "1P",
+     "first_sec": 4613.733333333334,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 16,
+     "side": "2P",
+     "first_sec": 4655.666666666667,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 19,
+     "side": "1P",
+     "first_sec": 4804.533333333334,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 20,
+     "side": "2P",
+     "first_sec": 4844.2,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 21,
+     "side": "1P",
+     "first_sec": 4915.933333333333,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 23,
+     "side": "1P",
+     "first_sec": 5015.25,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 24,
+     "side": "1P",
+     "first_sec": 5056.583333333333,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 26,
+     "side": "2P",
+     "first_sec": 5174.883333333333,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 27,
+     "side": "1P",
+     "first_sec": 5242.716666666666,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 28,
+     "side": "2P",
+     "first_sec": 5276.083333333333,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 29,
+     "side": "1P",
+     "first_sec": 5325.75,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 30,
+     "side": "1P",
+     "first_sec": 5410.816666666667,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 31,
+     "side": "2P",
+     "first_sec": 5475.783333333334,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 32,
+     "side": "2P",
+     "first_sec": 5513.15,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 33,
+     "side": "1P",
+     "first_sec": 5592.716666666666,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 34,
+     "side": "2P",
+     "first_sec": 5633.283333333334,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 35,
+     "side": "2P",
+     "first_sec": 5711.15,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 38,
+     "side": "2P",
+     "first_sec": 5883.416666666667,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 40,
+     "side": "2P",
+     "first_sec": 5983.75,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 41,
+     "side": "1P",
+     "first_sec": 6059.283333333334,
+     "winner": "1P",
+     "false": true
+    },
+    {
+     "game": 41,
+     "side": "2P",
+     "first_sec": 6043.366666666667,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 42,
+     "side": "2P",
+     "first_sec": 6124.8,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 43,
+     "side": "1P",
+     "first_sec": 6166.1,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 43,
+     "side": "2P",
+     "first_sec": 6172.6,
+     "winner": "2P",
+     "false": true
+    },
+    {
+     "game": 44,
+     "side": "1P",
+     "first_sec": 6254.233333333334,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 45,
+     "side": "1P",
+     "first_sec": 6309.933333333333,
+     "winner": "1P",
+     "false": true
+    },
+    {
+     "game": 45,
+     "side": "2P",
+     "first_sec": 6393.2,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 47,
+     "side": "1P",
+     "first_sec": 6509.666666666667,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 48,
+     "side": "2P",
+     "first_sec": 6553.966666666666,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 49,
+     "side": "1P",
+     "first_sec": 6621.8,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 51,
+     "side": "2P",
+     "first_sec": 6717.05,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 52,
+     "side": "1P",
+     "first_sec": 6747.816666666667,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 54,
+     "side": "1P",
+     "first_sec": 6823.983333333334,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 58,
+     "side": "2P",
+     "first_sec": 7002.85,
+     "winner": "2P",
+     "false": true
+    },
+    {
+     "game": 58,
+     "side": "1P",
+     "first_sec": 7015.916666666667,
+     "winner": "2P",
+     "false": false
+    }
+   ]
+  },
+  "e19": {
+   "cases": 48,
+   "false": 6,
+   "unlabelled": 0,
+   "outside_window_values": 12,
+   "rows": [
+    {
+     "game": 1,
+     "side": "1P",
+     "first_sec": 3474.4666666666667,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 3,
+     "side": "2P",
+     "first_sec": 3735.2,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 4,
+     "side": "2P",
+     "first_sec": 3795.0666666666666,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 6,
+     "side": "2P",
+     "first_sec": 3941.9666666666667,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 8,
+     "side": "1P",
+     "first_sec": 4073.3333333333335,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 9,
+     "side": "1P",
+     "first_sec": 4135.0,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 10,
+     "side": "1P",
+     "first_sec": 4179.9,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 11,
+     "side": "1P",
+     "first_sec": 4271.666666666667,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 12,
+     "side": "2P",
+     "first_sec": 4342.866666666667,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 13,
+     "side": "2P",
+     "first_sec": 4417.4,
+     "winner": "2P",
+     "false": true
+    },
+    {
+     "game": 13,
+     "side": "1P",
+     "first_sec": 4441.0,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 14,
+     "side": "1P",
+     "first_sec": 4537.2,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 15,
+     "side": "2P",
+     "first_sec": 4598.033333333334,
+     "winner": "2P",
+     "false": true
+    },
+    {
+     "game": 15,
+     "side": "1P",
+     "first_sec": 4613.733333333334,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 16,
+     "side": "2P",
+     "first_sec": 4655.666666666667,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 19,
+     "side": "1P",
+     "first_sec": 4804.533333333334,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 20,
+     "side": "2P",
+     "first_sec": 4844.2,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 21,
+     "side": "1P",
+     "first_sec": 4915.933333333333,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 23,
+     "side": "1P",
+     "first_sec": 5015.25,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 24,
+     "side": "1P",
+     "first_sec": 5056.583333333333,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 26,
+     "side": "2P",
+     "first_sec": 5174.883333333333,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 27,
+     "side": "1P",
+     "first_sec": 5242.716666666666,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 28,
+     "side": "2P",
+     "first_sec": 5276.083333333333,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 29,
+     "side": "1P",
+     "first_sec": 5325.75,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 30,
+     "side": "1P",
+     "first_sec": 5410.816666666667,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 31,
+     "side": "2P",
+     "first_sec": 5475.783333333334,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 32,
+     "side": "2P",
+     "first_sec": 5513.15,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 33,
+     "side": "1P",
+     "first_sec": 5592.716666666666,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 34,
+     "side": "2P",
+     "first_sec": 5633.283333333334,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 35,
+     "side": "2P",
+     "first_sec": 5711.15,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 38,
+     "side": "2P",
+     "first_sec": 5883.416666666667,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 40,
+     "side": "2P",
+     "first_sec": 5983.75,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 41,
+     "side": "1P",
+     "first_sec": 6059.283333333334,
+     "winner": "1P",
+     "false": true
+    },
+    {
+     "game": 41,
+     "side": "2P",
+     "first_sec": 6043.366666666667,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 42,
+     "side": "2P",
+     "first_sec": 6124.8,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 43,
+     "side": "1P",
+     "first_sec": 6166.1,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 43,
+     "side": "2P",
+     "first_sec": 6172.6,
+     "winner": "2P",
+     "false": true
+    },
+    {
+     "game": 44,
+     "side": "1P",
+     "first_sec": 6254.233333333334,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 45,
+     "side": "1P",
+     "first_sec": 6309.933333333333,
+     "winner": "1P",
+     "false": true
+    },
+    {
+     "game": 45,
+     "side": "2P",
+     "first_sec": 6393.2,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 47,
+     "side": "1P",
+     "first_sec": 6509.666666666667,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 48,
+     "side": "2P",
+     "first_sec": 6553.966666666666,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 49,
+     "side": "1P",
+     "first_sec": 6621.8,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 51,
+     "side": "2P",
+     "first_sec": 6717.05,
+     "winner": "1P",
+     "false": false
+    },
+    {
+     "game": 52,
+     "side": "1P",
+     "first_sec": 6747.816666666667,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 54,
+     "side": "1P",
+     "first_sec": 6823.983333333334,
+     "winner": "2P",
+     "false": false
+    },
+    {
+     "game": 58,
+     "side": "2P",
+     "first_sec": 7002.85,
+     "winner": "2P",
+     "false": true
+    },
+    {
+     "game": 58,
+     "side": "1P",
+     "first_sec": 7015.916666666667,
+     "winner": "2P",
+     "false": false
+    }
+   ]
+  }
+ },
+ "display_deaths": {
+  "prod": {
+   "false_frames": 288,
+   "rows": [
+    {
+     "game": 13,
+     "frames": 73,
+     "first_sec": 4417.4
+    },
+    {
+     "game": 15,
+     "frames": 13,
+     "first_sec": 4598.033333333334
+    },
+    {
+     "game": 41,
+     "frames": 41,
+     "first_sec": 6059.283333333334
+    },
+    {
+     "game": 43,
+     "frames": 40,
+     "first_sec": 6172.6
+    },
+    {
+     "game": 45,
+     "frames": 42,
+     "first_sec": 6309.933333333333
+    },
+    {
+     "game": 58,
+     "frames": 79,
+     "first_sec": 7002.85
+    }
+   ]
+  },
+  "e19": {
+   "false_frames": 288,
+   "rows": [
+    {
+     "game": 13,
+     "frames": 73,
+     "first_sec": 4417.4
+    },
+    {
+     "game": 15,
+     "frames": 13,
+     "first_sec": 4598.033333333334
+    },
+    {
+     "game": 41,
+     "frames": 41,
+     "first_sec": 6059.283333333334
+    },
+    {
+     "game": 43,
+     "frames": 40,
+     "first_sec": 6172.6
+    },
+    {
+     "game": 45,
+     "frames": 42,
+     "first_sec": 6309.933333333333
+    },
+    {
+     "game": 58,
+     "frames": 79,
+     "first_sec": 7002.85
+    }
+   ]
+  }
+ },
+ "prefix_check": {
+  "passed": true,
+  "rows": {
+   "rows_compared": 12576,
+   "kinds": {
+    "header": 1,
+    "update": 4470,
+    "static": 479,
+    "static_call": 4056,
+    "display": 3570,
+    "complete_skipped": 1
+   },
+   "mismatched_rows": 0,
+   "first_mismatch": null,
+   "check_rows_unpaired": 0
+  },
+  "windows": {
+   "check_windows": 83,
+   "existing_windows": 308,
+   "missing": [],
+   "differ": []
+  }
+ },
+ "regression": {
+  "records": 5,
+  "deaths": {
+   "total": 37,
+   "false": 0,
+   "unresolved": 0,
+   "same_cases": true
+  },
+  "scene": {
+   "first_display_sec": 2760.116666666667,
+   "legacy_metric_sec": 2760.383333333333,
+   "passed": true
+  },
+  "game14_false_times": [],
+  "passed": true,
+  "rows": [
+   {
+    "source": "q_7gc4TgFig",
+    "game": 2,
+    "side": "1P",
+    "first_sec": 232.56666666666666,
+    "bound": false,
+    "observed_death_sec": 236.46666666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.9000000000000057
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 3,
+    "side": "1P",
+    "first_sec": 270.0,
+    "bound": false,
+    "observed_death_sec": 277.43333333333334,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 7.433333333333337
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 4,
+    "side": "2P",
+    "first_sec": 322.0,
+    "bound": true,
+    "observed_death_sec": 344.26666666666665,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 22.26666666666665
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 5,
+    "side": "2P",
+    "first_sec": 394.23333333333335,
+    "bound": false,
+    "observed_death_sec": 396.06666666666666,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 1.8333333333333144
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 6,
+    "side": "1P",
+    "first_sec": 441.3333333333333,
+    "bound": false,
+    "observed_death_sec": 443.43333333333334,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.1000000000000227
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 7,
+    "side": "1P",
+    "first_sec": 498.73333333333335,
+    "bound": false,
+    "observed_death_sec": 515.0,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 16.26666666666665
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 8,
+    "side": "2P",
+    "first_sec": 581.8666666666667,
+    "bound": false,
+    "observed_death_sec": 583.7,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 1.8333333333333712
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 9,
+    "side": "1P",
+    "first_sec": 656.0666666666667,
+    "bound": false,
+    "observed_death_sec": 663.1666666666666,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 7.099999999999909
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 10,
+    "side": "1P",
+    "first_sec": 692.8666666666667,
+    "bound": false,
+    "observed_death_sec": 695.5666666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.7000000000000455
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 11,
+    "side": "1P",
+    "first_sec": 741.5333333333333,
+    "bound": false,
+    "observed_death_sec": 745.2666666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.7333333333333485
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 12,
+    "side": "2P",
+    "first_sec": 782.7666666666667,
+    "bound": true,
+    "observed_death_sec": 786.8,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 4.033333333333303
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 13,
+    "side": "1P",
+    "first_sec": 848.3666666666667,
+    "bound": true,
+    "observed_death_sec": 852.6,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 4.2333333333333485
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 1,
+    "side": "1P",
+    "first_sec": 218.23333333333332,
+    "bound": false,
+    "observed_death_sec": 239.93333333333334,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 21.700000000000017
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 2,
+    "side": "1P",
+    "first_sec": 309.0,
+    "bound": false,
+    "observed_death_sec": 311.6,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.6000000000000227
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 3,
+    "side": "2P",
+    "first_sec": 366.0,
+    "bound": false,
+    "observed_death_sec": 370.93333333333334,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 4.933333333333337
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 5,
+    "side": "2P",
+    "first_sec": 474.2,
+    "bound": false,
+    "observed_death_sec": 537.8666666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 63.666666666666686
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 6,
+    "side": "1P",
+    "first_sec": 626.7333333333333,
+    "bound": true,
+    "observed_death_sec": 631.0,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 4.2666666666666515
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 9,
+    "side": "2P",
+    "first_sec": 763.6,
+    "bound": false,
+    "observed_death_sec": 767.5,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.8999999999999773
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 10,
+    "side": "1P",
+    "first_sec": 824.1,
+    "bound": false,
+    "observed_death_sec": 827.0333333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.9333333333332803
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 11,
+    "side": "2P",
+    "first_sec": 874.9333333333333,
+    "bound": false,
+    "observed_death_sec": 879.8666666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 4.933333333333394
+   },
+   {
+    "source": "review",
+    "game": 0,
+    "side": "1P",
+    "first_sec": 2573.2166666666667,
+    "bound": false,
+    "observed_death_sec": 2576.983333333333,
+    "opponent_death_sec": null,
+    "winners": [],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.766666666666424
+   },
+   {
+    "source": "review",
+    "game": 1,
+    "side": "2P",
+    "first_sec": 2629.3166666666666,
+    "bound": false,
+    "observed_death_sec": 2634.75,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 5.433333333333394
+   },
+   {
+    "source": "review",
+    "game": 3,
+    "side": "2P",
+    "first_sec": 2760.116666666667,
+    "bound": true,
+    "observed_death_sec": 2773.7833333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 13.666666666666515
+   },
+   {
+    "source": "zenchi",
+    "game": 0,
+    "side": "1P",
+    "first_sec": 2573.2166666666667,
+    "bound": false,
+    "observed_death_sec": 2576.983333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.766666666666424
+   },
+   {
+    "source": "zenchi",
+    "game": 1,
+    "side": "2P",
+    "first_sec": 2629.3166666666666,
+    "bound": false,
+    "observed_death_sec": 2634.75,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 5.433333333333394
+   },
+   {
+    "source": "zenchi",
+    "game": 3,
+    "side": "2P",
+    "first_sec": 2760.116666666667,
+    "bound": true,
+    "observed_death_sec": 2773.7833333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 13.666666666666515
+   },
+   {
+    "source": "zenchi",
+    "game": 4,
+    "side": "1P",
+    "first_sec": 2808.1833333333334,
+    "bound": false,
+    "observed_death_sec": 2810.8166666666666,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.633333333333212
+   },
+   {
+    "source": "zenchi",
+    "game": 5,
+    "side": "2P",
+    "first_sec": 2860.983333333333,
+    "bound": false,
+    "observed_death_sec": 2863.6833333333334,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.700000000000273
+   },
+   {
+    "source": "zenchi",
+    "game": 6,
+    "side": "1P",
+    "first_sec": 2892.2833333333333,
+    "bound": false,
+    "observed_death_sec": 2896.15,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.866666666666788
+   },
+   {
+    "source": "zenchi",
+    "game": 7,
+    "side": "1P",
+    "first_sec": 2929.116666666667,
+    "bound": false,
+    "observed_death_sec": 2943.9166666666665,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 14.799999999999727
+   },
+   {
+    "source": "zenchi",
+    "game": 8,
+    "side": "2P",
+    "first_sec": 2978.6833333333334,
+    "bound": true,
+    "observed_death_sec": 2979.516666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 0.8333333333334849
+   },
+   {
+    "source": "zenchi",
+    "game": 9,
+    "side": "2P",
+    "first_sec": 3015.5833333333335,
+    "bound": false,
+    "observed_death_sec": 3017.95,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.366666666666333
+   },
+   {
+    "source": "zenchi",
+    "game": 11,
+    "side": "2P",
+    "first_sec": 3109.516666666667,
+    "bound": false,
+    "observed_death_sec": 3115.7166666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 6.199999999999818
+   },
+   {
+    "source": "zenchi",
+    "game": 12,
+    "side": "1P",
+    "first_sec": 3162.45,
+    "bound": false,
+    "observed_death_sec": 3169.2166666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 6.766666666666879
+   },
+   {
+    "source": "zenchi",
+    "game": 15,
+    "side": "2P",
+    "first_sec": 3321.7833333333333,
+    "bound": false,
+    "observed_death_sec": 3323.616666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 1.833333333333485
+   },
+   {
+    "source": "zenchi",
+    "game": 16,
+    "side": "1P",
+    "first_sec": 3351.65,
+    "bound": false,
+    "observed_death_sec": 3353.883333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.233333333333121
+   },
+   {
+    "source": "zenchi",
+    "game": 17,
+    "side": "2P",
+    "first_sec": 3406.6833333333334,
+    "bound": false,
+    "observed_death_sec": 3409.983333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.299999999999727
+   }
+  ]
+ },
+ "gates": {
+  "m_time": false,
+  "m_agree": true,
+  "false_death": false,
+  "regression": true
+ },
+ "passed": false,
+ "reference_next30": {
+  "labels": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/set2/labels_next30.json",
+  "games": 57,
+  "bootstrap": {
+   "n": 10000,
+   "seed": 0
+  },
+  "metrics": {
+   "m_time": {
+    "paired": {
+     "diff": -0.001534880730011734,
+     "ci95": [
+      -0.0042829592441039595,
+      0.0008669725567664751
+     ],
+     "se": 0.0013084955094389305,
+     "mdd": 0.0036658613918114664
+    },
+    "prod": {
+     "value": 0.5719466878922506,
+     "ci95": [
+      0.5377245102633362,
+      0.607967850142417
+     ]
+    },
+    "e19": {
+     "value": 0.5704118071622388,
+     "ci95": [
+      0.5368549217209366,
+      0.6052016752800637
+     ]
+    }
+   },
+   "m_agree": {
+    "paired": {
+     "diff": -0.0029057822130906796,
+     "ci95": [
+      -0.008580624264878614,
+      0.0014855830329648643
+     ],
+     "se": 0.0025951372243991355,
+     "mdd": 0.007270497520818253
+    },
+    "prod": {
+     "value": 0.8445553272673907,
+     "ci95": [
+      0.7929273382268349,
+      0.8936989022374903
+     ]
+    },
+    "e19": {
+     "value": 0.8416495450543,
+     "ci95": [
+      0.7890448538912325,
+      0.8917062937088596
+     ]
+    }
+   }
+  },
+  "summaries": {
+   "prod": {
+    "games": 57,
+    "frames": 102230,
+    "m_time": 0.5719466878922506,
+    "m_cp25": 0.7153149669512647,
+    "m_cp50": 0.7660022079690305,
+    "m_cp75": 0.4727103599750185,
+    "m_cp": 0.6513425116317713,
+    "m_agree": 0.8445553272673907,
+    "agree_hits": 28774,
+    "agree_frames": 34070,
+    "m_frame": 0.5820803385683122
+   },
+   "e19": {
+    "games": 57,
+    "frames": 102230,
+    "m_time": 0.5704118071622388,
+    "m_cp25": 0.7124975372553691,
+    "m_cp50": 0.7484069689617422,
+    "m_cp75": 0.4847429847817146,
+    "m_cp": 0.6485491636662754,
+    "m_agree": 0.8416495450543,
+    "agree_hits": 28675,
+    "agree_frames": 34070,
+    "m_frame": 0.5791995243815204
+   }
+  },
+  "deaths": {
+   "prod": {
+    "cases": 47,
+    "false": 6,
+    "unlabelled": 0,
+    "outside_window_values": 0,
+    "rows": [
+     {
+      "game": 2,
+      "side": "2P",
+      "first_sec": 3735.2,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 3,
+      "side": "2P",
+      "first_sec": 3795.0666666666666,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 5,
+      "side": "2P",
+      "first_sec": 3941.9666666666667,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 7,
+      "side": "1P",
+      "first_sec": 4073.3333333333335,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 8,
+      "side": "1P",
+      "first_sec": 4135.0,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 9,
+      "side": "1P",
+      "first_sec": 4179.9,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 10,
+      "side": "1P",
+      "first_sec": 4271.666666666667,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 11,
+      "side": "2P",
+      "first_sec": 4342.866666666667,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 12,
+      "side": "2P",
+      "first_sec": 4417.4,
+      "winner": "2P",
+      "false": true
+     },
+     {
+      "game": 12,
+      "side": "1P",
+      "first_sec": 4441.0,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 13,
+      "side": "1P",
+      "first_sec": 4537.2,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 14,
+      "side": "2P",
+      "first_sec": 4598.033333333334,
+      "winner": "2P",
+      "false": true
+     },
+     {
+      "game": 14,
+      "side": "1P",
+      "first_sec": 4613.733333333334,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 15,
+      "side": "2P",
+      "first_sec": 4655.666666666667,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 18,
+      "side": "1P",
+      "first_sec": 4804.533333333334,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 19,
+      "side": "2P",
+      "first_sec": 4844.2,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 20,
+      "side": "1P",
+      "first_sec": 4915.933333333333,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 22,
+      "side": "1P",
+      "first_sec": 5015.25,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 23,
+      "side": "1P",
+      "first_sec": 5056.583333333333,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 25,
+      "side": "2P",
+      "first_sec": 5174.883333333333,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 26,
+      "side": "1P",
+      "first_sec": 5242.716666666666,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 27,
+      "side": "2P",
+      "first_sec": 5276.083333333333,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 28,
+      "side": "1P",
+      "first_sec": 5325.75,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 29,
+      "side": "1P",
+      "first_sec": 5410.816666666667,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 30,
+      "side": "2P",
+      "first_sec": 5475.783333333334,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 31,
+      "side": "2P",
+      "first_sec": 5513.15,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 32,
+      "side": "1P",
+      "first_sec": 5592.716666666666,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 33,
+      "side": "2P",
+      "first_sec": 5633.283333333334,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 34,
+      "side": "2P",
+      "first_sec": 5711.15,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 37,
+      "side": "2P",
+      "first_sec": 5883.416666666667,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 39,
+      "side": "2P",
+      "first_sec": 5983.75,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 40,
+      "side": "1P",
+      "first_sec": 6059.283333333334,
+      "winner": "1P",
+      "false": true
+     },
+     {
+      "game": 40,
+      "side": "2P",
+      "first_sec": 6043.366666666667,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 41,
+      "side": "2P",
+      "first_sec": 6124.8,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 42,
+      "side": "1P",
+      "first_sec": 6166.1,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 42,
+      "side": "2P",
+      "first_sec": 6172.6,
+      "winner": "2P",
+      "false": true
+     },
+     {
+      "game": 43,
+      "side": "1P",
+      "first_sec": 6254.233333333334,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 44,
+      "side": "1P",
+      "first_sec": 6309.933333333333,
+      "winner": "1P",
+      "false": true
+     },
+     {
+      "game": 44,
+      "side": "2P",
+      "first_sec": 6393.2,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 46,
+      "side": "1P",
+      "first_sec": 6509.666666666667,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 47,
+      "side": "2P",
+      "first_sec": 6553.966666666666,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 48,
+      "side": "1P",
+      "first_sec": 6621.8,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 50,
+      "side": "2P",
+      "first_sec": 6717.05,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 51,
+      "side": "1P",
+      "first_sec": 6747.816666666667,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 53,
+      "side": "1P",
+      "first_sec": 6823.983333333334,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 57,
+      "side": "2P",
+      "first_sec": 7002.85,
+      "winner": "2P",
+      "false": true
+     },
+     {
+      "game": 57,
+      "side": "1P",
+      "first_sec": 7015.916666666667,
+      "winner": "2P",
+      "false": false
+     }
+    ]
+   },
+   "e19": {
+    "cases": 47,
+    "false": 6,
+    "unlabelled": 0,
+    "outside_window_values": 0,
+    "rows": [
+     {
+      "game": 2,
+      "side": "2P",
+      "first_sec": 3735.2,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 3,
+      "side": "2P",
+      "first_sec": 3795.0666666666666,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 5,
+      "side": "2P",
+      "first_sec": 3941.9666666666667,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 7,
+      "side": "1P",
+      "first_sec": 4073.3333333333335,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 8,
+      "side": "1P",
+      "first_sec": 4135.0,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 9,
+      "side": "1P",
+      "first_sec": 4179.9,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 10,
+      "side": "1P",
+      "first_sec": 4271.666666666667,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 11,
+      "side": "2P",
+      "first_sec": 4342.866666666667,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 12,
+      "side": "2P",
+      "first_sec": 4417.4,
+      "winner": "2P",
+      "false": true
+     },
+     {
+      "game": 12,
+      "side": "1P",
+      "first_sec": 4441.0,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 13,
+      "side": "1P",
+      "first_sec": 4537.2,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 14,
+      "side": "2P",
+      "first_sec": 4598.033333333334,
+      "winner": "2P",
+      "false": true
+     },
+     {
+      "game": 14,
+      "side": "1P",
+      "first_sec": 4613.733333333334,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 15,
+      "side": "2P",
+      "first_sec": 4655.666666666667,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 18,
+      "side": "1P",
+      "first_sec": 4804.533333333334,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 19,
+      "side": "2P",
+      "first_sec": 4844.2,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 20,
+      "side": "1P",
+      "first_sec": 4915.933333333333,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 22,
+      "side": "1P",
+      "first_sec": 5015.25,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 23,
+      "side": "1P",
+      "first_sec": 5056.583333333333,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 25,
+      "side": "2P",
+      "first_sec": 5174.883333333333,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 26,
+      "side": "1P",
+      "first_sec": 5242.716666666666,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 27,
+      "side": "2P",
+      "first_sec": 5276.083333333333,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 28,
+      "side": "1P",
+      "first_sec": 5325.75,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 29,
+      "side": "1P",
+      "first_sec": 5410.816666666667,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 30,
+      "side": "2P",
+      "first_sec": 5475.783333333334,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 31,
+      "side": "2P",
+      "first_sec": 5513.15,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 32,
+      "side": "1P",
+      "first_sec": 5592.716666666666,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 33,
+      "side": "2P",
+      "first_sec": 5633.283333333334,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 34,
+      "side": "2P",
+      "first_sec": 5711.15,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 37,
+      "side": "2P",
+      "first_sec": 5883.416666666667,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 39,
+      "side": "2P",
+      "first_sec": 5983.75,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 40,
+      "side": "1P",
+      "first_sec": 6059.283333333334,
+      "winner": "1P",
+      "false": true
+     },
+     {
+      "game": 40,
+      "side": "2P",
+      "first_sec": 6043.366666666667,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 41,
+      "side": "2P",
+      "first_sec": 6124.8,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 42,
+      "side": "1P",
+      "first_sec": 6166.1,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 42,
+      "side": "2P",
+      "first_sec": 6172.6,
+      "winner": "2P",
+      "false": true
+     },
+     {
+      "game": 43,
+      "side": "1P",
+      "first_sec": 6254.233333333334,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 44,
+      "side": "1P",
+      "first_sec": 6309.933333333333,
+      "winner": "1P",
+      "false": true
+     },
+     {
+      "game": 44,
+      "side": "2P",
+      "first_sec": 6393.2,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 46,
+      "side": "1P",
+      "first_sec": 6509.666666666667,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 47,
+      "side": "2P",
+      "first_sec": 6553.966666666666,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 48,
+      "side": "1P",
+      "first_sec": 6621.8,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 50,
+      "side": "2P",
+      "first_sec": 6717.05,
+      "winner": "1P",
+      "false": false
+     },
+     {
+      "game": 51,
+      "side": "1P",
+      "first_sec": 6747.816666666667,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 53,
+      "side": "1P",
+      "first_sec": 6823.983333333334,
+      "winner": "2P",
+      "false": false
+     },
+     {
+      "game": 57,
+      "side": "2P",
+      "first_sec": 7002.85,
+      "winner": "2P",
+      "false": true
+     },
+     {
+      "game": 57,
+      "side": "1P",
+      "first_sec": 7015.916666666667,
+      "winner": "2P",
+      "false": false
+     }
+    ]
+   }
+  },
+  "display_deaths": {
+   "prod": {
+    "false_frames": 288,
+    "rows": [
+     {
+      "game": 12,
+      "frames": 73,
+      "first_sec": 4417.4
+     },
+     {
+      "game": 14,
+      "frames": 13,
+      "first_sec": 4598.033333333334
+     },
+     {
+      "game": 40,
+      "frames": 41,
+      "first_sec": 6059.283333333334
+     },
+     {
+      "game": 42,
+      "frames": 40,
+      "first_sec": 6172.6
+     },
+     {
+      "game": 44,
+      "frames": 42,
+      "first_sec": 6309.933333333333
+     },
+     {
+      "game": 57,
+      "frames": 79,
+      "first_sec": 7002.85
+     }
+    ]
+   },
+   "e19": {
+    "false_frames": 288,
+    "rows": [
+     {
+      "game": 12,
+      "frames": 73,
+      "first_sec": 4417.4
+     },
+     {
+      "game": 14,
+      "frames": 13,
+      "first_sec": 4598.033333333334
+     },
+     {
+      "game": 40,
+      "frames": 41,
+      "first_sec": 6059.283333333334
+     },
+     {
+      "game": 42,
+      "frames": 40,
+      "first_sec": 6172.6
+     },
+     {
+      "game": 44,
+      "frames": 42,
+      "first_sec": 6309.933333333333
+     },
+     {
+      "game": 57,
+      "frames": 79,
+      "first_sec": 7002.85
+     }
+    ]
+   }
+  }
+ }
+}

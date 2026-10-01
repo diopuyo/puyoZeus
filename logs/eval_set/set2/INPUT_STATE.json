@@ -1,0 +1,26 @@
+{
+    "files":  [
+                  {
+                      "sha256":  "6f782e98330c58ee239d6d4bd47d75ce18e6a291fe59b3f79cb60d1a519d90d9",
+                      "path":  "src/production_config.py"
+                  },
+                  {
+                      "sha256":  "2bb0ab55a2549d7697fa550a9d272f8d0a7c97f415abf0558e83995a62a2d286",
+                      "path":  "src/exchange_hidden_row_probability.py"
+                  },
+                  {
+                      "sha256":  "4487824b7c1c15bbcc8b31f1fb99f8f4a7dcb40fc2c14f970203e0fbca094080",
+                      "path":  "logs/eval_set/METRIC.md"
+                  },
+                  {
+                      "sha256":  "e521c0d3a4c25ae4ff3b05077bda862eee281d9dc8580869019c35d94d039dd7",
+                      "path":  "logs/eval_set/labels.json"
+                  }
+              ],
+    "preregistered_bootstrap_n":  10000,
+    "max_workers":  8,
+    "branch":  "claude/eval-set-zenchi-set1-20261001",
+    "head":  "3d0673b6d183cbc57a0f9fa7ae3e2d617df31ef2",
+    "minimum_available_gb":  4,
+    "preregistered_bootstrap_seed":  0
+}

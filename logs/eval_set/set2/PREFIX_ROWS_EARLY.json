@@ -1,0 +1,14 @@
+{
+ "rows_compared": 12576,
+ "kinds": {
+  "header": 1,
+  "update": 4470,
+  "static": 479,
+  "static_call": 4056,
+  "display": 3570,
+  "complete_skipped": 1
+ },
+ "mismatched_rows": 0,
+ "first_mismatch": null,
+ "check_rows_unpaired": 0
+}

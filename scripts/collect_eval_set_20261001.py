@@ -92,9 +92,21 @@ def install(part: str) -> None:
 
 def main() -> None:
     """1パートを1プロセスで収集する。"""
+    global OUT
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--part', choices=tuple(PARTS), required=True)
+    parser.add_argument('--part', required=True)
+    parser.add_argument('--start-sec', type=float)
+    parser.add_argument('--end-sec', type=float)
+    parser.add_argument('--out', type=Path)
     args = parser.parse_args()
+    if args.start_sec is not None or args.end_sec is not None:
+        if args.start_sec is None or args.end_sec is None or args.start_sec >= args.end_sec:
+            parser.error('開始・終了は両方指定し、開始 < 終了とする')
+        PARTS[args.part] = (args.start_sec, args.end_sec)
+    if args.part not in PARTS:
+        parser.error('既存パート名、または開始・終了の指定が必要')
+    if args.out is not None:
+        OUT = args.out.resolve()
     from scripts import collect_r1, run_c65_guard_full
     assert json.loads(run_c65_guard_full.STAGE2_SUMMARY.read_text())['passed']
     install(args.part)

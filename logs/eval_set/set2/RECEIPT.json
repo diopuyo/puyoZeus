@@ -1,0 +1,151 @@
+{
+ "completion_signals": {
+  "collect_check": 0,
+  "collect_s0": 0,
+  "collect_s1": 0,
+  "collect_s2": 0,
+  "collect_s3": 0,
+  "collect_s4": 0,
+  "collect_s5": 0,
+  "collect_s6": 0,
+  "regression_fcXG83vInDY_e19": 0,
+  "regression_mia8KCjr52g_e19": 0,
+  "regression_q_7gc4TgFig_e19": 0,
+  "regression_review_e19": 0,
+  "regression_zenchi_e19": 0,
+  "replay_s0_e19": 0,
+  "replay_s0_prod": 0,
+  "replay_s1_e19": 0,
+  "replay_s1_prod": 0,
+  "replay_s2_e19": 0,
+  "replay_s2_prod": 0,
+  "replay_s3_e19": 0,
+  "replay_s3_prod": 0,
+  "replay_s4_e19": 0,
+  "replay_s4_prod": 0,
+  "replay_s5_e19": 0,
+  "replay_s5_prod": 0,
+  "replay_s6_e19": 0,
+  "replay_s6_prod": 0
+ },
+ "record_sha256": {
+  "check.jsonl.gz": "24ae36be704b99a8e8f127ccc0c8a786314b461c3d7e84441e246081ac22e424",
+  "check.windows.json.gz": "14a760e41c3df9642fdbf755d4ba57a27a0c29560e0d18bff987a6a3ddb2048a",
+  "s0.jsonl.gz": "795aee8f794da7a899e36b42fc0b3d8c5cb58e55562d3cec1a55374a554db601",
+  "s0.windows.json.gz": "a567a93ddf0f8c2ac6c702e6ecf065d9daec635d2b21b0578a4116feb17f54dc",
+  "s1.jsonl.gz": "6228fdc4351274793051dddbdb03dd61a8e66f06e7dc963e426bbfd73cbc2508",
+  "s1.windows.json.gz": "628cbaa6d336e3e2f2e33e8cc2f62a59ec397f62c914d14bed81abeb2213dfbe",
+  "s2.jsonl.gz": "15089e4f489887301b1609ae577b8b8341434a87ffa45017183708163b600273",
+  "s2.windows.json.gz": "e7c23a37cdf21350facbadd45200927bb3ab4a9ff65f6245c74e2934e22d3bac",
+  "s3.jsonl.gz": "71f6c7a2c66319b4ae9949745a722326412acf059164469180bca4a9b1361bfc",
+  "s3.windows.json.gz": "9ef45141c9a1e1ffa377fe35fc3f45060598f69266cc25ca149f798d6b239bc3",
+  "s4.jsonl.gz": "9f895547a4e57fa4482fea6a5cd185054b41ee83d78b66308dd3a1111620688f",
+  "s4.windows.json.gz": "d22112dd1470915460a339b7927fc7fb37a53d047aa912ba3d2e9cb407e22b85",
+  "s5.jsonl.gz": "81c8265fd27d84ac6f5d5b8e6987443ba5792eb357abde9fae32d2acf9ee35bf",
+  "s5.windows.json.gz": "b6c931c54a53635080737da9534669d0eb153d4e683d51e57f0ae3b214ab7637",
+  "s6.jsonl.gz": "f39862ad664b885d4db36b38b8284b662a4688d2f77ce03f58968b496dd15c5b",
+  "s6.windows.json.gz": "75042e043d5072e1346524469ab43eeb82c6b86c8befbfc023b74225cd351458"
+ },
+ "min_available_kib": 5842356,
+ "min_host_available_kib": 4899428,
+ "max_processes": 8,
+ "production_config_sha256": "6f782e98330c58ee239d6d4bd47d75ce18e6a291fe59b3f79cb60d1a519d90d9",
+ "recovered_completions": [
+  {
+   "exit_code": null,
+   "source": "check",
+   "completed": true,
+   "sha256": "24ae36be704b99a8e8f127ccc0c8a786314b461c3d7e84441e246081ac22e424",
+   "process_absent": true,
+   "reason": "実行中にjob.shを更新したため終了通知のみ未保存。収集完了票・SHA・gzip終端を照合",
+   "terminal": {
+    "kind": "complete",
+    "frames": 4470
+   }
+  },
+  {
+   "exit_code": null,
+   "source": "s0",
+   "completed": true,
+   "sha256": "795aee8f794da7a899e36b42fc0b3d8c5cb58e55562d3cec1a55374a554db601",
+   "process_absent": true,
+   "reason": "実行中にjob.shを更新したため終了通知のみ未保存。収集完了票・SHA・gzip終端を照合",
+   "terminal": {
+    "kind": "complete",
+    "frames": 7314
+   }
+  },
+  {
+   "exit_code": null,
+   "source": "s1",
+   "completed": true,
+   "sha256": "6228fdc4351274793051dddbdb03dd61a8e66f06e7dc963e426bbfd73cbc2508",
+   "process_absent": true,
+   "reason": "実行中にjob.shを更新したため終了通知のみ未保存。収集完了票・SHA・gzip終端を照合",
+   "terminal": {
+    "kind": "complete",
+    "frames": 20916
+   }
+  },
+  {
+   "exit_code": null,
+   "source": "s2",
+   "completed": true,
+   "sha256": "15089e4f489887301b1609ae577b8b8341434a87ffa45017183708163b600273",
+   "process_absent": true,
+   "reason": "実行中にjob.shを更新したため終了通知のみ未保存。収集完了票・SHA・gzip終端を照合",
+   "terminal": {
+    "kind": "complete",
+    "frames": 19825
+   }
+  },
+  {
+   "exit_code": null,
+   "source": "s3",
+   "completed": true,
+   "sha256": "71f6c7a2c66319b4ae9949745a722326412acf059164469180bca4a9b1361bfc",
+   "process_absent": true,
+   "reason": "実行中にjob.shを更新したため終了通知のみ未保存。収集完了票・SHA・gzip終端を照合",
+   "terminal": {
+    "kind": "complete",
+    "frames": 17641
+   }
+  },
+  {
+   "exit_code": null,
+   "source": "s4",
+   "completed": true,
+   "sha256": "9f895547a4e57fa4482fea6a5cd185054b41ee83d78b66308dd3a1111620688f",
+   "process_absent": true,
+   "reason": "実行中にjob.shを更新したため終了通知のみ未保存。収集完了票・SHA・gzip終端を照合",
+   "terminal": {
+    "kind": "complete",
+    "frames": 18437
+   }
+  },
+  {
+   "exit_code": null,
+   "source": "s5",
+   "completed": true,
+   "sha256": "81c8265fd27d84ac6f5d5b8e6987443ba5792eb357abde9fae32d2acf9ee35bf",
+   "process_absent": true,
+   "reason": "実行中にjob.shを更新したため終了通知のみ未保存。収集完了票・SHA・gzip終端を照合",
+   "terminal": {
+    "kind": "complete",
+    "frames": 18827
+   }
+  },
+  {
+   "exit_code": null,
+   "source": "s6",
+   "completed": true,
+   "sha256": "f39862ad664b885d4db36b38b8284b662a4688d2f77ce03f58968b496dd15c5b",
+   "process_absent": true,
+   "reason": "実行中にjob.shを更新したため終了通知のみ未保存。収集完了票・SHA・gzip終端を照合",
+   "terminal": {
+    "kind": "complete",
+    "frames": 11984
+   }
+  }
+ ]
+}

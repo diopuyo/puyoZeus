@@ -1,0 +1,344 @@
+[
+ {
+  "game": 0,
+  "winner": "2P",
+  "start": 3626.0,
+  "end": 3673.033
+ },
+ {
+  "game": 1,
+  "winner": "1P",
+  "start": 3673.033,
+  "end": 3744.7
+ },
+ {
+  "game": 2,
+  "winner": "1P",
+  "start": 3744.7,
+  "end": 3801.833
+ },
+ {
+  "game": 3,
+  "winner": "2P",
+  "start": 3801.833,
+  "end": 3893.966
+ },
+ {
+  "game": 4,
+  "winner": "1P",
+  "start": 3893.966,
+  "end": 3993.3
+ },
+ {
+  "game": 5,
+  "winner": "1P",
+  "start": 3993.3,
+  "end": 4035.7
+ },
+ {
+  "game": 6,
+  "winner": "2P",
+  "start": 4035.7,
+  "end": 4084.566
+ },
+ {
+  "game": 7,
+  "winner": "2P",
+  "start": 4084.566,
+  "end": 4142.4
+ },
+ {
+  "game": 8,
+  "winner": "2P",
+  "start": 4142.4,
+  "end": 4218.566
+ },
+ {
+  "game": 9,
+  "winner": "2P",
+  "start": 4218.566,
+  "end": 4293.2
+ },
+ {
+  "game": 10,
+  "winner": "1P",
+  "start": 4293.2,
+  "end": 4379.5
+ },
+ {
+  "game": 11,
+  "winner": "2P",
+  "start": 4379.5,
+  "end": 4452.866
+ },
+ {
+  "game": 12,
+  "winner": "2P",
+  "start": 4452.866,
+  "end": 4550.366
+ },
+ {
+  "game": 13,
+  "winner": "2P",
+  "start": 4550.366,
+  "end": 4623.633
+ },
+ {
+  "game": 14,
+  "winner": "1P",
+  "start": 4623.633,
+  "end": 4660.3
+ },
+ {
+  "game": 15,
+  "winner": "2P",
+  "start": 4660.3,
+  "end": 4730.0
+ },
+ {
+  "game": 16,
+  "winner": "1P",
+  "start": 4730.0,
+  "end": 4762.5
+ },
+ {
+  "game": 17,
+  "winner": "2P",
+  "start": 4762.5,
+  "end": 4818.266
+ },
+ {
+  "game": 18,
+  "winner": "1P",
+  "start": 4818.266,
+  "end": 4866.233
+ },
+ {
+  "game": 19,
+  "winner": "2P",
+  "start": 4866.233,
+  "end": 4924.033
+ },
+ {
+  "game": 20,
+  "winner": "1P",
+  "start": 4924.033,
+  "end": 4976.366
+ },
+ {
+  "game": 21,
+  "winner": "2P",
+  "start": 4976.366,
+  "end": 5026.833
+ },
+ {
+  "game": 22,
+  "winner": "2P",
+  "start": 5026.833,
+  "end": 5061.7
+ },
+ {
+  "game": 23,
+  "winner": "1P",
+  "start": 5061.7,
+  "end": 5127.433
+ },
+ {
+  "game": 24,
+  "winner": "1P",
+  "start": 5127.433,
+  "end": 5189.566
+ },
+ {
+  "game": 25,
+  "winner": "2P",
+  "start": 5189.566,
+  "end": 5255.6
+ },
+ {
+  "game": 26,
+  "winner": "1P",
+  "start": 5255.6,
+  "end": 5283.166
+ },
+ {
+  "game": 27,
+  "winner": "2P",
+  "start": 5283.166,
+  "end": 5366.133
+ },
+ {
+  "game": 28,
+  "winner": "2P",
+  "start": 5366.133,
+  "end": 5425.0
+ },
+ {
+  "game": 29,
+  "winner": "1P",
+  "start": 5425.0,
+  "end": 5482.066
+ },
+ {
+  "game": 30,
+  "winner": "1P",
+  "start": 5482.066,
+  "end": 5525.433
+ },
+ {
+  "game": 31,
+  "winner": "2P",
+  "start": 5525.433,
+  "end": 5605.933
+ },
+ {
+  "game": 32,
+  "winner": "1P",
+  "start": 5605.933,
+  "end": 5641.366
+ },
+ {
+  "game": 33,
+  "winner": "1P",
+  "start": 5641.366,
+  "end": 5739.866
+ },
+ {
+  "game": 34,
+  "winner": "1P",
+  "start": 5739.866,
+  "end": 5783.8
+ },
+ {
+  "game": 35,
+  "winner": "1P",
+  "start": 5783.8,
+  "end": 5827.566
+ },
+ {
+  "game": 36,
+  "winner": "1P",
+  "start": 5827.566,
+  "end": 5893.566
+ },
+ {
+  "game": 37,
+  "winner": "2P",
+  "start": 5893.566,
+  "end": 5935.733
+ },
+ {
+  "game": 38,
+  "winner": "1P",
+  "start": 5935.733,
+  "end": 6000.933
+ },
+ {
+  "game": 39,
+  "winner": "1P",
+  "start": 6000.933,
+  "end": 6066.6
+ },
+ {
+  "game": 40,
+  "winner": "1P",
+  "start": 6066.6,
+  "end": 6131.633
+ },
+ {
+  "game": 41,
+  "winner": "2P",
+  "start": 6131.633,
+  "end": 6204.733
+ },
+ {
+  "game": 42,
+  "winner": "2P",
+  "start": 6204.733,
+  "end": 6281.566
+ },
+ {
+  "game": 43,
+  "winner": "1P",
+  "start": 6281.566,
+  "end": 6399.333
+ },
+ {
+  "game": 44,
+  "winner": "1P",
+  "start": 6399.333,
+  "end": 6451.3
+ },
+ {
+  "game": 45,
+  "winner": "2P",
+  "start": 6451.3,
+  "end": 6522.366
+ },
+ {
+  "game": 46,
+  "winner": "1P",
+  "start": 6522.366,
+  "end": 6562.866
+ },
+ {
+  "game": 47,
+  "winner": "2P",
+  "start": 6562.866,
+  "end": 6631.8
+ },
+ {
+  "game": 48,
+  "winner": "2P",
+  "start": 6631.8,
+  "end": 6664.166
+ },
+ {
+  "game": 49,
+  "winner": "1P",
+  "start": 6664.166,
+  "end": 6724.333
+ },
+ {
+  "game": 50,
+  "winner": "2P",
+  "start": 6724.333,
+  "end": 6755.4
+ },
+ {
+  "game": 51,
+  "winner": "2P",
+  "start": 6755.4,
+  "end": 6788.466
+ },
+ {
+  "game": 52,
+  "winner": "2P",
+  "start": 6788.466,
+  "end": 6832.9
+ },
+ {
+  "game": 53,
+  "winner": "2P",
+  "start": 6832.9,
+  "end": 6874.366
+ },
+ {
+  "game": 54,
+  "winner": "1P",
+  "start": 6874.366,
+  "end": 6931.733
+ },
+ {
+  "game": 55,
+  "winner": "2P",
+  "start": 6931.733,
+  "end": 6972.933
+ },
+ {
+  "game": 56,
+  "winner": "2P",
+  "start": 6972.933,
+  "end": 7033.6
+ }
+]
