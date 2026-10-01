@@ -32,6 +32,8 @@ MAX_COUNTER_HANDS = 16              # 応手探索の深さ上限 (Phase 2 と�
 CONSERVATIVE_QUEUE: tuple[int, ...] = ()   # 死亡証明では NEXT を使わず試合4色の全組合せを認める (保守側)
 CACHE_SIZE = 16384
 PLACEMENTS_PER_PAIR = 22            # 1組の置き方 (縦2向き×6列 + 横2向き×5列)
+THIRD_HAND_BEAM_WIDTH = 1           # 3手目の探索の幅 (_third_hand の docstring)
+TWO_HAND_CACHE_SIZE = 512           # 静かな2手の盤面群 (最大 484 盤面) を持つので小さくする
 
 
 @dataclass(frozen=True)
@@ -75,14 +77,19 @@ def _best(placements: list) -> object | None:
     return max(placements, key=lambda p: p.chain_result.exact_score, default=None)
 
 
-def _third_hand(groups: list[list], pair: tuple[int, int]) -> FireLine | None:
-    """静かな2手の盤面群から3手目の最大発火を探す。native ビームで群ごとの最大を出し、最良群だけ列挙する。"""
+def _third_hand(groups: tuple, pair: tuple[int, int]) -> FireLine | None:
+    """静かな2手の盤面群から3手目の最大発火を探す。native ビームで群ごとの最大を出し、最良群だけ列挙する。
+
+    ビーム幅は1でよい: 1手だけの探索では最大得点は全候補の展開時に記録され、幅は次の深さへ残す数にしか効かない。
+    幅 (群の大きさ×22) と幅1の最大得点は記録の6,039群で全件一致し、所要は 1/7.5 (Phase 4、2026-10-01)。
+    幅を大きくすると最終候補を全部 Board に戻すため遅い。
+    """
     best_group, best_score = None, 0
     for group in groups:
         if not group:
             continue
         frontier = [native.FrontierEntry(board=p.placed_board, running_best=0) for p in group]
-        result = native.beam_search_continue(frontier, 0, [pair], len(frontier) * PLACEMENTS_PER_PAIR,
+        result = native.beam_search_continue(frontier, 0, [pair], THIRD_HAND_BEAM_WIDTH,
                                              exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
                                              use_exact_score=True)
         if result.best_score > best_score:
@@ -92,6 +99,25 @@ def _third_hand(groups: list[list], pair: tuple[int, int]) -> FireLine | None:
     fires = [f for p in best_group for f in sim._split(sim._placements(p.placed_board, pair))[0]]
     top = _best(fires)
     return _line(3, top) if top is not None else None
+
+
+@lru_cache(maxsize=TWO_HAND_CACHE_SIZE)
+def _two_hands(raw: bytes, first: tuple[int, int], second: tuple[int, int] | None) -> tuple:
+    """1〜2手目の最大発火・撃たないと窒息・静かな2手の盤面群。NEXT2 が後から読めても使い回す (純関数)。"""
+    board = sim._board(raw)
+    fires1, quiet1, has_quiet = sim._split(sim._placements(board, first))
+    lines = [_line(1, _best(fires1))] if fires1 else []
+    forced = bool(fires1) and has_quiet and not quiet1
+    if second is None:
+        return tuple(lines), forced, ()
+    groups, fires2 = [], []
+    for placed in quiet1:
+        fires, quiet, _ = sim._split(sim._placements(placed.placed_board, second))
+        fires2 += fires
+        groups.append(tuple(quiet))
+    if fires2:
+        lines.append(_line(2, _best(fires2)))
+    return tuple(lines), forced, tuple(groups)
 
 
 @lru_cache(maxsize=CACHE_SIZE)
@@ -104,27 +130,28 @@ def fire_lines(raw: bytes, known: tuple[int, ...]) -> tuple[tuple[FireLine, ...]
     pairs = _pairs(known)
     if not pairs or not _valid(raw):
         return (), False
-    board = sim._board(raw)
-    fires1, quiet1, has_quiet = sim._split(sim._placements(board, pairs[0]))
-    lines = [_line(1, _best(fires1))] if fires1 else []
-    forced = bool(fires1) and has_quiet and not quiet1
-    if len(pairs) < 2:
-        return tuple(lines), forced
-    groups, fires2 = [], []
-    for placed in quiet1:
-        fires, quiet, _ = sim._split(sim._placements(placed.placed_board, pairs[1]))
-        fires2 += fires
-        groups.append(quiet)
-    if fires2:
-        lines.append(_line(2, _best(fires2)))
+    lines, forced, groups = _two_hands(raw, pairs[0], pairs[1] if len(pairs) >= 2 else None)
     if len(pairs) >= KNOWN_HANDS:
         third = _third_hand(groups, pairs[2])
         if third is not None:
-            lines.append(third)
+            lines = (*lines, third)
     return tuple(lines), forced
 
 
-def counter_quantiles(raw: bytes, known: tuple[int, ...], hands: int, colors: tuple[int, ...],
+_RATE_CACHE: dict[tuple, object] = {}
+
+
+def _by_rate(name: str, args: tuple, elapsed: float, compute):
+    """経過秒を換算率に置き換えた鍵で結果を使い回す (出力は換算率だけに依存するので値は変わらない)。"""
+    key = (name, args, sim.effective_rate(elapsed))
+    if key not in _RATE_CACHE:
+        if len(_RATE_CACHE) >= CACHE_SIZE:
+            _RATE_CACHE.pop(next(iter(_RATE_CACHE)))
+        _RATE_CACHE[key] = compute()
+    return _RATE_CACHE[key]
+
+
+def _counter_quantiles(raw: bytes, known: tuple[int, ...], hands: int, colors: tuple[int, ...],
                       elapsed: float) -> tuple[float, ...]:
     """受け側が hands 手以内に返せる最大のおじゃま個数。既知ツモで決まれば1点、MC なら (p25, 平均, p75)。
 
@@ -144,13 +171,26 @@ def counter_quantiles(raw: bytes, known: tuple[int, ...], hands: int, colors: tu
     return (float(dist.mean),) if exact else (float(dist.p25), float(dist.mean), float(dist.p75))
 
 
-def lethal(raw: bytes, incoming: int, hands: int, colors: tuple[int, ...], elapsed: float) -> bool:
+def counter_quantiles(raw: bytes, known: tuple[int, ...], hands: int, colors: tuple[int, ...],
+                      elapsed: float) -> tuple[float, ...]:
+    """_counter_quantiles の結果を (盤面・既知の組・手数・色・換算率) で使い回す。"""
+    return _by_rate('counter', (raw, tuple(known), int(hands), tuple(colors)), elapsed,
+                    lambda: _counter_quantiles(raw, known, hands, colors, elapsed))
+
+
+def _lethal(raw: bytes, incoming: int, hands: int, colors: tuple[int, ...], elapsed: float) -> bool:
     """受け側がどう応手しても窒息することの証明 (E35 上限、ツモは試合4色の全組合せ)。4色が未確定なら証明しない。"""
     if incoming <= 0 or len(colors) != GAME_COLORS:
         return False
     proof = prove_post_counter(sim._board(raw), CONSERVATIVE_QUEUE, int(incoming), int(hands),
                                float(elapsed), tuple(colors))
     return bool(proof['dead'])
+
+
+def lethal(raw: bytes, incoming: int, hands: int, colors: tuple[int, ...], elapsed: float) -> bool:
+    """_lethal の結果を (盤面・受け量・手数・色・換算率) で使い回す。"""
+    return _by_rate('lethal', (raw, int(incoming), int(hands), tuple(colors)), elapsed,
+                    lambda: _lethal(raw, incoming, hands, colors, elapsed))
 
 
 def feature_simulator(grid: np.ndarray) -> object | None:

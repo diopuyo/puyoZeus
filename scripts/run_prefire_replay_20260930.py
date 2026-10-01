@@ -17,13 +17,15 @@ BASELINE = EXEV / 'logs/pending_expiry/e36b_on/on'
 BASELINE_DIRS = {'q_7gc4TgFig': 'renders/q_7gc4TgFig/on', 'fcXG83vInDY': 'renders/fcXG83vInDY/on',
                  'mia8KCjr52g': 'renders/mia8KCjr52g/on', 'review': 'review', 'zenchi': 'zenchi'}
 OUT = Path('logs/prefire_prediction/replay')
-VARIANTS = ('off', 'on', 'on_mc', 'bestplay')   # on=構成A、on_mc=構成B、bestplay=Phase 3 最善手 (hazard 不使用)
+VARIANTS = ('off', 'on', 'on_mc', 'bestplay', 'stable')   # on=構成A、on_mc=構成B、bestplay=Phase 3 最善手 (hazard 不使用)
 
 
 def options(variant: str, latency: float = 0.0, evaluator: str = 'full') -> dict:
     """本番 E36b の再生オプション。on だけ発火前予測を足す (off は引数自体を渡さない = 既存呼出と同一)。"""
     from scripts import run_e36b
     base = run_e36b.options()
+    if variant == 'stable':
+        return dict(base, prefire_best_play_stable=True, prefire_best_play_latency=latency)
     if variant == 'bestplay':
         return dict(base, prefire_best_play=True, prefire_best_play_latency=latency,
                     prefire_best_play_evaluator=evaluator)

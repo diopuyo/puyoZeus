@@ -1,0 +1,36 @@
+{
+ "stable": {
+  "in_hand": {
+   "hits": 41758,
+   "denominator": 46708,
+   "rate": 0.8940224372698468
+  },
+  "next": {
+   "hits": 32958,
+   "denominator": 39525,
+   "rate": 0.8338519924098672
+  },
+  "next2": {
+   "hits": 12243,
+   "denominator": 18750,
+   "rate": 0.65296
+  }
+ },
+ "phase3": {
+  "in_hand": {
+   "hits": 56128,
+   "denominator": 62583,
+   "rate": 0.8968569739386095
+  },
+  "next": {
+   "hits": 29622,
+   "denominator": 51965,
+   "rate": 0.5700375252573848
+  },
+  "next2": {
+   "hits": 25395,
+   "denominator": 52589,
+   "rate": 0.48289566259103617
+  }
+ }
+}

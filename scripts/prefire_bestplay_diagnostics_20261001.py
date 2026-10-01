@@ -24,9 +24,9 @@ SIDE_INDEX = {'1P': 0, '2P': 1}
 
 
 def trace_table(root: Path) -> dict[str, np.ndarray]:
-    """prefire_trace.npz を列名つきの表にする。"""
-    with np.load(root / 'prefire_trace.npz') as data:
-        return dict(zip([str(c) for c in data['columns']], data['values'].T))
+    """prefire_trace.npz を列名つきの表にする (採点器と同じ読み方)。"""
+    from scripts.prefire_bestplay_gate_20261001 import trace
+    return trace(root)
 
 
 def window(table: dict, row: dict) -> np.ndarray:
@@ -77,7 +77,8 @@ def agreement(items: list[dict], key: str) -> dict:
 
 def timing(tables: list[dict]) -> dict:
     """計算した回 (compute_ms > 0) の所要と、書き換え量の分布。"""
-    spent = np.concatenate([t['compute_ms'][t['compute_ms'] > 0] for t in tables])
+    from scripts.prefire_bestplay_gate_20261001 import compute_times
+    spent = np.concatenate([compute_times(t) for t in tables])
     moved = np.concatenate([np.abs(t['p_shown'] - t['p_current']) for t in tables])
     pct = lambda v, q: float(np.percentile(v, q)) if len(v) else None
     return dict(computed=int(len(spent)), p50_ms=pct(spent, 50), p95_ms=pct(spent, 95), p99_ms=pct(spent, 99),

@@ -27,19 +27,36 @@ FPS = 30
 
 
 def trace(root: Path) -> dict[str, np.ndarray]:
-    """prefire_trace.npz を列名つきで読む。"""
+    """prefire_trace.npz を列名つきで読む。Phase 4 は計算した回の所要を 'computes' に別に持つ。"""
     with np.load(root / 'prefire_trace.npz') as data:
-        return dict(zip([str(c) for c in data['columns']], data['values'].T))
+        table = dict(zip([str(c) for c in data['columns']], data['values'].T))
+        if 'computes' in data.files:
+            table['_computes_ms'] = data['computes'][:, 1] if len(data['computes']) else np.zeros(0)
+        return table
+
+
+def compute_times(table: dict) -> np.ndarray:
+    """計算した回の所要 (ms)。Phase 3 は trace の compute_ms > 0 の行。"""
+    if '_computes_ms' in table:
+        return table['_computes_ms']
+    return table['compute_ms'][table['compute_ms'] > 0]
+
+
+def shown_lethal(table: dict, side: int) -> np.ndarray:
+    """表示に出た確実な勝ちの行 (Phase 4 は保持の後の表示、Phase 3 は採った側)。"""
+    if 'shown_lethal' in table:
+        return table['shown_lethal'].astype(int) == side + 1
+    chosen = table['chosen'].astype(int)
+    return (table[LETHAL_COLUMNS[side]] > 0) & ((chosen == side) | (chosen == 2))
 
 
 def false_lethal(source: str, table: dict) -> dict:
     """表示で採った確実な勝ち (E35 証明) が、ラベルの勝者と食い違った行数 (母数つき)。"""
     windows = e3.outcomes(source)[0]
     frames = np.rint(table['t_sec'] * FPS).astype(int)
-    chosen = table['chosen'].astype(int)
     rows, wrong = 0, 0
-    for side, column in enumerate(LETHAL_COLUMNS):
-        used = (table[column] > 0) & ((chosen == side) | (chosen == 2))
+    for side in range(len(LETHAL_COLUMNS)):
+        used = shown_lethal(table, side)
         for window in windows:
             sel = used & (frames >= window['start']) & (frames < window['end'])
             rows += int(sel.sum())
@@ -49,14 +66,12 @@ def false_lethal(source: str, table: dict) -> dict:
 
 def game14_display(table: dict) -> int:
     """q 第14試合で、最善手の層が 1P の確実な負け (2P の lethal) を表示した行数。"""
-    chosen = table['chosen'].astype(int)
-    return int(((table['game_idx'] == GAME14) & (table['lethal_2p'] > 0) & ((chosen == 1) | (chosen == 2))).sum())
+    return int(((table['game_idx'] == GAME14) & shown_lethal(table, 1)).sum())
 
 
 def timing(on: Path) -> dict:
     """計算した回 (compute_ms > 0) の所要 (ms)。"""
-    spent = np.concatenate([trace(on / s)['compute_ms'] for s in BASELINE_DIRS])
-    spent = spent[spent > 0]
+    spent = np.concatenate([compute_times(trace(on / s)) for s in BASELINE_DIRS])
     pct = lambda q: float(np.percentile(spent, q)) if len(spent) else None
     return dict(computed=int(len(spent)), p50=pct(50), p95=pct(95), p99=pct(99), max=pct(100))
 
@@ -80,7 +95,7 @@ def score(on: Path) -> dict:
     return result
 
 
-def gates(result: dict) -> dict:
+def gates(result: dict, phase4: bool = False) -> dict:
     """事前登録の判定。改善は発火前3秒 LL と先読み件数の両方、対照はどちらかを落とすこと。"""
     g1, on, placebo = result['gate1'], result['on'], result['placebo']
     flips = g1['flips']
@@ -95,15 +110,19 @@ def gates(result: dict) -> dict:
                anticipation=on['anticipation']['hits'] >= ANTICIPATION_MIN)
     out['placebo_fails'] = not (placebo['q']['prefire3s']['log_loss'] <= PREFIRE_LL_MAX
                                 and placebo['anticipation']['hits'] >= ANTICIPATION_MIN)
+    if phase4:   # Phase 4 事前登録: 先読みは揺れで偶然増えるので、対照が先読み条件を通らないことも必須
+        out['placebo_anticipation_fails'] = placebo['anticipation']['hits'] < ANTICIPATION_MIN
     return out
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--variant', required=True)
-    variant = parser.parse_args().variant
+    parser.add_argument('--phase4', action='store_true', help='Phase 4 の門 (対照の先読み不合格も必須)')
+    args = parser.parse_args()
+    variant = args.variant
     result = score(REPLAY / variant)
-    result['gates'] = gates(result)
+    result['gates'] = gates(result, args.phase4)
     result['leak_suspect'] = result['on']['q']['all']['log_loss'] < phase2.ORACLE_Q_LL
     result['passed'] = all(result['gates'].values())
     out = Path('logs/prefire_prediction') / f'GATE_{variant}.json'

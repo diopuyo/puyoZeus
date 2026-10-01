@@ -70,7 +70,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            prefire_counter_mc: bool = False,
            prefire_best_play: bool = False,
            prefire_best_play_latency: float = 0.0,
-           prefire_best_play_evaluator: str = 'full') -> dict:
+           prefire_best_play_evaluator: str = 'full',
+           prefire_best_play_stable: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -112,6 +113,11 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
     if prefire_exchange_prediction:
         from src.prefire_exchange_layer import FileHazardModel, PrefireExchangeLayer
         prefire_layer = PrefireExchangeLayer(FileHazardModel.load(), counter_mc=prefire_counter_mc)
+    if prefire_best_play_stable:
+        if prefire_layer is not None or prefire_best_play:
+            raise ValueError("--prefire-best-play-stable は他の発火前予測フラグと同時指定できない")
+        from src.prefire_best_play_stable import StableBestPlayLayer
+        prefire_layer = StableBestPlayLayer(latency_sec=prefire_best_play_latency)
     if prefire_best_play:
         if prefire_layer is not None:
             raise ValueError("--prefire-best-play と --prefire-exchange-prediction は同時指定できない")
@@ -217,6 +223,8 @@ def main() -> None:
                         help="発火前予測の受け側応手を未来ツモ標本で求める (構成B、既定OFF=理想ツモ future_send)")
     parser.add_argument("--prefire-best-play", action="store_true", default=False,
                         help="発火前の最善手の値を表示へ出す (Phase 3、既定OFF、hazard 不使用)")
+    parser.add_argument("--prefire-best-play-stable", action="store_true", default=False,
+                        help="発火前の最善手 Phase 4 (NEXT の安定化・片側ごとの再利用・値の保持、s3、既定OFF)")
     parser.add_argument("--prefire-best-play-latency", type=float, default=0.0,
                         help="最善手の結果が届くまでの遅れ秒 (非同期計算の模擬、既定0=同期)")
     parser.add_argument("--prefire-best-play-evaluator", choices=("full", "fast", "s3", "gfe"), default="full",
@@ -256,7 +264,8 @@ def main() -> None:
                     prefire_counter_mc=options.prefire_counter_mc,
                     prefire_best_play=options.prefire_best_play,
                     prefire_best_play_latency=options.prefire_best_play_latency,
-                    prefire_best_play_evaluator=options.prefire_best_play_evaluator)
+                    prefire_best_play_evaluator=options.prefire_best_play_evaluator,
+                    prefire_best_play_stable=options.prefire_best_play_stable)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

@@ -65,7 +65,7 @@ def compare_trace(full: Path, cut: Path, cut_sec: float) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cut', type=float, required=True)
-    parser.add_argument('--variant', default='on', choices=('on', 'on_mc', 'bestplay'))
+    parser.add_argument('--variant', default='on', choices=('on', 'on_mc', 'bestplay', 'stable'))
     parser.add_argument('--latency', type=float, default=0.0)
     parser.add_argument('--tag', default='')
     parser.add_argument('--evaluator', default='full', choices=('full', 'fast', 's3', 'gfe'))
