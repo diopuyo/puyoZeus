@@ -1,0 +1,257 @@
+{
+  "standard": {
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5075669993215693,
+      "auc": 0.7752487506069708
+    },
+    "zenchi": {
+      "hits": 7671,
+      "frames": 8333,
+      "agreement": 0.9205568222728909
+    },
+    "deaths": {
+      "false": 0,
+      "total": 37,
+      "unlabelled": 0
+    },
+    "audit": {
+      "records": 5,
+      "cases": 37,
+      "false": 0,
+      "unresolved": 0,
+      "baseline_false": 0,
+      "bound_false": 0,
+      "bound_cases": 13,
+      "lead_sec": {
+        "n": 37,
+        "p50": 3.9000000000000057,
+        "p95": 21.813333333333343
+      }
+    },
+    "scene_first_sec": 2760.25,
+    "gates": {
+      "q": true,
+      "zenchi": true,
+      "false_fire": true,
+      "false_certainty": true,
+      "scene": true
+    },
+    "passed": true,
+    "risky": {
+      "cases": 37,
+      "single": 15,
+      "other_risky": 7,
+      "long_lead": 7,
+      "risky_rows": [
+        {
+          "source": "q_7gc4TgFig",
+          "game": 4,
+          "side": "2P",
+          "first": 322.0,
+          "lead": 22.26666666666665,
+          "false": false,
+          "route": "other",
+          "long_lead": true,
+          "later_chains": 2,
+          "verified_counter": true
+        },
+        {
+          "source": "q_7gc4TgFig",
+          "game": 7,
+          "side": "1P",
+          "first": 498.73333333333335,
+          "lead": 16.26666666666665,
+          "false": false,
+          "route": "single",
+          "long_lead": true,
+          "later_chains": 1,
+          "verified_counter": true
+        },
+        {
+          "source": "review",
+          "game": 3,
+          "side": "2P",
+          "first": 2760.116666666667,
+          "lead": 13.666666666666515,
+          "false": false,
+          "route": "other",
+          "long_lead": true,
+          "later_chains": 0,
+          "verified_counter": false
+        },
+        {
+          "source": "fcXG83vInDY",
+          "game": 1,
+          "side": "1P",
+          "first": 218.23333333333332,
+          "lead": 21.700000000000017,
+          "false": false,
+          "route": "single",
+          "long_lead": true,
+          "later_chains": 1,
+          "verified_counter": true
+        },
+        {
+          "source": "fcXG83vInDY",
+          "game": 5,
+          "side": "2P",
+          "first": 474.2,
+          "lead": 63.666666666666686,
+          "false": false,
+          "route": "single",
+          "long_lead": true,
+          "later_chains": 3,
+          "verified_counter": true
+        },
+        {
+          "source": "zenchi",
+          "game": 3,
+          "side": "2P",
+          "first": 2760.116666666667,
+          "lead": 13.666666666666515,
+          "false": false,
+          "route": "other",
+          "long_lead": true,
+          "later_chains": 0,
+          "verified_counter": false
+        },
+        {
+          "source": "zenchi",
+          "game": 7,
+          "side": "1P",
+          "first": 2929.116666666667,
+          "lead": 14.799999999999727,
+          "false": false,
+          "route": "other",
+          "long_lead": true,
+          "later_chains": 2,
+          "verified_counter": true
+        }
+      ]
+    },
+    "game14_false_times": []
+  },
+  "jumps": {
+    "frames": 112346,
+    "switches": 641,
+    "jumps": 342,
+    "by_kind": {
+      "none": 80,
+      "fire": 112,
+      "landing": 48,
+      "death": 45,
+      "chain_end": 24,
+      "boundary": 33
+    },
+    "non_event_jumps": 80,
+    "non_event_switch_jumps": 34,
+    "by_transition": {
+      "(同一由来内)S3_landing": {
+        "landing": 13,
+        "fire": 47,
+        "none": 6,
+        "chain_end": 9,
+        "death": 2
+      },
+      "(同一由来内)G_fe": {
+        "none": 36,
+        "landing": 11,
+        "fire": 3,
+        "boundary": 7,
+        "chain_end": 1
+      },
+      "G_fe→S3_landing": {
+        "fire": 45
+      },
+      "waiting_confirmed→G_fe": {
+        "none": 19,
+        "boundary": 25
+      },
+      "S3_landing→G_fe": {
+        "fire": 3,
+        "landing": 19,
+        "chain_end": 8,
+        "none": 6
+      },
+      "S3_landing→unavoidable_death": {
+        "death": 19
+      },
+      "G_fe→confirmed_death": {
+        "death": 14
+      },
+      "G_fe→S3_provisional": {
+        "fire": 7,
+        "none": 3
+      },
+      "S3_provisional→S3_landing": {
+        "fire": 5,
+        "chain_end": 2,
+        "none": 1
+      },
+      "S3_landing→confirmed_death": {
+        "death": 6,
+        "boundary": 1
+      },
+      "S3→G_fe": {
+        "chain_end": 3,
+        "none": 2,
+        "fire": 1,
+        "landing": 1
+      },
+      "(同一由来内)S3_provisional": {
+        "none": 4,
+        "chain_end": 1
+      },
+      "S3_landing→S3": {
+        "none": 1,
+        "landing": 2
+      },
+      "S3_provisional→S3": {
+        "landing": 2
+      },
+      "unavoidable_death→S3_landing": {
+        "death": 2
+      },
+      "S3_landing→S3_provisional": {
+        "none": 1,
+        "fire": 1
+      },
+      "G_fe→unavoidable_death": {
+        "death": 1
+      },
+      "S3_provisional→G_fe": {
+        "none": 1
+      },
+      "S3_provisional→confirmed_death": {
+        "death": 1
+      }
+    }
+  },
+  "display_q": {
+    "frames": 6526,
+    "matches": 4,
+    "log_loss": 0.5060023990792154,
+    "auc": 0.7732757731626511
+  },
+  "death": {
+    "frames": 5544,
+    "exact": 5544
+  },
+  "fresh_adv": {
+    "frames": 112346,
+    "adjacent_pairs": 112341,
+    "equal_fraction": 0.1591582770315379,
+    "longest_equal_seconds": 85.96666666666667,
+    "updates_per_minute": 1513.4477417976607
+  },
+  "fresh_eval": {
+    "frames": 112346,
+    "adjacent_pairs": 112341,
+    "equal_fraction": 0.7939754853526317,
+    "longest_equal_seconds": 89.76666666666667,
+    "updates_per_minute": 370.8276218111904
+  },
+  "raw_identical": {}
+}

@@ -1,0 +1,11 @@
+{
+  "q": true,
+  "zenchi": false,
+  "false_fire": true,
+  "false_certainty": true,
+  "scene": true,
+  "game14": true,
+  "improvement": true,
+  "freshness_eval": true,
+  "passed": false
+}
