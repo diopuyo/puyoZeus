@@ -5,10 +5,17 @@ from contextlib import contextmanager
 from dataclasses import replace
 from itertools import product
 from math import prod
+from numbers import Integral
 from typing import Any, Iterator
 import numpy as np
 from src.exchange_event_evaluator import ExchangeEndInput, evaluate_exchange_event
 from src.scoring import score_to_ojama
+
+
+def validate_scenario_cap(cap: int | None) -> None:
+    """無制限または正の整数だけを許し、空候補による偽の勝率を防ぐ。"""
+    if cap is not None and (isinstance(cap, bool) or not isinstance(cap, Integral) or cap <= 0):
+        raise ValueError("hidden_scenario_capはNoneまたは正の整数が必要")
 
 
 def capped(rows: list[tuple], cap: int | None) -> list[tuple]:
@@ -16,6 +23,7 @@ def capped(rows: list[tuple], cap: int | None) -> list[tuple]:
 
     既定 (cap=None) は従来どおり全候補。決定的で、壁時計に依存しない。
     """
+    validate_scenario_cap(cap)
     if cap is None or len(rows) <= cap:
         return rows
     keep = sorted(sorted(range(len(rows)), key=lambda i: (-rows[i][1], i))[:cap])
@@ -97,6 +105,11 @@ def weighted_landing(projection: Any, overlay: Any, snapshot: Any, latest: tuple
     engine = getattr(tracker, 'hidden_row_belief', None)
     record = tracker.current or projection.death_record
     if engine is None or record is None or not any(engine.active(c) for c in record.chains):
+        return None
+    if tracker.firing is None:
+        # 撃ち合いの記録 (death_record) だけが残り発火入力が無い時刻では S3 を組めない。
+        # 旧実装は ExchangeEndInput で ValueError になり再生が止まった (zenchi 第32〜33試合、2026-10-01)。
+        # 加重なし (呼出元の確率をそのまま使う) へ落とす。発火入力がある時刻の値は変わらない。
         return None
     probability, gfe_mean, counter = 0., 0., {}
     dropped = (snapshot.total_dropped_to_p1, snapshot.total_dropped_to_p2)

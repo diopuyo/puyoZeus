@@ -1,0 +1,4 @@
+# 台の確認 (既知の出力の再現)。第3パートのみ。
+rejudge J_orig_rs1 zenchi
+rejudge J_orig_rs0 zenchi
+cli prod zenchi

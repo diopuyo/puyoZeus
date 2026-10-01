@@ -1,0 +1,12 @@
+cli prod c5
+cli e19 c5
+rejudge J_orig_rs0 c5
+rejudge J_orig_rs1 c5
+rejudge J_orig_rs2 c5
+rejudge J_orig_rs3 c5
+rejudge J_orig_rs4 c5
+rejudge J_T_rs0 c5
+rejudge J_T_rs1 c5
+rejudge J_T_rs2 c5
+rejudge J_T_rs3 c5
+rejudge J_T_rs4 c5

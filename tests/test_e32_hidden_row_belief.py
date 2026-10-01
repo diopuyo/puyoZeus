@@ -241,6 +241,19 @@ def test_landing_averages_candidate_probabilities_and_zero_incoming(monkeypatch:
     assert chain.predicted_final_score == 40. and entry['stats']['mean_send'] == .5
 
 
+def test_landing_without_firing_input_falls_back_instead_of_raising() -> None:
+    """撃ち合い記録だけが残り発火入力が無い時刻 (tracker.current=None) は加重なしへ落とす (旧: ValueError)。"""
+    from src import exchange_hidden_row_probability as probability
+    from src.exchange_event_tracker import ExchangeChainRecord
+    chain = ExchangeChainRecord('1P', 1, 1., 1.)
+    entry = dict(options=[dict(score=0, weight=1.)], elapsed=0., stats=dict(mean_send=0.))
+    tracker = NS(current=None, models=None, firing=None, _score_elapsed=0.,
+                 hidden_row_belief=NS(active=lambda c: entry))
+    projection = NS(death_record=NS(chains=[chain]))
+    snapshot = NS(total_dropped_to_p1=0, total_dropped_to_p2=0)
+    assert probability.weighted_landing(projection, NS(tracker=tracker), snapshot, (), (), dict(p1=.5), 2.) is None
+
+
 def test_death_counterexample_keeps_all_surviving_boards() -> None:
     from src.exchange_hidden_row_belief import HiddenRowPrefire
     from src.exchange_event_tracker import ExchangeChainRecord

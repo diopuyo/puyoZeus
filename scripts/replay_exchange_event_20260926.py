@@ -122,7 +122,9 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
             overlay.update(*inputs)
             if observer is not None:
                 observer(overlay, inputs)
-            _exchange_display(overlay, *fallback_unknown, smoothing, inputs[3])
+            fallback = ((item["fallback_adv"], item["fallback_p1"])
+                        if "fallback_adv" in item else fallback_unknown)
+            _exchange_display(overlay, *fallback, smoothing, inputs[3])
             frames += 1
         elif item["kind"] == "display":
             if inputs is None or inputs[3:5] != (item["t_sec"], item["game_idx"]):

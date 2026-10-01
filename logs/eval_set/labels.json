@@ -1,0 +1,438 @@
+{
+ "games": [
+  {
+   "game": 1,
+   "winner": "1P",
+   "start": 0.0,
+   "end": 136.133,
+   "part": 1
+  },
+  {
+   "game": 2,
+   "winner": "1P",
+   "start": 136.133,
+   "end": 227.6,
+   "part": 1
+  },
+  {
+   "game": 3,
+   "winner": "1P",
+   "start": 227.6,
+   "end": 273.233,
+   "part": 1
+  },
+  {
+   "game": 4,
+   "winner": "1P",
+   "start": 273.233,
+   "end": 331.1,
+   "part": 1
+  },
+  {
+   "game": 5,
+   "winner": "1P",
+   "start": 331.1,
+   "end": 411.633,
+   "part": 1
+  },
+  {
+   "game": 6,
+   "winner": "1P",
+   "start": 411.633,
+   "end": 482.433,
+   "part": 1
+  },
+  {
+   "game": 7,
+   "winner": "2P",
+   "start": 482.433,
+   "end": 514.233,
+   "part": 1
+  },
+  {
+   "game": 8,
+   "winner": "2P",
+   "start": 514.233,
+   "end": 609.633,
+   "part": 1
+  },
+  {
+   "game": 9,
+   "winner": "2P",
+   "start": 609.633,
+   "end": 695.266,
+   "part": 1
+  },
+  {
+   "game": 10,
+   "winner": "2P",
+   "start": 695.266,
+   "end": 751.233,
+   "part": 1
+  },
+  {
+   "game": 11,
+   "winner": "2P",
+   "start": 751.233,
+   "end": 828.366,
+   "part": 1
+  },
+  {
+   "game": 12,
+   "winner": "2P",
+   "start": 828.366,
+   "end": 893.666,
+   "part": 1
+  },
+  {
+   "game": 13,
+   "winner": "1P",
+   "start": 893.666,
+   "end": 954.033,
+   "part": 1
+  },
+  {
+   "game": 14,
+   "winner": "2P",
+   "start": 954.033,
+   "end": 985.7,
+   "part": 1
+  },
+  {
+   "game": 15,
+   "winner": "1P",
+   "start": 985.7,
+   "end": 1040.266,
+   "part": 1
+  },
+  {
+   "game": 16,
+   "winner": "1P",
+   "start": 1040.266,
+   "end": 1092.766,
+   "part": 1
+  },
+  {
+   "game": 17,
+   "winner": "2P",
+   "start": 1092.766,
+   "end": 1174.5,
+   "part": 1
+  },
+  {
+   "game": 18,
+   "winner": "1P",
+   "start": 1174.5,
+   "end": 1230.733,
+   "part": 1
+  },
+  {
+   "game": 19,
+   "winner": "2P",
+   "start": 1230.733,
+   "end": 1300.033,
+   "part": 1
+  },
+  {
+   "game": 20,
+   "winner": "2P",
+   "start": 1300.033,
+   "end": 1356.833,
+   "part": 1
+  },
+  {
+   "game": 21,
+   "winner": "2P",
+   "start": 1356.833,
+   "end": 1396.9,
+   "part": 2
+  },
+  {
+   "game": 22,
+   "winner": "1P",
+   "start": 1396.9,
+   "end": 1427.3,
+   "part": 2
+  },
+  {
+   "game": 23,
+   "winner": "2P",
+   "start": 1427.3,
+   "end": 1505.566,
+   "part": 2
+  },
+  {
+   "game": 24,
+   "winner": "2P",
+   "start": 1505.566,
+   "end": 1582.0,
+   "part": 2
+  },
+  {
+   "game": 25,
+   "winner": "2P",
+   "start": 1582.0,
+   "end": 1625.266,
+   "part": 2
+  },
+  {
+   "game": 26,
+   "winner": "2P",
+   "start": 1625.266,
+   "end": 1738.3,
+   "part": 2
+  },
+  {
+   "game": 27,
+   "winner": "2P",
+   "start": 1738.3,
+   "end": 1798.533,
+   "part": 2
+  },
+  {
+   "game": 28,
+   "winner": "2P",
+   "start": 1798.533,
+   "end": 1879.033,
+   "part": 2
+  },
+  {
+   "game": 29,
+   "winner": "2P",
+   "start": 1879.033,
+   "end": 1918.266,
+   "part": 2
+  },
+  {
+   "game": 30,
+   "winner": "1P",
+   "start": 1918.266,
+   "end": 1978.2,
+   "part": 2
+  },
+  {
+   "game": 31,
+   "winner": "2P",
+   "start": 1978.2,
+   "end": 2034.133,
+   "part": 2
+  },
+  {
+   "game": 32,
+   "winner": "1P",
+   "start": 2034.133,
+   "end": 2120.266,
+   "part": 2
+  },
+  {
+   "game": 33,
+   "winner": "1P",
+   "start": 2120.266,
+   "end": 2167.2,
+   "part": 2
+  },
+  {
+   "game": 34,
+   "winner": "1P",
+   "start": 2167.2,
+   "end": 2214.466,
+   "part": 2
+  },
+  {
+   "game": 35,
+   "winner": "2P",
+   "start": 2214.466,
+   "end": 2275.866,
+   "part": 2
+  },
+  {
+   "game": 36,
+   "winner": "1P",
+   "start": 2275.866,
+   "end": 2346.333,
+   "part": 2
+  },
+  {
+   "game": 37,
+   "winner": "1P",
+   "start": 2346.333,
+   "end": 2388.266,
+   "part": 2
+  },
+  {
+   "game": 38,
+   "winner": "2P",
+   "start": 2388.266,
+   "end": 2453.7,
+   "part": 2
+  },
+  {
+   "game": 39,
+   "winner": "1P",
+   "start": 2453.7,
+   "end": 2539.566,
+   "part": 2
+  },
+  {
+   "game": 40,
+   "winner": "2P",
+   "start": 2539.566,
+   "end": 2579.066,
+   "part": 2
+  },
+  {
+   "game": 41,
+   "winner": "1P",
+   "start": 2579.066,
+   "end": 2637.333,
+   "part": 3
+  },
+  {
+   "game": 42,
+   "winner": "1P",
+   "start": 2637.333,
+   "end": 2701.266,
+   "part": 3
+  },
+  {
+   "game": 43,
+   "winner": "1P",
+   "start": 2701.266,
+   "end": 2777.333,
+   "part": 3
+  },
+  {
+   "game": 44,
+   "winner": "2P",
+   "start": 2777.333,
+   "end": 2812.3,
+   "part": 3
+  },
+  {
+   "game": 45,
+   "winner": "1P",
+   "start": 2812.3,
+   "end": 2866.0,
+   "part": 3
+  },
+  {
+   "game": 46,
+   "winner": "2P",
+   "start": 2866.0,
+   "end": 2898.1,
+   "part": 3
+  },
+  {
+   "game": 47,
+   "winner": "2P",
+   "start": 2898.1,
+   "end": 2948.5,
+   "part": 3
+  },
+  {
+   "game": 48,
+   "winner": "1P",
+   "start": 2948.5,
+   "end": 2983.766,
+   "part": 3
+  },
+  {
+   "game": 49,
+   "winner": "1P",
+   "start": 2983.766,
+   "end": 3020.533,
+   "part": 3
+  },
+  {
+   "game": 50,
+   "winner": "2P",
+   "start": 3020.533,
+   "end": 3051.7,
+   "part": 3
+  },
+  {
+   "game": 51,
+   "winner": "1P",
+   "start": 3051.7,
+   "end": 3118.033,
+   "part": 3
+  },
+  {
+   "game": 52,
+   "winner": "2P",
+   "start": 3118.033,
+   "end": 3170.833,
+   "part": 3
+  },
+  {
+   "game": 53,
+   "winner": "1P",
+   "start": 3170.833,
+   "end": 3234.233,
+   "part": 3
+  },
+  {
+   "game": 54,
+   "winner": "2P",
+   "start": 3234.233,
+   "end": 3272.933,
+   "part": 3
+  },
+  {
+   "game": 55,
+   "winner": "1P",
+   "start": 3272.933,
+   "end": 3325.9,
+   "part": 3
+  },
+  {
+   "game": 56,
+   "winner": "2P",
+   "start": 3325.9,
+   "end": 3356.2,
+   "part": 3
+  },
+  {
+   "game": 57,
+   "winner": "1P",
+   "start": 3356.2,
+   "end": 3412.2,
+   "part": 3
+  }
+ ],
+ "parts": [
+  {
+   "part": 1,
+   "first": 1,
+   "last": 20,
+   "start_sec": 0.0,
+   "end_sec": 1357.633
+  },
+  {
+   "part": 2,
+   "first": 21,
+   "last": 40,
+   "start_sec": 1357.633,
+   "end_sec": 2580.566
+  },
+  {
+   "part": 3,
+   "first": 41,
+   "last": 57,
+   "start_sec": 2580.566,
+   "end_sec": 3427.166
+  }
+ ],
+ "winners": {
+  "1P": 28,
+  "2P": 29
+ },
+ "checks": {
+  "existing_match": 17,
+  "existing_total": 17,
+  "panel_match": 57,
+  "panel_total": 57,
+  "panel_mismatch_games": []
+ },
+ "source": "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/zenchi_two_sets_review_source_2026-08-31/runs/schema=v1/video=video_zenchi_c0BQoMJwwQU/build=build-a2d3d70a5d2ebfb316f4eb993fab9a8ddcf079045917330aea65abfc59feaa24/attempt=zenchi-review-set1-20260831"
+}

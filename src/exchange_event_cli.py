@@ -21,10 +21,21 @@ def parse_exchange_event_args(
     )
     arguments = list(sys.argv[1:] if argv is None else argv)
     options = parser.parse_args(arguments)
+    _validate_options(parser, options)
     if options.production_exchange_event:
         arguments.extend(shlex.split(production_config.exchange_event_flags()))
         if RECONCILE_OPTION in parser._option_string_actions:
             # 描画CLIだけが認識を動かすので、受け付けるパーサーにだけ追加する。
             arguments.extend(shlex.split(production_config.placement_reconcile_flags()))
         options = parser.parse_args(arguments)
+        _validate_options(parser, options)
     return options
+
+
+def _validate_options(parser: argparse.ArgumentParser, options: argparse.Namespace) -> None:
+    """描画・再生の候補上限をAPIと同じ契約で検証する。"""
+    from src.exchange_hidden_row_probability import validate_scenario_cap
+    try:
+        validate_scenario_cap(getattr(options, "hidden_scenario_cap", None))
+    except ValueError as exc:
+        parser.error(str(exc))
