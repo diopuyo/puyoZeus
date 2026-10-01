@@ -4732,6 +4732,7 @@ def _fresh_trackers(
     attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
     enable_chain_gen_accumulate: bool = False,
     accounting_tracker: OjamaAccountingTracker | None = None,
+    margin_origin_first_placement: bool = False,
 ) -> tuple[OjamaAccountingTracker, "_SideTracker", "_SideTracker",
            PressureTracker, RealtimeForecastTracker, ScoreLeadTracker, HeavyAdvCache,
            EarlyFireTracker, "ChainGenerationAccumulator"]:
@@ -4757,7 +4758,7 @@ def _fresh_trackers(
     # 旧 tracker 内の pending が boundary_wiped_uncapped_* へ記録される。
     tracker = accounting_tracker
     if tracker is None:
-        tracker = OjamaAccountingTracker()
+        tracker = OjamaAccountingTracker(margin_origin_first_placement=margin_origin_first_placement)
         tracker.reset()
     return (tracker, _SideTracker(), _SideTracker(),
             PressureTracker(), RealtimeForecastTracker(), ScoreLeadTracker(),
@@ -6494,6 +6495,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              single_death_proof_negative_only: bool = False,
              post_counter_early_exit: bool = False,
              hidden_scenario_cap: int | None = None,
+             margin_origin_first_placement: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7113,6 +7115,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             prefire_stage_timeout_only=prefire_stage_timeout_only,
             prefire_origin_guard=prefire_origin_guard, prefire_match_gate=prefire_match_gate,
             landing_counter_prob=landing_counter_prob,
+            margin_origin_first_placement=margin_origin_first_placement,
             # 専用ラッパーの partial 指定を上書きしないよう、True のときだけ渡す。
             **{name: True for name, on in (
                 ('post_counter_death_bound', post_counter_death_bound),
@@ -7300,7 +7303,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
         pipe.set_video_id(m.group(1))
-    tracker = OjamaAccountingTracker(); tracker.reset()
+    tracker = OjamaAccountingTracker(margin_origin_first_placement=margin_origin_first_placement)
+    tracker.reset()
     tp1, tp2 = _SideTracker(), _SideTracker()
     # (2026-08-25 Gate 3R-6 本体) 死亡確定の時間的ロジック。2サイド分の
     # 独立インスタンス (_SideTracker と同じ「1サイド1インスタンス」パターン)。
@@ -7550,7 +7554,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 accounting_tracker=(
                     tracker if (enable_gross_ledger_dump or enable_exchange_episode_gate)
                     else None),
-                enable_chain_gen_accumulate=enable_kill_override_chain_gen_accumulate)
+                enable_chain_gen_accumulate=enable_kill_override_chain_gen_accumulate,
+                margin_origin_first_placement=margin_origin_first_placement)
             chain_gen1 = chain_gen2 = 0.0
             chain_gen_before1 = chain_gen_before2 = None
             # (2026-08-24) 確信度ゲート/未登録送付分も前試合の状態を持ち越さない
@@ -7660,6 +7665,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if enable_death_confirm_sequence:
             death_confirm_stats.record(_death_event1, _death_delay1)
             death_confirm_stats.record(_death_event2, _death_delay2)
+        from src.margin_clock import placement_times_from_pipeline
+        placement_times = placement_times_from_pipeline(pipe) if margin_origin_first_placement else None
+        tracker.observe_margin((r.p1, r.p2), t, game_idx, placement_times)
         snap = _drive_ojama(tracker, r.p1, r.p2, ps1, ps2, t,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
         if event_overlay is not None:
@@ -7687,6 +7695,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                             t, game_idx, formula_totals_from_pipeline(pipe),
                             displayed_scores_from_pipeline(pipe, recog_frame),
                             formula_visible_from_pipeline(pipe))
+            if placement_times is not None:
+                event_inputs += (placement_times,)
             if event_recorder is not None:
                 event_recorder.update(*event_inputs)
             event_overlay.update(*event_inputs)
@@ -9164,6 +9174,7 @@ def main() -> None:
               single_death_proof_negative_only=a.single_death_proof_negative_only,
               post_counter_early_exit=a.post_counter_early_exit,
               hidden_scenario_cap=a.hidden_scenario_cap,
+              margin_origin_first_placement=a.margin_origin_first_placement,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
               exchange_event_switch_smoothing=a.exchange_event_switch_smoothing,

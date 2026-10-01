@@ -1,0 +1,1478 @@
+{
+  "summaries": {
+    "legacy_off": {
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5075669993215693,
+        "auc": 0.7752487506069708
+      },
+      "zenchi": {
+        "hits": 7671,
+        "frames": 8333,
+        "agreement": 0.9205568222728909
+      },
+      "deaths": {
+        "false": 0,
+        "total": 37,
+        "unlabelled": 0
+      },
+      "audit": {
+        "records": 5,
+        "cases": 37,
+        "false": 0,
+        "unresolved": 0,
+        "baseline_false": 0,
+        "bound_false": 0,
+        "bound_cases": 13,
+        "lead_sec": {
+          "n": 37,
+          "p50": 3.9000000000000057,
+          "p95": 21.813333333333343
+        }
+      },
+      "scene_first_sec": 2760.383333333333,
+      "gates": {
+        "q": true,
+        "zenchi": true,
+        "false_fire": true,
+        "false_certainty": true,
+        "scene": true
+      },
+      "passed": true,
+      "risky": {
+        "cases": 37,
+        "single": 15,
+        "other_risky": 7,
+        "long_lead": 7,
+        "risky_rows": [
+          {
+            "source": "q_7gc4TgFig",
+            "game": 4,
+            "side": "2P",
+            "first": 322.0,
+            "lead": 22.26666666666665,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 2,
+            "verified_counter": true
+          },
+          {
+            "source": "q_7gc4TgFig",
+            "game": 7,
+            "side": "1P",
+            "first": 498.73333333333335,
+            "lead": 16.26666666666665,
+            "false": false,
+            "route": "single",
+            "long_lead": true,
+            "later_chains": 1,
+            "verified_counter": true
+          },
+          {
+            "source": "review",
+            "game": 3,
+            "side": "2P",
+            "first": 2760.116666666667,
+            "lead": 13.666666666666515,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 0,
+            "verified_counter": false
+          },
+          {
+            "source": "fcXG83vInDY",
+            "game": 1,
+            "side": "1P",
+            "first": 218.23333333333332,
+            "lead": 21.700000000000017,
+            "false": false,
+            "route": "single",
+            "long_lead": true,
+            "later_chains": 1,
+            "verified_counter": true
+          },
+          {
+            "source": "fcXG83vInDY",
+            "game": 5,
+            "side": "2P",
+            "first": 474.2,
+            "lead": 63.666666666666686,
+            "false": false,
+            "route": "single",
+            "long_lead": true,
+            "later_chains": 3,
+            "verified_counter": true
+          },
+          {
+            "source": "zenchi",
+            "game": 3,
+            "side": "2P",
+            "first": 2760.116666666667,
+            "lead": 13.666666666666515,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 0,
+            "verified_counter": false
+          },
+          {
+            "source": "zenchi",
+            "game": 7,
+            "side": "1P",
+            "first": 2929.116666666667,
+            "lead": 14.799999999999727,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 2,
+            "verified_counter": true
+          }
+        ]
+      },
+      "game14_false_times": []
+    },
+    "off": {
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5075669993215693,
+        "auc": 0.7752487506069708
+      },
+      "zenchi": {
+        "hits": 7670,
+        "frames": 8333,
+        "agreement": 0.9204368174726989
+      },
+      "deaths": {
+        "false": 0,
+        "total": 37,
+        "unlabelled": 0
+      },
+      "audit": {
+        "records": 5,
+        "cases": 37,
+        "false": 0,
+        "unresolved": 0,
+        "baseline_false": 0,
+        "bound_false": 0,
+        "bound_cases": 13,
+        "lead_sec": {
+          "n": 37,
+          "p50": 3.9000000000000057,
+          "p95": 21.813333333333343
+        }
+      },
+      "scene_first_sec": 2760.383333333333,
+      "gates": {
+        "q": true,
+        "zenchi": false,
+        "false_fire": true,
+        "false_certainty": true,
+        "scene": true
+      },
+      "passed": false,
+      "risky": {
+        "cases": 37,
+        "single": 15,
+        "other_risky": 7,
+        "long_lead": 7,
+        "risky_rows": [
+          {
+            "source": "q_7gc4TgFig",
+            "game": 4,
+            "side": "2P",
+            "first": 322.0,
+            "lead": 22.26666666666665,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 2,
+            "verified_counter": true
+          },
+          {
+            "source": "q_7gc4TgFig",
+            "game": 7,
+            "side": "1P",
+            "first": 498.73333333333335,
+            "lead": 16.26666666666665,
+            "false": false,
+            "route": "single",
+            "long_lead": true,
+            "later_chains": 1,
+            "verified_counter": true
+          },
+          {
+            "source": "review",
+            "game": 3,
+            "side": "2P",
+            "first": 2760.116666666667,
+            "lead": 13.666666666666515,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 0,
+            "verified_counter": false
+          },
+          {
+            "source": "fcXG83vInDY",
+            "game": 1,
+            "side": "1P",
+            "first": 218.23333333333332,
+            "lead": 21.700000000000017,
+            "false": false,
+            "route": "single",
+            "long_lead": true,
+            "later_chains": 1,
+            "verified_counter": true
+          },
+          {
+            "source": "fcXG83vInDY",
+            "game": 5,
+            "side": "2P",
+            "first": 474.2,
+            "lead": 63.666666666666686,
+            "false": false,
+            "route": "single",
+            "long_lead": true,
+            "later_chains": 3,
+            "verified_counter": true
+          },
+          {
+            "source": "zenchi",
+            "game": 3,
+            "side": "2P",
+            "first": 2760.116666666667,
+            "lead": 13.666666666666515,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 0,
+            "verified_counter": false
+          },
+          {
+            "source": "zenchi",
+            "game": 7,
+            "side": "1P",
+            "first": 2929.116666666667,
+            "lead": 14.799999999999727,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 2,
+            "verified_counter": true
+          }
+        ]
+      },
+      "game14_false_times": []
+    },
+    "on": {
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5075669993215693,
+        "auc": 0.7752487506069708
+      },
+      "zenchi": {
+        "hits": 7670,
+        "frames": 8333,
+        "agreement": 0.9204368174726989
+      },
+      "deaths": {
+        "false": 0,
+        "total": 37,
+        "unlabelled": 0
+      },
+      "audit": {
+        "records": 5,
+        "cases": 37,
+        "false": 0,
+        "unresolved": 0,
+        "baseline_false": 0,
+        "bound_false": 0,
+        "bound_cases": 13,
+        "lead_sec": {
+          "n": 37,
+          "p50": 3.9000000000000057,
+          "p95": 21.813333333333343
+        }
+      },
+      "scene_first_sec": 2760.383333333333,
+      "gates": {
+        "q": true,
+        "zenchi": false,
+        "false_fire": true,
+        "false_certainty": true,
+        "scene": true
+      },
+      "passed": false,
+      "risky": {
+        "cases": 37,
+        "single": 15,
+        "other_risky": 7,
+        "long_lead": 7,
+        "risky_rows": [
+          {
+            "source": "q_7gc4TgFig",
+            "game": 4,
+            "side": "2P",
+            "first": 322.0,
+            "lead": 22.26666666666665,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 2,
+            "verified_counter": true
+          },
+          {
+            "source": "q_7gc4TgFig",
+            "game": 7,
+            "side": "1P",
+            "first": 498.73333333333335,
+            "lead": 16.26666666666665,
+            "false": false,
+            "route": "single",
+            "long_lead": true,
+            "later_chains": 1,
+            "verified_counter": true
+          },
+          {
+            "source": "review",
+            "game": 3,
+            "side": "2P",
+            "first": 2760.116666666667,
+            "lead": 13.666666666666515,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 0,
+            "verified_counter": false
+          },
+          {
+            "source": "fcXG83vInDY",
+            "game": 1,
+            "side": "1P",
+            "first": 218.23333333333332,
+            "lead": 21.700000000000017,
+            "false": false,
+            "route": "single",
+            "long_lead": true,
+            "later_chains": 1,
+            "verified_counter": true
+          },
+          {
+            "source": "fcXG83vInDY",
+            "game": 5,
+            "side": "2P",
+            "first": 474.2,
+            "lead": 63.666666666666686,
+            "false": false,
+            "route": "single",
+            "long_lead": true,
+            "later_chains": 3,
+            "verified_counter": true
+          },
+          {
+            "source": "zenchi",
+            "game": 3,
+            "side": "2P",
+            "first": 2760.116666666667,
+            "lead": 13.666666666666515,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 0,
+            "verified_counter": false
+          },
+          {
+            "source": "zenchi",
+            "game": 7,
+            "side": "1P",
+            "first": 2929.116666666667,
+            "lead": 14.799999999999727,
+            "false": false,
+            "route": "other",
+            "long_lead": true,
+            "later_chains": 2,
+            "verified_counter": true
+          }
+        ]
+      },
+      "game14_false_times": []
+    }
+  },
+  "baseline_display_equivalence": {
+    "q_7gc4TgFig": {
+      "actual": "54a1ec98e0e16023cad853ec15cea2db1522c9b1f1b715c3fa8c8c986e4744b2",
+      "reference": "54a1ec98e0e16023cad853ec15cea2db1522c9b1f1b715c3fa8c8c986e4744b2",
+      "identical": true
+    },
+    "review": {
+      "actual": "9f7d27e6cf8267ffa63037f02cc3a158ab28852177e65942bf35d3e0615151a8",
+      "reference": "9f7d27e6cf8267ffa63037f02cc3a158ab28852177e65942bf35d3e0615151a8",
+      "identical": true
+    },
+    "fcXG83vInDY": {
+      "actual": "60e11e8dc2d288a6165bbb1f653149a356297548ba6b51a0a8b56c9a6a25aa85",
+      "reference": "60e11e8dc2d288a6165bbb1f653149a356297548ba6b51a0a8b56c9a6a25aa85",
+      "identical": true
+    },
+    "mia8KCjr52g": {
+      "actual": "d7111a30cc8055938023426889e45e6280ba4531911c3ef5e17dc55fdbff1009",
+      "reference": "d7111a30cc8055938023426889e45e6280ba4531911c3ef5e17dc55fdbff1009",
+      "identical": true
+    },
+    "zenchi": {
+      "actual": "e7794b7cb8a95ebb6559b12dc8ef7c5ed421d2a9f5f8bf5f43bd50a7724beac5",
+      "reference": "e7794b7cb8a95ebb6559b12dc8ef7c5ed421d2a9f5f8bf5f43bd50a7724beac5",
+      "identical": true
+    }
+  },
+  "differences": {
+    "q_7gc4TgFig": {
+      "columns": {
+        "display_adv": {
+          "changed": 0,
+          "frames": 27000,
+          "max_abs": 0.0,
+          "first_times": []
+        },
+        "display_p1": {
+          "changed": 0,
+          "frames": 27000,
+          "max_abs": 0.0,
+          "first_times": []
+        },
+        "source": {
+          "changed": 0,
+          "frames": 27000,
+          "max_abs": null,
+          "first_times": []
+        }
+      },
+      "games": [
+        {
+          "game": 0,
+          "frames": 4013,
+          "old_origin": 0.06666666666666667,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 1,
+          "frames": 1393,
+          "old_origin": 134.1,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 2,
+          "frames": 1812,
+          "old_origin": 180.2,
+          "first_placement": 183.53333333333333,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 3,
+          "frames": 1231,
+          "old_origin": 243.2,
+          "first_placement": 243.8,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 4,
+          "frames": 2064,
+          "old_origin": 281.96666666666664,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 5,
+          "frames": 1553,
+          "old_origin": 356.8,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 6,
+          "frames": 1396,
+          "old_origin": 407.0,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 7,
+          "frames": 2147,
+          "old_origin": 448.73333333333335,
+          "first_placement": 451.96666666666664,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 8,
+          "frames": 2087,
+          "old_origin": 520.3,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 9,
+          "frames": 2330,
+          "old_origin": 595.3,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 10,
+          "frames": 965,
+          "old_origin": 667.5333333333333,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 11,
+          "frames": 1527,
+          "old_origin": 699.7,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 12,
+          "frames": 1269,
+          "old_origin": 750.6,
+          "first_placement": 753.7333333333333,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 13,
+          "frames": 1947,
+          "old_origin": 797.7333333333333,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 14,
+          "frames": 1266,
+          "old_origin": 857.8,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        }
+      ],
+      "rate_context": {
+        "display_frames": 0,
+        "sources": {}
+      },
+      "rate_difference_frames": 0
+    },
+    "review": {
+      "columns": {
+        "display_adv": {
+          "changed": 0,
+          "frames": 5948,
+          "max_abs": 0.0,
+          "first_times": []
+        },
+        "display_p1": {
+          "changed": 0,
+          "frames": 5948,
+          "max_abs": 0.0,
+          "first_times": []
+        },
+        "source": {
+          "changed": 0,
+          "frames": 5948,
+          "max_abs": null,
+          "first_times": []
+        }
+      },
+      "games": [
+        {
+          "game": 0,
+          "frames": 901,
+          "old_origin": 2549.116666666667,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 1,
+          "frames": 1748,
+          "old_origin": 2579.0833333333335,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 2,
+          "frames": 1917,
+          "old_origin": 2637.35,
+          "first_placement": 2640.116666666667,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 3,
+          "frames": 2282,
+          "old_origin": 2701.25,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        }
+      ],
+      "rate_context": {
+        "display_frames": 0,
+        "sources": {}
+      },
+      "rate_difference_frames": 0
+    },
+    "fcXG83vInDY": {
+      "columns": {
+        "display_adv": {
+          "changed": 0,
+          "frames": 27000,
+          "max_abs": 0.0,
+          "first_times": []
+        },
+        "display_p1": {
+          "changed": 0,
+          "frames": 27000,
+          "max_abs": 0.0,
+          "first_times": []
+        },
+        "source": {
+          "changed": 0,
+          "frames": 27000,
+          "max_abs": null,
+          "first_times": []
+        }
+      },
+      "games": [
+        {
+          "game": 0,
+          "frames": 5194,
+          "old_origin": 0.06666666666666667,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 1,
+          "frames": 2063,
+          "old_origin": 173.4,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 2,
+          "frames": 2161,
+          "old_origin": 241.9,
+          "first_placement": 245.73333333333332,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 3,
+          "frames": 1858,
+          "old_origin": 313.93333333333334,
+          "first_placement": 317.2,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 4,
+          "frames": 2034,
+          "old_origin": 382.23333333333335,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 5,
+          "frames": 2959,
+          "old_origin": 448.3333333333333,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 6,
+          "frames": 2751,
+          "old_origin": 547.2333333333333,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 7,
+          "frames": 1409,
+          "old_origin": 634.0,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 8,
+          "frames": 1631,
+          "old_origin": 686.4666666666667,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 9,
+          "frames": 1074,
+          "old_origin": 740.7666666666667,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 10,
+          "frames": 1763,
+          "old_origin": 775.8,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 11,
+          "frames": 1595,
+          "old_origin": 829.9,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 12,
+          "frames": 508,
+          "old_origin": 889.6,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        }
+      ],
+      "rate_context": {
+        "display_frames": 0,
+        "sources": {}
+      },
+      "rate_difference_frames": 0
+    },
+    "mia8KCjr52g": {
+      "columns": {
+        "display_adv": {
+          "changed": 0,
+          "frames": 27000,
+          "max_abs": 0.0,
+          "first_times": []
+        },
+        "display_p1": {
+          "changed": 0,
+          "frames": 27000,
+          "max_abs": 0.0,
+          "first_times": []
+        },
+        "source": {
+          "changed": 0,
+          "frames": 27000,
+          "max_abs": null,
+          "first_times": []
+        }
+      },
+      "games": [
+        {
+          "game": 0,
+          "frames": 3924,
+          "old_origin": 0.06666666666666667,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 1,
+          "frames": 1547,
+          "old_origin": 130.93333333333334,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 2,
+          "frames": 1721,
+          "old_origin": 187.2,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 3,
+          "frames": 2983,
+          "old_origin": 239.73333333333332,
+          "first_placement": 242.93333333333334,
+          "rate_difference_frames": 97,
+          "applied_difference_frames": 97
+        },
+        {
+          "game": 4,
+          "frames": 2594,
+          "old_origin": 339.3,
+          "first_placement": 342.3,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 5,
+          "frames": 4497,
+          "old_origin": 430.3,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 6,
+          "frames": 1301,
+          "old_origin": 580.3333333333334,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 7,
+          "frames": 2665,
+          "old_origin": 623.8333333333334,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 8,
+          "frames": 989,
+          "old_origin": 707.7333333333333,
+          "first_placement": 710.8666666666667,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 9,
+          "frames": 1805,
+          "old_origin": 740.8333333333334,
+          "first_placement": 743.8333333333334,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 10,
+          "frames": 1960,
+          "old_origin": 800.8666666666667,
+          "first_placement": 804.0,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 11,
+          "frames": 1014,
+          "old_origin": 871.1,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        }
+      ],
+      "rate_context": {
+        "display_frames": 97,
+        "sources": {
+          "G_fe": 3,
+          "confirmed_death": 94
+        }
+      },
+      "rate_difference_frames": 97
+    },
+    "zenchi": {
+      "columns": {
+        "display_adv": {
+          "changed": 0,
+          "frames": 25398,
+          "max_abs": 0.0,
+          "first_times": []
+        },
+        "display_p1": {
+          "changed": 0,
+          "frames": 25398,
+          "max_abs": 0.0,
+          "first_times": []
+        },
+        "source": {
+          "changed": 0,
+          "frames": 25398,
+          "max_abs": null,
+          "first_times": []
+        }
+      },
+      "games": [
+        {
+          "game": 0,
+          "frames": 856,
+          "old_origin": 2550.616666666667,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 1,
+          "frames": 1748,
+          "old_origin": 2579.0833333333335,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 2,
+          "frames": 1917,
+          "old_origin": 2637.35,
+          "first_placement": 2640.116666666667,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 3,
+          "frames": 2283,
+          "old_origin": 2701.25,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 4,
+          "frames": 1048,
+          "old_origin": 2777.35,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 5,
+          "frames": 1612,
+          "old_origin": 2812.2833333333333,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 6,
+          "frames": 963,
+          "old_origin": 2866.016666666667,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 7,
+          "frames": 1511,
+          "old_origin": 2898.116666666667,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 8,
+          "frames": 1058,
+          "old_origin": 2948.483333333333,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 9,
+          "frames": 1103,
+          "old_origin": 2983.75,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 10,
+          "frames": 935,
+          "old_origin": 3020.65,
+          "first_placement": 3023.3166666666666,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 11,
+          "frames": 1991,
+          "old_origin": 3051.6833333333334,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 12,
+          "frames": 1583,
+          "old_origin": 3118.05,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 13,
+          "frames": 1902,
+          "old_origin": 3170.8166666666666,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 14,
+          "frames": 1162,
+          "old_origin": 3234.2166666666667,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 15,
+          "frames": 1588,
+          "old_origin": 3272.95,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 16,
+          "frames": 909,
+          "old_origin": 3326.016666666667,
+          "first_placement": 3328.616666666667,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 17,
+          "frames": 1680,
+          "old_origin": 3356.1833333333334,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        },
+        {
+          "game": 18,
+          "frames": 449,
+          "old_origin": 3412.1833333333334,
+          "first_placement": null,
+          "rate_difference_frames": 0,
+          "applied_difference_frames": 0
+        }
+      ],
+      "rate_context": {
+        "display_frames": 0,
+        "sources": {}
+      },
+      "rate_difference_frames": 0
+    }
+  },
+  "production_flags": "--exchange-event-update --exchange-event-model-dir models/exchange_event_v3 --exchange-event-live-count --exchange-event-death-guard --confirmed-death-hold --death-formula-guard --color-score-safety --multi-landing-death --midchain-completion --death-pending-ledger --hidden-row-death --prefire-snapshot --hidden-row-belief --post-counter-death-bound --single-death-proof-guard --single-death-proof-negative-only --post-counter-early-exit --hidden-scenario-cap 256 --exchange-event-switch-smoothing",
+  "record_sha256": {
+    "q_7gc4TgFig": "041ce81fb39f9285ed8ffb05f91f544dc7d40e7712e7973981bee3a0f4628490",
+    "review": "30d7a26ed49ed8eb1f50d42e731ee6d26891233aabe60d44d0b68f610923ffaf",
+    "fcXG83vInDY": "6d69dd8a4d56c407dfab6c4b4c717d9fc904425a897f904536b6f74843c2f75f",
+    "mia8KCjr52g": "1d4772a5a6330ab8a584705623b99ca9872fd38143e7cb5999e2309f63721e0f",
+    "zenchi": "c25e77d5b182f1e6f3ff70fc636d712e4e97217482ec7c3d317b752cf52f7d9f"
+  },
+  "production_config_sha256": "6f782e98330c58ee239d6d4bd47d75ce18e6a291fe59b3f79cb60d1a519d90d9",
+  "actual_display": {
+    "legacy_off": {
+      "scene_first_sec": 2760.25,
+      "stamp": 2759.05,
+      "p2_display": 0.3822803355623189,
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5060023990792154,
+        "auc": 0.7732757731626511
+      }
+    },
+    "off": {
+      "scene_first_sec": 2760.25,
+      "stamp": 2759.05,
+      "p2_display": 0.3822803355623189,
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5063335562246403,
+        "auc": 0.7724442231418098
+      }
+    },
+    "on": {
+      "scene_first_sec": 2760.25,
+      "stamp": 2759.05,
+      "p2_display": 0.3822803355623189,
+      "q": {
+        "frames": 6526,
+        "matches": 4,
+        "log_loss": 0.5063335562246403,
+        "auc": 0.7724442231418098
+      }
+    }
+  },
+  "scenes": {
+    "legacy_off": {
+      "first_sec": 2760.383333333333,
+      "stamp": 2759.05,
+      "p2_display": 0.38228287591936483,
+      "p2_selected": 0.3823164248110478,
+      "source": "S3_landing",
+      "latest": {
+        "source": "S3_landing",
+        "t_sec": 2758.95,
+        "p1": 0.6176835751889522,
+        "base_p1": 0.3997474181101629,
+        "gfe_p1": 0.79672876194145,
+        "incoming": [
+          0,
+          171.0
+        ],
+        "hands": [
+          10,
+          1
+        ],
+        "required_cancel": [
+          0,
+          0
+        ],
+        "near_future_send": [
+          null,
+          null
+        ],
+        "resolving_send": [
+          0,
+          0
+        ],
+        "dead_sides": [],
+        "overflow_rows": [
+          null,
+          null
+        ],
+        "verified_attack": [
+          false,
+          false
+        ],
+        "rejected_boards": [],
+        "optimistic_send": [
+          null,
+          null
+        ],
+        "completion_certain": [
+          true,
+          true
+        ],
+        "completion_sides": [
+          "1P",
+          "2P"
+        ],
+        "hidden_row_weighted": true,
+        "single_death_proof": [
+          null,
+          null
+        ],
+        "death_incoming": [
+          0,
+          171
+        ],
+        "hidden_death_scores": [
+          87720,
+          75440
+        ],
+        "state_safety": [
+          "completion_prefix_unverified",
+          "completion_prefix_unverified"
+        ],
+        "pending_ledger": [
+          0,
+          171
+        ],
+        "post_counter_bound": [
+          {
+            "side": "2P",
+            "dead": false,
+            "reason": "unverified_attack_or_budget"
+          }
+        ],
+        "multi_landing": [
+          {
+            "dead": false,
+            "reason": "single_landing"
+          },
+          {
+            "dead": false,
+            "reason": "unverified_attack"
+          }
+        ],
+        "midchain_prediction": [],
+        "prefire_prediction": [
+          {
+            "side": "1P",
+            "chain_id": 8,
+            "candidates": 1.0,
+            "mean_score": 87720.0,
+            "mean_send": 1253.0,
+            "method": "prefire_snapshot",
+            "label": "発火前盤面から予測"
+          },
+          {
+            "side": "2P",
+            "chain_id": 9,
+            "candidates": 1.0,
+            "mean_score": 75440.0,
+            "mean_send": 1077.0,
+            "method": "prefire_snapshot",
+            "label": "発火前盤面から予測"
+          }
+        ]
+      }
+    },
+    "off": {
+      "first_sec": 2760.383333333333,
+      "stamp": 2759.05,
+      "p2_display": 0.38228287591936483,
+      "p2_selected": 0.3823164248110478,
+      "source": "S3_landing",
+      "latest": {
+        "source": "S3_landing",
+        "t_sec": 2758.95,
+        "p1": 0.6176835751889522,
+        "base_p1": 0.3997474181101629,
+        "gfe_p1": 0.79672876194145,
+        "incoming": [
+          0,
+          171.0
+        ],
+        "hands": [
+          10,
+          1
+        ],
+        "required_cancel": [
+          0,
+          0
+        ],
+        "near_future_send": [
+          null,
+          null
+        ],
+        "resolving_send": [
+          0,
+          0
+        ],
+        "dead_sides": [],
+        "overflow_rows": [
+          null,
+          null
+        ],
+        "verified_attack": [
+          false,
+          false
+        ],
+        "rejected_boards": [],
+        "optimistic_send": [
+          null,
+          null
+        ],
+        "completion_certain": [
+          true,
+          true
+        ],
+        "completion_sides": [
+          "1P",
+          "2P"
+        ],
+        "hidden_row_weighted": true,
+        "single_death_proof": [
+          null,
+          null
+        ],
+        "death_incoming": [
+          0,
+          171
+        ],
+        "hidden_death_scores": [
+          87720,
+          75440
+        ],
+        "state_safety": [
+          "completion_prefix_unverified",
+          "completion_prefix_unverified"
+        ],
+        "pending_ledger": [
+          0,
+          171
+        ],
+        "post_counter_bound": [
+          {
+            "side": "2P",
+            "dead": false,
+            "reason": "unverified_attack_or_budget"
+          }
+        ],
+        "multi_landing": [
+          {
+            "dead": false,
+            "reason": "single_landing"
+          },
+          {
+            "dead": false,
+            "reason": "unverified_attack"
+          }
+        ],
+        "midchain_prediction": [],
+        "prefire_prediction": [
+          {
+            "side": "1P",
+            "chain_id": 8,
+            "candidates": 1.0,
+            "mean_score": 87720.0,
+            "mean_send": 1253.0,
+            "method": "prefire_snapshot",
+            "label": "発火前盤面から予測"
+          },
+          {
+            "side": "2P",
+            "chain_id": 9,
+            "candidates": 1.0,
+            "mean_score": 75440.0,
+            "mean_send": 1077.0,
+            "method": "prefire_snapshot",
+            "label": "発火前盤面から予測"
+          }
+        ]
+      }
+    },
+    "on": {
+      "first_sec": 2760.383333333333,
+      "stamp": 2759.05,
+      "p2_display": 0.38228287591936483,
+      "p2_selected": 0.3823164248110478,
+      "source": "S3_landing",
+      "latest": {
+        "source": "S3_landing",
+        "t_sec": 2758.95,
+        "p1": 0.6176835751889522,
+        "base_p1": 0.3997474181101629,
+        "gfe_p1": 0.79672876194145,
+        "incoming": [
+          0,
+          171.0
+        ],
+        "hands": [
+          10,
+          1
+        ],
+        "required_cancel": [
+          0,
+          0
+        ],
+        "near_future_send": [
+          null,
+          null
+        ],
+        "resolving_send": [
+          0,
+          0
+        ],
+        "dead_sides": [],
+        "overflow_rows": [
+          null,
+          null
+        ],
+        "verified_attack": [
+          false,
+          false
+        ],
+        "rejected_boards": [],
+        "optimistic_send": [
+          null,
+          null
+        ],
+        "completion_certain": [
+          true,
+          true
+        ],
+        "completion_sides": [
+          "1P",
+          "2P"
+        ],
+        "hidden_row_weighted": true,
+        "single_death_proof": [
+          null,
+          null
+        ],
+        "death_incoming": [
+          0,
+          171
+        ],
+        "hidden_death_scores": [
+          87720,
+          75440
+        ],
+        "state_safety": [
+          "completion_prefix_unverified",
+          "completion_prefix_unverified"
+        ],
+        "pending_ledger": [
+          0,
+          171
+        ],
+        "post_counter_bound": [
+          {
+            "side": "2P",
+            "dead": false,
+            "reason": "unverified_attack_or_budget"
+          }
+        ],
+        "multi_landing": [
+          {
+            "dead": false,
+            "reason": "single_landing"
+          },
+          {
+            "dead": false,
+            "reason": "unverified_attack"
+          }
+        ],
+        "midchain_prediction": [],
+        "prefire_prediction": [
+          {
+            "side": "1P",
+            "chain_id": 8,
+            "candidates": 1.0,
+            "mean_score": 87720.0,
+            "mean_send": 1253.0,
+            "method": "prefire_snapshot",
+            "label": "発火前盤面から予測"
+          },
+          {
+            "side": "2P",
+            "chain_id": 9,
+            "candidates": 1.0,
+            "mean_score": 75440.0,
+            "mean_send": 1077.0,
+            "method": "prefire_snapshot",
+            "label": "発火前盤面から予測"
+          }
+        ]
+      }
+    }
+  }
+}

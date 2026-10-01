@@ -72,7 +72,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            post_counter_early_exit: bool = False,
            multilanding_node_limit: int | None = None,
            hidden_scenario_cap: int | None = None,
-           switch_smoothing: bool = False) -> dict:
+           switch_smoothing: bool = False,
+           margin_origin_first_placement: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -109,7 +110,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         single_death_proof_guard=single_death_proof_guard,
         single_death_proof_negative_only=single_death_proof_negative_only,
         post_counter_early_exit=post_counter_early_exit,
-        multilanding_node_limit=multilanding_node_limit, hidden_scenario_cap=hidden_scenario_cap)
+        multilanding_node_limit=multilanding_node_limit, hidden_scenario_cap=hidden_scenario_cap,
+        margin_origin_first_placement=margin_origin_first_placement)
     rows, frames, inputs = [], 0, None
     smoothing = SwitchAwareDisplayEMA() if switch_smoothing else _ExchangeDisplayEMA()
     fallback_unknown = (None, None) if switch_smoothing else (0.0, 0.5)  # 記録に旧評価器値の無い更新行
@@ -235,7 +237,8 @@ def main() -> None:
                     single_death_proof_negative_only=options.single_death_proof_negative_only,
                     post_counter_early_exit=options.post_counter_early_exit,
                     hidden_scenario_cap=options.hidden_scenario_cap,
-                    switch_smoothing=options.exchange_event_switch_smoothing)
+                    switch_smoothing=options.exchange_event_switch_smoothing,
+                    margin_origin_first_placement=options.margin_origin_first_placement)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

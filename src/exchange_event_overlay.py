@@ -19,6 +19,7 @@ from src.exchange_event_tracker import ExchangeEventTracker, SIDE_LABELS, valid_
 from src.score_ocr import FORMULA_SESSION_RESET_SEC
 from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE
 from src.scoring import calculate_chain_score, compute_effective_rate
+from src.margin_clock import MarginClock
 
 UNUSED_S1_M0 = .5  # S1/S3の特徴列にはM0がなく、G_feにはこの値を渡さない。
 
@@ -82,12 +83,13 @@ class ExchangeEventOverlay:
                  single_death_proof_negative_only: bool = False,
                  post_counter_early_exit: bool = False,
                  multilanding_node_limit: int | None = None,
-                 hidden_scenario_cap: int | None = None) -> None:
+                 hidden_scenario_cap: int | None = None,
+                 margin_origin_first_placement: bool = False) -> None:
         self._initialize_layers(models, live_count, e16, count_sync, death_guard,
                                 evaluation_layers, completion_check, confirmed_death_hold)
         self._build_static, self._signal_factory = build_static, signal_factory
         self._m0, self._per_side_settled = m0_predictor, per_side_settled
-        self._initialize_state()
+        self._initialize_state(margin_origin_first_placement)
         from src.exchange_event_landing import ExchangeLandingProjection
         if landing_counter_prob and counter_probability_model is None:
             from src.landing_counter_probability import LogisticResponseProbability
@@ -131,7 +133,7 @@ class ExchangeEventOverlay:
         if enabled and self._e16.layer_enabled:
             self.tracker.layer_rows = []
 
-    def _initialize_state(self) -> None:
+    def _initialize_state(self, margin_origin_first_placement: bool = False) -> None:
         """試合内で持つ履歴・信号・得点の初期値を用意する。"""
         self._history: list[list[ConfirmedSide]] = [[], []]
         self._snapshots: list[tuple[float, Any]] = []
@@ -139,6 +141,7 @@ class ExchangeEventOverlay:
         self._counts, self._previous = (0, 0), (None, None)
         self._game: int | None = None
         self._start: float | None = None
+        self._margin_clock = MarginClock() if margin_origin_first_placement else None
         self._falling = [False, False]
         self._chain_keys: list[tuple | None] = [None, None]
         self._scores: list[list[tuple[float, float]]] = [[], []]
@@ -222,11 +225,11 @@ class ExchangeEventOverlay:
                t_sec: float, game_idx: int,
                formula_totals: tuple[float | None, float | None] = (None, None),
                displayed_scores: tuple[float | None, float | None] | None = None,
-               formula_visible: tuple[bool, bool] = (False, False)) -> None:
+               formula_visible: tuple[bool, bool] = (False, False),
+               first_placement_times: tuple[float | None, float | None] | None = None) -> None:
         """発火→両側終了/確定→S3→着地後G_feの順で一括更新する。"""
         sides = (result.p1, result.p2)
-        if self._game != game_idx:
-            self._reset(game_idx, t_sec)
+        self._observe_margin(sides, t_sec, game_idx, first_placement_times)
         if self._landing_projection.post_counter_bound is not None:
             self._landing_projection.post_counter_bound.observe(result, game_idx)
         if self._origin_guard is not None:
@@ -267,6 +270,14 @@ class ExchangeEventOverlay:
         self._previous = tuple(s.state for s in sides)
         if self._e16 is not None:
             self._e16.apply(self, result, snapshot, t_sec)
+
+    def _observe_margin(self, sides: tuple, stamp: float, game: int,
+                        first_placement_times: tuple[float | None, float | None] | None) -> None:
+        """試合境界を先に反映し、両者の観測を共通時計へ渡す。"""
+        if self._game != game:
+            self._reset(game, stamp)
+        if self._margin_clock is not None:
+            self._margin_clock.observe(sides, stamp, game, first_placement_times)
 
     def _observe_prefire(self, sides: tuple, stamp: float, game: int) -> None:
         """予測入力を復元してから、明示ONの因果履歴を更新する。"""
@@ -321,6 +332,8 @@ class ExchangeEventOverlay:
             self._prefire.reset()
         self.tracker.boundary(game_idx, t_sec)
         self._game, self._start = game_idx, None
+        if self._margin_clock is not None:
+            self._margin_clock = MarginClock()
         self._history, self._snapshots, self._signals = [[], []], [], {}
         self._counts, self._previous = (0, 0), (None, None)
         self._falling = [False, False]
@@ -462,14 +475,14 @@ class ExchangeEventOverlay:
         if not all(selected) or self._start is None:
             self.tracker.missing_input("missing_prefire_board", t_sec, "S1", triggers)
             return  # 発火前盤面が揃う以前の区間は未来盤面で補わない。
-        elapsed = max(0.0, first - self._start)
+        elapsed = max(0.0, self._margin_elapsed(first))
         boards = tuple(s.board for s in selected)
         before_snap = next((s for t, s in reversed(self._snapshots) if t < first), None)
         if before_snap is None:
             self.tracker.missing_input("missing_prefire_snapshot", t_sec, "S1", triggers)
             return
         try:
-            static = self._build_static(boards, before_snap, elapsed, UNUSED_S1_M0)
+            static = self._build_static(boards, before_snap, max(0.0, first - self._start), UNUSED_S1_M0)
             prefire = np.stack([prefire_side_features(s.board._grid, s.queue, elapsed)
                                 for s in selected])
         except (ValueError, TypeError, FloatingPointError) as error:
@@ -541,10 +554,10 @@ class ExchangeEventOverlay:
             return
         if self.tracker.current is None or self._start is None or not all(self._history):
             return
-        elapsed = t_sec - self._start
+        elapsed = self._margin_elapsed(t_sec)
         latest = tuple(h[-1] for h in self._history)
         try:
-            static = self._build_static(tuple(s.board for s in latest), snapshot, elapsed, UNUSED_S1_M0)
+            static = self._build_static(tuple(s.board for s in latest), snapshot, t_sec - self._start, UNUSED_S1_M0)
             features = []
             for side in latest:
                 grid = side.board._grid
@@ -578,14 +591,14 @@ class ExchangeEventOverlay:
                         tracker.missing_input("missing_live_completion", t_sec, "S3", chain.chain_id)
                         return
                     _, _, final = completion(saved.board._grid.astype(np.int8).tobytes(), True,
-                                              chain.trigger_sec - self._start)
+                                              self._margin_elapsed(chain.trigger_sec))
                     grid = np.frombuffer(final, np.int8).reshape(saved.board._grid.shape)
                 else:
                     grid = np.asarray(chain.predicted_final_board, dtype=np.int8)
             grids.append(np.asarray(grid, dtype=np.int8))
             queues.append(latest.queue)
         observation = CountObservation(np.stack(grids), np.stack(queues),
-            t_sec - self._start, live=True, score_elapsed_sec=tracker._score_elapsed)
+            self._margin_elapsed(t_sec), live=True, score_elapsed_sec=tracker._score_elapsed)
         key = (tracker.current.exchange_id, observation.grids.tobytes(),
                observation.queues.tobytes(), compute_effective_rate(observation.elapsed_sec),
                tuple(h[-1].board._grid.tobytes() for h in self._history))
@@ -686,6 +699,12 @@ class ExchangeEventOverlay:
             self.tracker.missing_input("static_input: " + str(error), t_sec, "G_fe")
             return
         self.tracker.static(event, t_sec, confirmed)
+
+    def _margin_elapsed(self, t_sec: float) -> float:
+        """おじゃま換算の共通起点。学習済みG_feの進行度時計は変更しない。"""
+        if self._margin_clock is not None:
+            return self._margin_clock.elapsed(t_sec, self._start)
+        return t_sec - self._start if self._start is not None else 0.0
 
 
 def displayed_scores_from_pipeline(pipeline: object, frame: np.ndarray) -> tuple:

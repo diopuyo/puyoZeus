@@ -17,6 +17,7 @@ from src.board_state_machine import BoardState
 from src.exchange_event_evaluator import StaticInput
 
 RECORD_VERSION = 1
+FIRST_PLACEMENT_ARGUMENT_INDEX = 8  # 旧8引数に追加する任意の設置観測。
 COMPRESSION_LEVEL = 6
 SIDE_FIELDS = ("state", "confirmed_board", "score", "next_pair", "dnext_pair",
                "next_slide_motion")
@@ -115,7 +116,8 @@ class ExchangeEventRecorder:
 
     def update(self, result: Any, snapshot: Any, finalization: Any, t_sec: float,
                game_idx: int, formula_totals: tuple, displayed_scores: tuple,
-               formula_visible: tuple) -> None:
+               formula_visible: tuple,
+               first_placement_times: tuple[float | None, float | None] | None = None) -> None:
         """overlay呼出直前に入力を複製し、後続の認識器更新と切り離す。"""
         sides = []
         for side in (result.p1, result.p2):
@@ -135,9 +137,12 @@ class ExchangeEventRecorder:
         if getattr(result, "terminal_evidence_available", False):
             saved_result.confirmed_dead_sides = result.confirmed_dead_sides
             saved_result.terminal_evidence_available = True
-        self.write(dict(kind="update", args=(saved_result,
+        inputs = (saved_result,
             fields(snapshot, SNAPSHOT_FIELDS), fields(finalization, FINALIZATION_FIELDS),
-            t_sec, game_idx, formula_totals, displayed_scores, formula_visible)))
+            t_sec, game_idx, formula_totals, displayed_scores, formula_visible)
+        if first_placement_times is not None:
+            inputs += (first_placement_times,)
+        self.write(dict(kind="update", args=inputs))
         self.frames += 1
 
     def wrap_static(self, builder: Any) -> Any:

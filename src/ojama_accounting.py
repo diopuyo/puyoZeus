@@ -364,7 +364,10 @@ class OjamaAccountingTracker:
         self,
         ojama_rate_base: int = OJAMA_RATE_STANDARD,
         overflow_threshold: int = OJAMA_MAX_DROP_PER_TURN,
+        margin_origin_first_placement: bool = False,
     ) -> None:
+        from src.margin_clock import MarginClock
+        self._margin_clock = MarginClock() if margin_origin_first_placement else None
         self._rate_base = int(ojama_rate_base)
         self._overflow_threshold = int(overflow_threshold)
         self._p1 = _SideState()
@@ -377,6 +380,9 @@ class OjamaAccountingTracker:
 
     def reset(self, match_start_sec: float | None = None) -> None:
         """試合開始時に全帳簿をクリア。"""
+        if self._margin_clock is not None:
+            from src.margin_clock import MarginClock
+            self._margin_clock = MarginClock()
         self._p1 = _SideState()
         self._p2 = _SideState()
         self._frame_idx = 0
@@ -648,6 +654,12 @@ class OjamaAccountingTracker:
             leftover_after_p1=self._p1.last_leftover_after,
             leftover_after_p2=self._p2.last_leftover_after,
         )
+
+    def observe_margin(self, sides: tuple, t_sec: float, game_idx: int,
+                       first_placement_times: tuple[float | None, float | None] | None = None) -> None:
+        """得点処理前に両者同時の確定観測を渡す。収集側の既定経路は変更しない。"""
+        if self._margin_clock is not None:
+            self._margin_clock.observe(sides, t_sec, game_idx, first_placement_times)
 
     def get_effective_rate(self, t_sec: float) -> int:
         """現在の試合相対時刻に対する得点→おじゃま換算率を返す。"""
@@ -1179,6 +1191,8 @@ class OjamaAccountingTracker:
         クリップ先頭からの経過秒をそのまま返す旧実装はマージンタイム過剰適用の原因
         であったため廃止(2026-06-10 修正)。
         """
+        if self._margin_clock is not None:
+            return self._margin_clock.elapsed(float(t_sec), self._match_start_sec)
         if self._match_start_sec is None:
             return 0.0
         return max(0.0, float(t_sec) - self._match_start_sec)

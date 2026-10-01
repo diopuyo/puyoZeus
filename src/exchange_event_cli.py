@@ -20,6 +20,8 @@ def parse_exchange_event_args(
         help="採用済み撃ち合い評価を一括適用（モデル等の個別指定より優先）",
     )
     arguments = list(sys.argv[1:] if argv is None else argv)
+    parser.add_argument("--margin-origin-first-placement", action="store_true", default=False,
+                        help="両者で最初の設置確定をマージン起点にする（実験・既定OFF）")
     options = parser.parse_args(arguments)
     if options.production_exchange_event:
         arguments.extend(shlex.split(production_config.exchange_event_flags()))
