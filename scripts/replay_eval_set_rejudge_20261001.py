@@ -14,7 +14,7 @@ EVALSET = Path('/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set')
 OUT_ROOT = EVALSET/'replay_rejudge'
 PART_RECORDS = EVALSET/'collect/records'
 PART3_RECORDS = Path('/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/logs/pending_expiry/full/records')
-SOURCES = ('p1', 'p2', 'zenchi')
+SOURCES = ('c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'zenchi')
 
 
 def main() -> None:

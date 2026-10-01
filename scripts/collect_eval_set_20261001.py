@@ -25,7 +25,11 @@ EXISTING_RECORD_META = EXEV/'logs/pending_expiry/full/records/zenchi.jsonl.json'
 # 区間 (秒)。パート境界はレビュー動画 manifest の resolved_start/end_sec。
 PART3_START = 2580.566
 CHECK_END = 2702.0   # 第41・42試合 (2579.066〜2701.266) を含む短区間
-PARTS = dict(p1=(0.0, 1357.633), p2=(1357.633, PART3_START), p3check=(PART3_START, CHECK_END))
+# 第1〜40試合は6区間に分けて並列収集する (CPU 競合下で2区間だと約5時間かかるため、2026-10-01 変更)。
+# 区切りは公式試合境界 (labels.json の開始時刻)、各区間は独立に30秒ウォームアップ (第3パートと同じ手順)。
+PARTS = dict(c1=(0.0, 482.433), c2=(482.433, 893.666), c3=(893.666, 1300.033),
+             c4=(1300.033, 1738.3), c5=(1738.3, 2167.2), c6=(2167.2, PART3_START),
+             p1=(0.0, 1357.633), p2=(1357.633, PART3_START), p3check=(PART3_START, CHECK_END))
 COLLECT_R1_FLAG = '--placement-signal-reconcile'   # collect_r1 が自分で末尾へ足すフラグ
 
 
