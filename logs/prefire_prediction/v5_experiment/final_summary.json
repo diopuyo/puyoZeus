@@ -1,0 +1,30 @@
+{
+  "experiment": {
+    "samples": 100,
+    "transitions": 94600,
+    "mismatches": 0,
+    "missed": 52
+  },
+  "gates": {
+    "a": true,
+    "b": false,
+    "c": true
+  },
+  "passed": false,
+  "trace_rows": 60426,
+  "predicted_rows": 1580,
+  "early_referenced": 0,
+  "missing_rows": 32985,
+  "firing_rows": 3124,
+  "held_rows": 0,
+  "agreement": {
+    "denominator": 0,
+    "last_hits": 0,
+    "half_second_hits": 0,
+    "exchanges": 181,
+    "with_both_endpoints": 164,
+    "last_scored": 2,
+    "half_second_scored": 10,
+    "both_scored": 0
+  }
+}

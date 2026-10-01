@@ -71,7 +71,7 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            prefire_best_play: bool = False,
            prefire_best_play_latency: float = 0.0,
            prefire_best_play_evaluator: str = 'full',
-           prefire_best_play_stable: bool = False) -> dict:
+           prefire_best_play_stable: bool = False, prefire_best_play_v5: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -110,6 +110,11 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     prefire_layer = None
+    if prefire_best_play_v5:
+        if prefire_exchange_prediction or prefire_best_play or prefire_best_play_stable:
+            raise ValueError('--prefire-best-play-v5 は他の発火前予測と同時指定できない')
+        from src.prefire_best_play_v5 import BestPlayV5Layer
+        prefire_layer = BestPlayV5Layer(latency_sec=prefire_best_play_latency)
     if prefire_exchange_prediction:
         from src.prefire_exchange_layer import FileHazardModel, PrefireExchangeLayer
         prefire_layer = PrefireExchangeLayer(FileHazardModel.load(), counter_mc=prefire_counter_mc)
@@ -221,6 +226,8 @@ def main() -> None:
                         help="発火前の撃ち合い予測を表示へ混ぜる (既定OFF、models/prefire_hazard_v1)")
     parser.add_argument("--prefire-counter-mc", action="store_true", default=False,
                         help="発火前予測の受け側応手を未来ツモ標本で求める (構成B、既定OFF=理想ツモ future_send)")
+    parser.add_argument('--prefire-best-play-v5', action='store_true', default=False,
+                        help='Phase 5 整合性修正版、保持なし、既定OFF')
     parser.add_argument("--prefire-best-play", action="store_true", default=False,
                         help="発火前の最善手の値を表示へ出す (Phase 3、既定OFF、hazard 不使用)")
     parser.add_argument("--prefire-best-play-stable", action="store_true", default=False,
@@ -265,7 +272,8 @@ def main() -> None:
                     prefire_best_play=options.prefire_best_play,
                     prefire_best_play_latency=options.prefire_best_play_latency,
                     prefire_best_play_evaluator=options.prefire_best_play_evaluator,
-                    prefire_best_play_stable=options.prefire_best_play_stable)
+                    prefire_best_play_stable=options.prefire_best_play_stable,
+                    prefire_best_play_v5=options.prefire_best_play_v5)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

@@ -17,13 +17,15 @@ BASELINE = EXEV / 'logs/pending_expiry/e36b_on/on'
 BASELINE_DIRS = {'q_7gc4TgFig': 'renders/q_7gc4TgFig/on', 'fcXG83vInDY': 'renders/fcXG83vInDY/on',
                  'mia8KCjr52g': 'renders/mia8KCjr52g/on', 'review': 'review', 'zenchi': 'zenchi'}
 OUT = Path('logs/prefire_prediction/replay')
-VARIANTS = ('off', 'on', 'on_mc', 'bestplay', 'stable')   # on=構成A、on_mc=構成B、bestplay=Phase 3 最善手 (hazard 不使用)
+VARIANTS = ('off', 'on', 'on_mc', 'bestplay', 'stable', 'v5')   # v5=Phase 5 整合性修正、既定OFF
 
 
 def options(variant: str, latency: float = 0.0, evaluator: str = 'full') -> dict:
     """本番 E36b の再生オプション。on だけ発火前予測を足す (off は引数自体を渡さない = 既存呼出と同一)。"""
     from scripts import run_e36b
     base = run_e36b.options()
+    if variant == 'v5':
+        return dict(base, prefire_best_play_v5=True, prefire_best_play_latency=latency)
     if variant == 'stable':
         return dict(base, prefire_best_play_stable=True, prefire_best_play_latency=latency)
     if variant == 'bestplay':
@@ -36,6 +38,12 @@ def options(variant: str, latency: float = 0.0, evaluator: str = 'full') -> dict
     return base
 
 
+def model_directory(opts: dict) -> Path:
+    """再生と参照実験が同じモデル系統を使うための共通選択。"""
+    version = 'v4' if opts.get('count_sync') or opts.get('e16') else 'v3'
+    return Path('models/exchange_event_' + version)
+
+
 def run(variant: str, source: str, compare_baseline: bool, latency: float = 0.0, tag: str = '',
         evaluator: str = 'full') -> dict:
     """1記録を再生する。off は本番記録とバイト一致を照合できる (原則3: 台がまず既知の値を再現する)。"""
@@ -45,10 +53,9 @@ def run(variant: str, source: str, compare_baseline: bool, latency: float = 0.0,
     d5_runtime.install()
     from scripts.replay_exchange_event_20260926 import compare, replay
     opts = options(variant, latency, evaluator)
-    model = 'v4' if opts.get('count_sync') or opts.get('e16') else 'v3'
     dest = OUT / name / source
     dest.mkdir(parents=True, exist_ok=True)
-    result = replay(RECORDS / f'{source}.jsonl.gz', dest, Path('models/exchange_event_' + model), True,
+    result = replay(RECORDS / f'{source}.jsonl.gz', dest, model_directory(opts), True,
                     None, **opts)
     result['options'] = opts
     if compare_baseline:

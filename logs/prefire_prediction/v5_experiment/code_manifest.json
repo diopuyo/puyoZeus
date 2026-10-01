@@ -1,0 +1,20 @@
+{
+  "sha256": {
+    "scripts/prefire_v5_checks.py": "9eda52146dfc741fbb2efcae6b589c1a2790f89532956624f7edd5fbd9c03d84",
+    "scripts/prefire_v5_experiment.py": "d71902214f5d82918aba81a8c6769aefe3d5ff32f8293302f95cc576a6c4ce99",
+    "scripts/prefire_v5_ledger_samples.py": "6794a3787cf76eacb471f2149c84af7e221b183adf7c2cd85e6b61fecfe14cff",
+    "scripts/prefire_v5_report.py": "ea8bee41f88c6a970ece0fd9f997d244e930f5d76db5cfe7ad86a528a80fed97",
+    "scripts/prefire_v5_short_replay.py": "dda4e89b1991ddde3fb102405998cd35a538f2311aca61671f8b7130f501c892",
+    "src/prefire_best_play_v5.py": "f897974396d61a44d4b2d3203ebff38d8539db4af52ff704280ea7edd86aa638",
+    "src/prefire_v5_search.py": "88dd14c3dc31f18c3ea8a8c85a8628c21cee24c2f2484b5fae3bf282393ee9b0",
+    "src/prefire_v5_value.py": "ffe7f7e163b1d93b669ddab2cc30dc7f1576de05affd51eddb719e531a24d28e",
+    "tests/test_prefire_best_play_v5.py": "eea056f6742bddf72bd45aee41d52b858a8408349e3104b342b7d8397e810c9d",
+    "tests/test_prefire_v5_report.py": "a1cb1faf1ad69f2fed849ed2f57189957f41ed5d2f0a25b480cba03ecb59eb9f",
+    "tests/test_prefire_v5_search.py": "d29970ef609e9410cfca7fb054dfaafbf087994a88ab4203b8c5987dafbce793",
+    "tests/test_prefire_v5_value.py": "a3ebb1525d0e9319e099d792b81a910c1a855f02d0b576c55865577a854a1085",
+    "src/production_config.py": "99a3297c7a928cf0cbeb5bde1bdaa65c2e0a2fa7014b2b22ebc299c7ab8431a5",
+    "logs/prefire_prediction/v5_experiment/samples.json": "6a18209d4ed2754997b0dc457df38170d0123ec1b095a8e4adfdabdb7826d9cf",
+    "logs/prefire_prediction/v5_experiment/samples_ledger.json": "4d5aacfcd673eddab911aad40c5d6312634e9dc906c46415dceef0f0fa2a8135"
+  },
+  "violations": []
+}

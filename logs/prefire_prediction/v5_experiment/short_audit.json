@@ -1,0 +1,1 @@
+{"rows": 587, "used": 17, "early_referenced": 0, "early_used": 0, "held": 0, "missing_any": 192, "firing_any": 36, "not_predicted": 570, "statuses": {"ok": [91, 93], "missing": [104, 124], "firing": [29, 7], "invalid": [0, 0], "waiting": [363, 363]}}

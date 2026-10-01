@@ -1,0 +1,457 @@
+{
+  "q_7gc4TgFig": {
+    "audit": {
+      "rows": 14107,
+      "used": 283,
+      "compute_ms": {
+        "count": 2442,
+        "p50": 0.007338996976613998,
+        "p95": 12154.228809502336,
+        "maximum": 47051.562729001045,
+        "over_simulated_latency": 943
+      },
+      "early_referenced": 0,
+      "early_used": 0,
+      "held": 0,
+      "missing_any": 6378,
+      "firing_any": 417,
+      "not_predicted": 13824,
+      "statuses": {
+        "ok": [
+          2021,
+          1826
+        ],
+        "missing": [
+          2223,
+          5047
+        ],
+        "firing": [
+          239,
+          180
+        ],
+        "invalid": [
+          3991,
+          1421
+        ],
+        "waiting": [
+          5633,
+          5633
+        ]
+      }
+    },
+    "agreement": {
+      "denominator": 0,
+      "last_hits": 0,
+      "half_second_hits": 0,
+      "exchanges": 38,
+      "with_both_endpoints": 33,
+      "last_scored": 1,
+      "half_second_scored": 1,
+      "both_scored": 0
+    },
+    "loss": {
+      "prefire_rows": 2447,
+      "missing_labels": 1874,
+      "all_with_fallback": {
+        "rows": 573,
+        "games": 4,
+        "p_current": 0.7307605608482143,
+        "p_current_game_mean": 0.7128928820819971,
+        "p_shown": 0.7297671222683618,
+        "p_shown_game_mean": 0.7113896920953309
+      },
+      "predicted_only": {
+        "rows": 5,
+        "games": 2,
+        "p_current": 0.7766865144911261,
+        "p_current_game_mean": 0.7666310430492245,
+        "p_shown": 0.6628384532400396,
+        "p_shown_game_mean": 0.5864786630294105
+      }
+    },
+    "display_loss": {
+      "prefire_rows": 2457,
+      "missing_labels": 1884,
+      "all_with_fallback": {
+        "rows": 573,
+        "games": 4,
+        "p_current": 0.7307605608482143,
+        "p_current_game_mean": 0.7128928820819971,
+        "p_shown": 0.7297671222683618,
+        "p_shown_game_mean": 0.7113896920953309
+      },
+      "predicted_only": {
+        "rows": 5,
+        "games": 2,
+        "p_current": 0.7766865144911261,
+        "p_current_game_mean": 0.7666310430492245,
+        "p_shown": 0.6628384532400396,
+        "p_shown_game_mean": 0.5864786630294105
+      }
+    }
+  },
+  "fcXG83vInDY": {
+    "audit": {
+      "rows": 14181,
+      "used": 241,
+      "compute_ms": {
+        "count": 2035,
+        "p50": 0.0071619972586631775,
+        "p95": 10859.824539299305,
+        "maximum": 45459.75237600505,
+        "over_simulated_latency": 761
+      },
+      "early_referenced": 0,
+      "early_used": 0,
+      "held": 0,
+      "missing_any": 7995,
+      "firing_any": 731,
+      "not_predicted": 13940,
+      "statuses": {
+        "ok": [
+          1805,
+          1615
+        ],
+        "missing": [
+          2146,
+          6641
+        ],
+        "firing": [
+          355,
+          377
+        ],
+        "invalid": [
+          5181,
+          854
+        ],
+        "waiting": [
+          4694,
+          4694
+        ]
+      }
+    },
+    "agreement": {
+      "denominator": 0,
+      "last_hits": 0,
+      "half_second_hits": 0,
+      "exchanges": 25,
+      "with_both_endpoints": 25,
+      "last_scored": 1,
+      "half_second_scored": 0,
+      "both_scored": 0
+    },
+    "loss": {
+      "prefire_rows": 1826,
+      "missing_labels": 1556,
+      "all_with_fallback": {
+        "rows": 270,
+        "games": 1,
+        "p_current": 0.27238362137194233,
+        "p_current_game_mean": 0.27238362137194233,
+        "p_shown": 0.28986128731777633,
+        "p_shown_game_mean": 0.28986128731777633
+      },
+      "predicted_only": {
+        "rows": 7,
+        "games": 1,
+        "p_current": 0.6289582196295858,
+        "p_current_game_mean": 0.6289582196295858,
+        "p_shown": 1.3030967632546109,
+        "p_shown_game_mean": 1.3030967632546109
+      }
+    },
+    "display_loss": {
+      "prefire_rows": 1834,
+      "missing_labels": 1564,
+      "all_with_fallback": {
+        "rows": 270,
+        "games": 1,
+        "p_current": 0.27238362137194233,
+        "p_current_game_mean": 0.27238362137194233,
+        "p_shown": 0.28986128731777633,
+        "p_shown_game_mean": 0.28986128731777633
+      },
+      "predicted_only": {
+        "rows": 7,
+        "games": 1,
+        "p_current": 0.6289582196295858,
+        "p_current_game_mean": 0.6289582196295858,
+        "p_shown": 1.3030967632546109,
+        "p_shown_game_mean": 1.3030967632546109
+      }
+    }
+  },
+  "mia8KCjr52g": {
+    "audit": {
+      "rows": 14836,
+      "used": 639,
+      "compute_ms": {
+        "count": 2232,
+        "p50": 0.006388004869222641,
+        "p95": 11313.290704001105,
+        "maximum": 49869.52576300502,
+        "over_simulated_latency": 759
+      },
+      "early_referenced": 0,
+      "early_used": 0,
+      "held": 0,
+      "missing_any": 8983,
+      "firing_any": 805,
+      "not_predicted": 14197,
+      "statuses": {
+        "ok": [
+          2662,
+          2662
+        ],
+        "missing": [
+          3162,
+          7142
+        ],
+        "firing": [
+          576,
+          233
+        ],
+        "invalid": [
+          3826,
+          189
+        ],
+        "waiting": [
+          4610,
+          4610
+        ]
+      }
+    },
+    "agreement": {
+      "denominator": 0,
+      "last_hits": 0,
+      "half_second_hits": 0,
+      "exchanges": 52,
+      "with_both_endpoints": 47,
+      "last_scored": 0,
+      "half_second_scored": 5,
+      "both_scored": 0
+    },
+    "loss": {
+      "prefire_rows": 3565,
+      "missing_labels": 3332,
+      "all_with_fallback": {
+        "rows": 233,
+        "games": 1,
+        "p_current": 0.9422034256378176,
+        "p_current_game_mean": 0.9422034256378176,
+        "p_shown": 0.9404343499818779,
+        "p_shown_game_mean": 0.9404343499818779
+      },
+      "predicted_only": {
+        "rows": 4,
+        "games": 1,
+        "p_current": 0.6242005148652137,
+        "p_current_game_mean": 0.6242005148652137,
+        "p_shown": 0.5211518579067269,
+        "p_shown_game_mean": 0.5211518579067269
+      }
+    },
+    "display_loss": {
+      "prefire_rows": 3569,
+      "missing_labels": 3336,
+      "all_with_fallback": {
+        "rows": 233,
+        "games": 1,
+        "p_current": 0.9422034256378176,
+        "p_current_game_mean": 0.9422034256378176,
+        "p_shown": 0.9404343499818779,
+        "p_shown_game_mean": 0.9404343499818779
+      },
+      "predicted_only": {
+        "rows": 4,
+        "games": 1,
+        "p_current": 0.6242005148652137,
+        "p_current_game_mean": 0.6242005148652137,
+        "p_shown": 0.5211518579067269,
+        "p_shown_game_mean": 0.5211518579067269
+      }
+    }
+  },
+  "review": {
+    "audit": {
+      "rows": 3485,
+      "used": 73,
+      "compute_ms": {
+        "count": 769,
+        "p50": 0.004500001668930054,
+        "p95": 8192.357867999368,
+        "maximum": 30393.694418005645,
+        "over_simulated_latency": 212
+      },
+      "early_referenced": 0,
+      "early_used": 0,
+      "held": 0,
+      "missing_any": 1802,
+      "firing_any": 245,
+      "not_predicted": 3412,
+      "statuses": {
+        "ok": [
+          477,
+          1098
+        ],
+        "missing": [
+          1492,
+          859
+        ],
+        "firing": [
+          117,
+          129
+        ],
+        "invalid": [
+          80,
+          80
+        ],
+        "waiting": [
+          1319,
+          1319
+        ]
+      }
+    },
+    "agreement": {
+      "denominator": 0,
+      "last_hits": 0,
+      "half_second_hits": 0,
+      "exchanges": 13,
+      "with_both_endpoints": 11,
+      "last_scored": 0,
+      "half_second_scored": 1,
+      "both_scored": 0
+    },
+    "loss": {
+      "prefire_rows": 784,
+      "missing_labels": 784,
+      "all_with_fallback": {
+        "rows": 0,
+        "games": 0,
+        "p_current": null,
+        "p_current_game_mean": null,
+        "p_shown": null,
+        "p_shown_game_mean": null
+      },
+      "predicted_only": {
+        "rows": 0,
+        "games": 0,
+        "p_current": null,
+        "p_current_game_mean": null,
+        "p_shown": null,
+        "p_shown_game_mean": null
+      }
+    },
+    "display_loss": {
+      "prefire_rows": 784,
+      "missing_labels": 784,
+      "all_with_fallback": {
+        "rows": 0,
+        "games": 0,
+        "p_current": null,
+        "p_current_game_mean": null,
+        "p_shown": null,
+        "p_shown_game_mean": null
+      },
+      "predicted_only": {
+        "rows": 0,
+        "games": 0,
+        "p_current": null,
+        "p_current_game_mean": null,
+        "p_shown": null,
+        "p_shown_game_mean": null
+      }
+    }
+  },
+  "zenchi": {
+    "audit": {
+      "rows": 13817,
+      "used": 344,
+      "compute_ms": {
+        "count": 2934,
+        "p50": 0.0055029988288879395,
+        "p95": 8978.894824101773,
+        "maximum": 67745.68020500243,
+        "over_simulated_latency": 763
+      },
+      "early_referenced": 0,
+      "early_used": 0,
+      "held": 0,
+      "missing_any": 7827,
+      "firing_any": 926,
+      "not_predicted": 13473,
+      "statuses": {
+        "ok": [
+          2086,
+          4644
+        ],
+        "missing": [
+          6253,
+          4072
+        ],
+        "firing": [
+          711,
+          225
+        ],
+        "invalid": [
+          173,
+          282
+        ],
+        "waiting": [
+          4594,
+          4594
+        ]
+      }
+    },
+    "agreement": {
+      "denominator": 0,
+      "last_hits": 0,
+      "half_second_hits": 0,
+      "exchanges": 53,
+      "with_both_endpoints": 48,
+      "last_scored": 0,
+      "half_second_scored": 3,
+      "both_scored": 0
+    },
+    "loss": {
+      "prefire_rows": 3622,
+      "missing_labels": 90,
+      "all_with_fallback": {
+        "rows": 3532,
+        "games": 17,
+        "p_current": 0.7125162189122781,
+        "p_current_game_mean": 0.7336045351650357,
+        "p_shown": 0.7066781079966769,
+        "p_shown_game_mean": 0.725999485490864
+      },
+      "predicted_only": {
+        "rows": 72,
+        "games": 12,
+        "p_current": 0.6985209133553862,
+        "p_current_game_mean": 0.7023733169337055,
+        "p_shown": 0.41212913899560993,
+        "p_shown_game_mean": 0.5412103343917565
+      }
+    },
+    "display_loss": {
+      "prefire_rows": 3622,
+      "missing_labels": 90,
+      "all_with_fallback": {
+        "rows": 3532,
+        "games": 17,
+        "p_current": 0.7125162189122781,
+        "p_current_game_mean": 0.7336045351650357,
+        "p_shown": 0.7066781079966769,
+        "p_shown_game_mean": 0.725999485490864
+      },
+      "predicted_only": {
+        "rows": 72,
+        "games": 12,
+        "p_current": 0.6985209133553862,
+        "p_current_game_mean": 0.7023733169337055,
+        "p_shown": 0.41212913899560993,
+        "p_shown_game_mean": 0.5412103343917565
+      }
+    }
+  }
+}
