@@ -1,0 +1,50 @@
+﻿[
+    {
+        "part":  "s2",
+        "file":  "events.jsonl",
+        "identical":  true,
+        "sha256":  "E31BAB5BF945915EEBA5F0B31F27EFE02C67CF26203F7796D80139F4FC5C7FDB"
+    },
+    {
+        "part":  "s2",
+        "file":  "display.npz",
+        "identical":  true,
+        "sha256":  "14D6B6637970DA19C318A7200A4A1133EB7EBEA904A7194FE471C05AE6D8E540"
+    },
+    {
+        "part":  "s4",
+        "file":  "events.jsonl",
+        "identical":  true,
+        "sha256":  "4E8EC0AB0C240F8DB5719993917135A1E9C9D09CA1143820CC923C3F6967CD14"
+    },
+    {
+        "part":  "s4",
+        "file":  "display.npz",
+        "identical":  true,
+        "sha256":  "921BF52D619B1FFB6AC9DA594F2A3FDA29B0BC253ACEB679E50CAFF54C075CCC"
+    },
+    {
+        "part":  "s5",
+        "file":  "events.jsonl",
+        "identical":  true,
+        "sha256":  "8C4B521805CCAD54AD6C171885C84322381F02B8F41DF9174469833659AAD3BB"
+    },
+    {
+        "part":  "s5",
+        "file":  "display.npz",
+        "identical":  true,
+        "sha256":  "AB845D9236BDD2452AC36E60E60CF37934C58800D1FCA4282D341C11E93414B7"
+    },
+    {
+        "part":  "s6",
+        "file":  "events.jsonl",
+        "identical":  true,
+        "sha256":  "129A5E90327DE64AD0C878691F179544B107641C1E9F946BFF5474A58EE35B04"
+    },
+    {
+        "part":  "s6",
+        "file":  "display.npz",
+        "identical":  true,
+        "sha256":  "AD6901E1A1E8C5563FDE8273F8EA874F62B4503A037294D00A3EF9AC21DD68C0"
+    }
+]

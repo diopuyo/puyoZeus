@@ -1,0 +1,1528 @@
+{
+ "audit_version": 2,
+ "set1": {
+  "rows": [
+   {
+    "game": 2,
+    "side": "2P",
+    "first_sec": 186.46666666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 2,
+    "side": "1P",
+    "first_sec": 199.86666666666667,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 3,
+    "side": "2P",
+    "first_sec": 266.3333333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 4,
+    "side": "2P",
+    "first_sec": 322.8,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 5,
+    "side": "2P",
+    "first_sec": 404.1666666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 6,
+    "side": "1P",
+    "first_sec": 455.0,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 6,
+    "side": "2P",
+    "first_sec": 473.2,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 7,
+    "side": "1P",
+    "first_sec": 509.31666666666666,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 9,
+    "side": "1P",
+    "first_sec": 687.15,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 10,
+    "side": "1P",
+    "first_sec": 729.75,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 11,
+    "side": "2P",
+    "first_sec": 784.8833333333333,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 11,
+    "side": "1P",
+    "first_sec": 803.85,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 12,
+    "side": "2P",
+    "first_sec": 866.8166666666667,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 12,
+    "side": "1P",
+    "first_sec": 885.25,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 13,
+    "side": "2P",
+    "first_sec": 913.6166666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 13,
+    "side": "1P",
+    "first_sec": 928.5166666666667,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 15,
+    "side": "2P",
+    "first_sec": 1031.5833333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 16,
+    "side": "2P",
+    "first_sec": 1086.55,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 17,
+    "side": "1P",
+    "first_sec": 1170.5166666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 18,
+    "side": "1P",
+    "first_sec": 1206.9166666666667,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 18,
+    "side": "2P",
+    "first_sec": 1224.3833333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 19,
+    "side": "2P",
+    "first_sec": 1272.25,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 19,
+    "side": "1P",
+    "first_sec": 1294.05,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 20,
+    "side": "1P",
+    "first_sec": 1350.25,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 21,
+    "side": "1P",
+    "first_sec": 1393.3833333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 22,
+    "side": "2P",
+    "first_sec": 1424.1166666666666,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 23,
+    "side": "2P",
+    "first_sec": 1474.9833333333333,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 23,
+    "side": "1P",
+    "first_sec": 1494.7833333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 24,
+    "side": "1P",
+    "first_sec": 1568.35,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 25,
+    "side": "1P",
+    "first_sec": 1619.8833333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 26,
+    "side": "1P",
+    "first_sec": 1689.6166666666666,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 26,
+    "side": "2P",
+    "first_sec": 1710.0333333333333,
+    "false": true,
+    "in_display_span": false
+   },
+   {
+    "game": 27,
+    "side": "1P",
+    "first_sec": 1784.5666666666666,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 28,
+    "side": "1P",
+    "first_sec": 1864.2,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 30,
+    "side": "2P",
+    "first_sec": 1968.2333333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 31,
+    "side": "1P",
+    "first_sec": 2025.3,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 32,
+    "side": "2P",
+    "first_sec": 2111.9,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 33,
+    "side": "2P",
+    "first_sec": 2158.9333333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 34,
+    "side": "2P",
+    "first_sec": 2206.95,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 35,
+    "side": "1P",
+    "first_sec": 2269.75,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 36,
+    "side": "2P",
+    "first_sec": 2331.9166666666665,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 38,
+    "side": "1P",
+    "first_sec": 2448.9166666666665,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 39,
+    "side": "1P",
+    "first_sec": 2511.35,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 39,
+    "side": "2P",
+    "first_sec": 2530.05,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 40,
+    "side": "1P",
+    "first_sec": 2573.2166666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 41,
+    "side": "2P",
+    "first_sec": 2629.3166666666666,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 43,
+    "side": "2P",
+    "first_sec": 2760.116666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 44,
+    "side": "1P",
+    "first_sec": 2808.1833333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 45,
+    "side": "2P",
+    "first_sec": 2860.983333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 46,
+    "side": "1P",
+    "first_sec": 2892.2833333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 47,
+    "side": "1P",
+    "first_sec": 2929.116666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 48,
+    "side": "2P",
+    "first_sec": 2978.6833333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 49,
+    "side": "2P",
+    "first_sec": 3015.5833333333335,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 51,
+    "side": "2P",
+    "first_sec": 3109.516666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 52,
+    "side": "1P",
+    "first_sec": 3162.45,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 55,
+    "side": "2P",
+    "first_sec": 3321.7833333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 56,
+    "side": "1P",
+    "first_sec": 3351.65,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 57,
+    "side": "2P",
+    "first_sec": 3406.6833333333334,
+    "false": false,
+    "in_display_span": true
+   }
+  ],
+  "cases": 58,
+  "false": 10,
+  "false_frames": 283,
+  "wrong_frames": [
+   {
+    "game": 2,
+    "count": 6,
+    "first": 199.86666666666667
+   },
+   {
+    "game": 6,
+    "count": 123,
+    "first": 455.0
+   },
+   {
+    "game": 11,
+    "count": 57,
+    "first": 784.8833333333333
+   },
+   {
+    "game": 12,
+    "count": 8,
+    "first": 866.8166666666667
+   },
+   {
+    "game": 13,
+    "count": 11,
+    "first": 928.5166666666667
+   },
+   {
+    "game": 18,
+    "count": 7,
+    "first": 1206.9166666666667
+   },
+   {
+    "game": 19,
+    "count": 25,
+    "first": 1272.25
+   },
+   {
+    "game": 23,
+    "count": 22,
+    "first": 1474.9833333333333
+   },
+   {
+    "game": 39,
+    "count": 24,
+    "first": 2511.35
+   }
+  ],
+  "correct_confirmed_games": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   25,
+   26,
+   27,
+   28,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35,
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45,
+   46,
+   47,
+   48,
+   49,
+   50,
+   51,
+   52,
+   53,
+   54,
+   55,
+   56,
+   57
+  ]
+ },
+ "set2": {
+  "rows": [
+   {
+    "game": 1,
+    "side": "1P",
+    "first_sec": 3474.4666666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 3,
+    "side": "2P",
+    "first_sec": 3735.2,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 4,
+    "side": "2P",
+    "first_sec": 3795.0666666666666,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 6,
+    "side": "2P",
+    "first_sec": 3941.9666666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 8,
+    "side": "1P",
+    "first_sec": 4073.3333333333335,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 9,
+    "side": "1P",
+    "first_sec": 4135.0,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 10,
+    "side": "1P",
+    "first_sec": 4179.9,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 11,
+    "side": "1P",
+    "first_sec": 4271.666666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 12,
+    "side": "2P",
+    "first_sec": 4342.866666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 13,
+    "side": "2P",
+    "first_sec": 4417.4,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 13,
+    "side": "1P",
+    "first_sec": 4441.0,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 14,
+    "side": "1P",
+    "first_sec": 4537.2,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 15,
+    "side": "2P",
+    "first_sec": 4598.033333333334,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 15,
+    "side": "1P",
+    "first_sec": 4613.733333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 16,
+    "side": "2P",
+    "first_sec": 4655.666666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 19,
+    "side": "1P",
+    "first_sec": 4804.533333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 20,
+    "side": "2P",
+    "first_sec": 4844.2,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 21,
+    "side": "1P",
+    "first_sec": 4915.933333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 23,
+    "side": "1P",
+    "first_sec": 5015.25,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 24,
+    "side": "1P",
+    "first_sec": 5056.583333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 26,
+    "side": "2P",
+    "first_sec": 5174.883333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 27,
+    "side": "1P",
+    "first_sec": 5242.716666666666,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 28,
+    "side": "2P",
+    "first_sec": 5276.083333333333,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 29,
+    "side": "1P",
+    "first_sec": 5325.75,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 30,
+    "side": "1P",
+    "first_sec": 5410.816666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 31,
+    "side": "2P",
+    "first_sec": 5475.783333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 32,
+    "side": "2P",
+    "first_sec": 5513.15,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 33,
+    "side": "1P",
+    "first_sec": 5592.716666666666,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 34,
+    "side": "2P",
+    "first_sec": 5633.283333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 35,
+    "side": "2P",
+    "first_sec": 5711.15,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 38,
+    "side": "2P",
+    "first_sec": 5883.416666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 40,
+    "side": "2P",
+    "first_sec": 5983.75,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 41,
+    "side": "1P",
+    "first_sec": 6059.283333333334,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 41,
+    "side": "2P",
+    "first_sec": 6043.366666666667,
+    "false": false,
+    "in_display_span": false
+   },
+   {
+    "game": 42,
+    "side": "2P",
+    "first_sec": 6124.8,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 43,
+    "side": "1P",
+    "first_sec": 6166.1,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 43,
+    "side": "2P",
+    "first_sec": 6172.6,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 44,
+    "side": "1P",
+    "first_sec": 6254.233333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 45,
+    "side": "1P",
+    "first_sec": 6309.933333333333,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 45,
+    "side": "2P",
+    "first_sec": 6393.2,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 47,
+    "side": "1P",
+    "first_sec": 6509.666666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 48,
+    "side": "2P",
+    "first_sec": 6553.966666666666,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 49,
+    "side": "1P",
+    "first_sec": 6621.8,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 51,
+    "side": "2P",
+    "first_sec": 6717.05,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 52,
+    "side": "1P",
+    "first_sec": 6747.816666666667,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 54,
+    "side": "1P",
+    "first_sec": 6823.983333333334,
+    "false": false,
+    "in_display_span": true
+   },
+   {
+    "game": 58,
+    "side": "2P",
+    "first_sec": 7002.85,
+    "false": true,
+    "in_display_span": true
+   },
+   {
+    "game": 58,
+    "side": "1P",
+    "first_sec": 7015.916666666667,
+    "false": false,
+    "in_display_span": true
+   }
+  ],
+  "cases": 48,
+  "false": 6,
+  "false_frames": 288,
+  "wrong_frames": [
+   {
+    "game": 13,
+    "count": 73,
+    "first": 4417.4
+   },
+   {
+    "game": 15,
+    "count": 13,
+    "first": 4598.033333333334
+   },
+   {
+    "game": 41,
+    "count": 41,
+    "first": 6059.283333333334
+   },
+   {
+    "game": 43,
+    "count": 40,
+    "first": 6172.6
+   },
+   {
+    "game": 45,
+    "count": 42,
+    "first": 6309.933333333333
+   },
+   {
+    "game": 58,
+    "count": 79,
+    "first": 7002.85
+   }
+  ],
+  "correct_confirmed_games": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   25,
+   26,
+   27,
+   28,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35,
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45,
+   46,
+   47,
+   48,
+   49,
+   50,
+   51,
+   52,
+   53,
+   54,
+   55,
+   56,
+   57,
+   58
+  ]
+ },
+ "existing5": {
+  "records": 5,
+  "deaths": {
+   "total": 37,
+   "false": 0,
+   "unresolved": 0,
+   "same_cases": true
+  },
+  "scene": {
+   "first_display_sec": 2760.116666666667,
+   "legacy_metric_sec": 2760.383333333333,
+   "passed": true
+  },
+  "game14_false_times": [],
+  "passed": true,
+  "rows": [
+   {
+    "source": "q_7gc4TgFig",
+    "game": 2,
+    "side": "1P",
+    "first_sec": 232.56666666666666,
+    "bound": false,
+    "observed_death_sec": 236.46666666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.9000000000000057
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 3,
+    "side": "1P",
+    "first_sec": 270.0,
+    "bound": false,
+    "observed_death_sec": 277.43333333333334,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 7.433333333333337
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 4,
+    "side": "2P",
+    "first_sec": 322.0,
+    "bound": true,
+    "observed_death_sec": 344.26666666666665,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 22.26666666666665
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 5,
+    "side": "2P",
+    "first_sec": 394.23333333333335,
+    "bound": false,
+    "observed_death_sec": 396.06666666666666,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 1.8333333333333144
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 6,
+    "side": "1P",
+    "first_sec": 441.3333333333333,
+    "bound": false,
+    "observed_death_sec": 443.43333333333334,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.1000000000000227
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 7,
+    "side": "1P",
+    "first_sec": 498.73333333333335,
+    "bound": false,
+    "observed_death_sec": 515.0,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 16.26666666666665
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 8,
+    "side": "2P",
+    "first_sec": 581.8666666666667,
+    "bound": false,
+    "observed_death_sec": 583.7,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 1.8333333333333712
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 9,
+    "side": "1P",
+    "first_sec": 656.0666666666667,
+    "bound": false,
+    "observed_death_sec": 663.1666666666666,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 7.099999999999909
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 10,
+    "side": "1P",
+    "first_sec": 692.8666666666667,
+    "bound": false,
+    "observed_death_sec": 695.5666666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.7000000000000455
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 11,
+    "side": "1P",
+    "first_sec": 741.5333333333333,
+    "bound": false,
+    "observed_death_sec": 745.2666666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.7333333333333485
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 12,
+    "side": "2P",
+    "first_sec": 782.7666666666667,
+    "bound": true,
+    "observed_death_sec": 786.8,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 4.033333333333303
+   },
+   {
+    "source": "q_7gc4TgFig",
+    "game": 13,
+    "side": "1P",
+    "first_sec": 848.3666666666667,
+    "bound": true,
+    "observed_death_sec": 852.6,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 4.2333333333333485
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 1,
+    "side": "1P",
+    "first_sec": 218.23333333333332,
+    "bound": false,
+    "observed_death_sec": 239.93333333333334,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 21.700000000000017
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 2,
+    "side": "1P",
+    "first_sec": 309.0,
+    "bound": false,
+    "observed_death_sec": 311.6,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.6000000000000227
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 3,
+    "side": "2P",
+    "first_sec": 366.0,
+    "bound": false,
+    "observed_death_sec": 370.93333333333334,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 4.933333333333337
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 5,
+    "side": "2P",
+    "first_sec": 474.2,
+    "bound": false,
+    "observed_death_sec": 537.8666666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 63.666666666666686
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 6,
+    "side": "1P",
+    "first_sec": 626.7333333333333,
+    "bound": true,
+    "observed_death_sec": 631.0,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 4.2666666666666515
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 9,
+    "side": "2P",
+    "first_sec": 763.6,
+    "bound": false,
+    "observed_death_sec": 767.5,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.8999999999999773
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 10,
+    "side": "1P",
+    "first_sec": 824.1,
+    "bound": false,
+    "observed_death_sec": 827.0333333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.9333333333332803
+   },
+   {
+    "source": "fcXG83vInDY",
+    "game": 11,
+    "side": "2P",
+    "first_sec": 874.9333333333333,
+    "bound": false,
+    "observed_death_sec": 879.8666666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 4.933333333333394
+   },
+   {
+    "source": "review",
+    "game": 0,
+    "side": "1P",
+    "first_sec": 2573.2166666666667,
+    "bound": false,
+    "observed_death_sec": 2576.983333333333,
+    "opponent_death_sec": null,
+    "winners": [],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.766666666666424
+   },
+   {
+    "source": "review",
+    "game": 1,
+    "side": "2P",
+    "first_sec": 2629.3166666666666,
+    "bound": false,
+    "observed_death_sec": 2634.75,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 5.433333333333394
+   },
+   {
+    "source": "review",
+    "game": 3,
+    "side": "2P",
+    "first_sec": 2760.116666666667,
+    "bound": true,
+    "observed_death_sec": 2773.7833333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 13.666666666666515
+   },
+   {
+    "source": "zenchi",
+    "game": 0,
+    "side": "1P",
+    "first_sec": 2573.2166666666667,
+    "bound": false,
+    "observed_death_sec": 2576.983333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.766666666666424
+   },
+   {
+    "source": "zenchi",
+    "game": 1,
+    "side": "2P",
+    "first_sec": 2629.3166666666666,
+    "bound": false,
+    "observed_death_sec": 2634.75,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 5.433333333333394
+   },
+   {
+    "source": "zenchi",
+    "game": 3,
+    "side": "2P",
+    "first_sec": 2760.116666666667,
+    "bound": true,
+    "observed_death_sec": 2773.7833333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 13.666666666666515
+   },
+   {
+    "source": "zenchi",
+    "game": 4,
+    "side": "1P",
+    "first_sec": 2808.1833333333334,
+    "bound": false,
+    "observed_death_sec": 2810.8166666666666,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.633333333333212
+   },
+   {
+    "source": "zenchi",
+    "game": 5,
+    "side": "2P",
+    "first_sec": 2860.983333333333,
+    "bound": false,
+    "observed_death_sec": 2863.6833333333334,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.700000000000273
+   },
+   {
+    "source": "zenchi",
+    "game": 6,
+    "side": "1P",
+    "first_sec": 2892.2833333333333,
+    "bound": false,
+    "observed_death_sec": 2896.15,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.866666666666788
+   },
+   {
+    "source": "zenchi",
+    "game": 7,
+    "side": "1P",
+    "first_sec": 2929.116666666667,
+    "bound": false,
+    "observed_death_sec": 2943.9166666666665,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 14.799999999999727
+   },
+   {
+    "source": "zenchi",
+    "game": 8,
+    "side": "2P",
+    "first_sec": 2978.6833333333334,
+    "bound": true,
+    "observed_death_sec": 2979.516666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 0.8333333333334849
+   },
+   {
+    "source": "zenchi",
+    "game": 9,
+    "side": "2P",
+    "first_sec": 3015.5833333333335,
+    "bound": false,
+    "observed_death_sec": 3017.95,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.366666666666333
+   },
+   {
+    "source": "zenchi",
+    "game": 11,
+    "side": "2P",
+    "first_sec": 3109.516666666667,
+    "bound": false,
+    "observed_death_sec": 3115.7166666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 6.199999999999818
+   },
+   {
+    "source": "zenchi",
+    "game": 12,
+    "side": "1P",
+    "first_sec": 3162.45,
+    "bound": false,
+    "observed_death_sec": 3169.2166666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 6.766666666666879
+   },
+   {
+    "source": "zenchi",
+    "game": 15,
+    "side": "2P",
+    "first_sec": 3321.7833333333333,
+    "bound": false,
+    "observed_death_sec": 3323.616666666667,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 1.833333333333485
+   },
+   {
+    "source": "zenchi",
+    "game": 16,
+    "side": "1P",
+    "first_sec": 3351.65,
+    "bound": false,
+    "observed_death_sec": 3353.883333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "2P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 2.233333333333121
+   },
+   {
+    "source": "zenchi",
+    "game": 17,
+    "side": "2P",
+    "first_sec": 3406.6833333333334,
+    "bound": false,
+    "observed_death_sec": 3409.983333333333,
+    "opponent_death_sec": null,
+    "winners": [
+     "1P"
+    ],
+    "false": false,
+    "unresolved": false,
+    "lead_sec": 3.299999999999727
+   }
+  ]
+ }
+}

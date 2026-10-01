@@ -1,0 +1,73 @@
+{
+  "candidates": 4,
+  "accepted": 3,
+  "accepted_chains": 3,
+  "next_mismatch": 1,
+  "final_mismatch": 0,
+  "final_unresolved": 1,
+  "skipped": {
+    "unknown_or_floating": 649,
+    "missing_formula": 60,
+    "no_remaining_chain": 60
+  },
+  "rows": [
+    {
+      "game": 0,
+      "side": "2P",
+      "chain_id": 1,
+      "candidate_sec": 4913.083333333333,
+      "t_sec": 4913.116666666667,
+      "next_count": 13,
+      "observed_count": 13,
+      "observed_score": 86520,
+      "expected_score": 86520,
+      "predicted_final_score": 119580,
+      "outcome": "accepted",
+      "final_score": null,
+      "final_mismatch": null
+    },
+    {
+      "game": 2,
+      "side": "1P",
+      "chain_id": 5,
+      "candidate_sec": 5009.25,
+      "t_sec": 5009.283333333334,
+      "next_count": 3,
+      "observed_count": 3,
+      "observed_score": 1060,
+      "expected_score": 1060,
+      "predicted_final_score": 1060,
+      "outcome": "accepted",
+      "final_score": 1060,
+      "final_mismatch": false
+    },
+    {
+      "game": 2,
+      "side": "2P",
+      "chain_id": 6,
+      "candidate_sec": 5011.95,
+      "t_sec": 5011.983333333334,
+      "next_count": 7,
+      "observed_count": 7,
+      "observed_score": 3000,
+      "expected_score": 6840,
+      "predicted_final_score": 14940,
+      "outcome": "next_mismatch"
+    },
+    {
+      "game": 8,
+      "side": "1P",
+      "chain_id": 4,
+      "candidate_sec": 5309.35,
+      "t_sec": 5309.383333333333,
+      "next_count": 5,
+      "observed_count": 5,
+      "observed_score": 5340,
+      "expected_score": 5340,
+      "predicted_final_score": 5340,
+      "outcome": "accepted",
+      "final_score": 5340,
+      "final_mismatch": false
+    }
+  ]
+}

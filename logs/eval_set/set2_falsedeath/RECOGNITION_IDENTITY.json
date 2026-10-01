@@ -1,0 +1,20 @@
+{
+ "s2": {
+  "compared": 10075,
+  "mismatch_count": 0,
+  "target_rows": 121,
+  "target_mismatches": 0
+ },
+ "s5": {
+  "compared": 8230,
+  "mismatch_count": 0,
+  "target_rows": 121,
+  "target_mismatches": 0
+ },
+ "s6": {
+  "compared": 11091,
+  "mismatch_count": 0,
+  "target_rows": 60,
+  "target_mismatches": 0
+ }
+}

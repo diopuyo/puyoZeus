@@ -1,0 +1,616 @@
+{
+  "rows": [
+    {
+      "game": 2,
+      "side": "2P",
+      "chain_id": 3,
+      "t_sec": 6717.95,
+      "incoming": 246,
+      "hands": 1,
+      "palette": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        2,
+        4,
+        2,
+        3
+      ],
+      "completion_score": 108360.0,
+      "elapsed_sec": 1.9903003703802824e-05,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 2,
+      "side": "2P",
+      "chain_id": 3,
+      "t_sec": 6717.983333333334,
+      "incoming": 246,
+      "hands": 1,
+      "palette": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        2,
+        4,
+        2,
+        3
+      ],
+      "completion_score": 108360.0,
+      "elapsed_sec": 4.0199956856667995e-06,
+      "cached": true,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 2,
+      "side": "2P",
+      "chain_id": 3,
+      "t_sec": 6718.016666666666,
+      "incoming": 246,
+      "hands": 1,
+      "palette": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        2,
+        4,
+        2,
+        3
+      ],
+      "completion_score": 108360.0,
+      "elapsed_sec": 2.654996933415532e-06,
+      "cached": true,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 2,
+      "side": "2P",
+      "chain_id": 3,
+      "t_sec": 6718.483333333334,
+      "incoming": 246,
+      "hands": 1,
+      "palette": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        2,
+        4,
+        2,
+        3
+      ],
+      "completion_score": 108360.0,
+      "elapsed_sec": 3.0950031941756606e-06,
+      "cached": true,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 2,
+      "t_sec": 6823.283333333334,
+      "incoming": 3,
+      "hands": 3,
+      "palette": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        1,
+        4,
+        2,
+        3
+      ],
+      "completion_score": 1210.0,
+      "elapsed_sec": 0.0004215760054648854,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "optimistic_survivor",
+          "nodes": 2,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 2,
+      "t_sec": 6823.85,
+      "incoming": 21,
+      "hands": 3,
+      "palette": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        1,
+        4,
+        2,
+        3
+      ],
+      "completion_score": 1210.0,
+      "elapsed_sec": 0.00037755999801447615,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "optimistic_survivor",
+          "nodes": 2,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 2,
+      "t_sec": 6823.883333333333,
+      "incoming": 21,
+      "hands": 2,
+      "palette": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        1,
+        4,
+        2,
+        3
+      ],
+      "completion_score": 1210.0,
+      "elapsed_sec": 0.0001521459998912178,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "optimistic_survivor",
+          "nodes": 2,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 8,
+      "side": "1P",
+      "chain_id": 4,
+      "t_sec": 6963.716666666666,
+      "incoming": 27,
+      "hands": 6,
+      "palette": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "queue": [
+        3,
+        5,
+        3,
+        1
+      ],
+      "completion_score": 0.0,
+      "elapsed_sec": 0.0003704859991557896,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "optimistic_survivor",
+          "nodes": 4,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 8,
+      "side": "1P",
+      "chain_id": 4,
+      "t_sec": 6963.95,
+      "incoming": 27,
+      "hands": 8,
+      "palette": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "queue": [
+        3,
+        5,
+        3,
+        1
+      ],
+      "completion_score": 0.0,
+      "elapsed_sec": 0.00032166500022867694,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "optimistic_survivor",
+          "nodes": 4,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 8,
+      "side": "1P",
+      "chain_id": 4,
+      "t_sec": 6964.116666666667,
+      "incoming": 27,
+      "hands": 7,
+      "palette": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "queue": [
+        3,
+        5,
+        3,
+        1
+      ],
+      "completion_score": 0.0,
+      "elapsed_sec": 0.0002178290014853701,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "optimistic_survivor",
+          "nodes": 4,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 9,
+      "side": "2P",
+      "chain_id": 1,
+      "t_sec": 7004.283333333334,
+      "incoming": 313,
+      "hands": 2,
+      "palette": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        3,
+        5,
+        4,
+        5
+      ],
+      "completion_score": 920.0,
+      "elapsed_sec": 1.763500040397048e-05,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 9,
+      "side": "2P",
+      "chain_id": 1,
+      "t_sec": 7004.316666666667,
+      "incoming": 313,
+      "hands": 4,
+      "palette": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        3,
+        5,
+        4,
+        5
+      ],
+      "completion_score": 920.0,
+      "elapsed_sec": 1.793999399524182e-05,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 9,
+      "side": "2P",
+      "chain_id": 1,
+      "t_sec": 7004.916666666667,
+      "incoming": 313,
+      "hands": 3,
+      "palette": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        4,
+        5,
+        3,
+        2
+      ],
+      "completion_score": 920.0,
+      "elapsed_sec": 2.3208005586639047e-05,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 9,
+      "side": "2P",
+      "chain_id": 1,
+      "t_sec": 7005.35,
+      "incoming": 405,
+      "hands": 1,
+      "palette": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        4,
+        5,
+        3,
+        2
+      ],
+      "completion_score": 920.0,
+      "elapsed_sec": 2.336200122954324e-05,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 9,
+      "side": "1P",
+      "chain_id": 2,
+      "t_sec": 7018.283333333334,
+      "incoming": 221,
+      "hands": 2,
+      "palette": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        2,
+        2,
+        5,
+        2
+      ],
+      "completion_score": 15550.0,
+      "elapsed_sec": 1.9988001440651715e-05,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 9,
+      "side": "1P",
+      "chain_id": 2,
+      "t_sec": 7018.316666666667,
+      "incoming": 221,
+      "hands": 1,
+      "palette": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        2,
+        2,
+        5,
+        2
+      ],
+      "completion_score": 15550.0,
+      "elapsed_sec": 4.710999928647652e-05,
+      "cached": false,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    },
+    {
+      "game": 9,
+      "side": "1P",
+      "chain_id": 2,
+      "t_sec": 7018.383333333333,
+      "incoming": 221,
+      "hands": 1,
+      "palette": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        2,
+        2,
+        5,
+        2
+      ],
+      "completion_score": 15550.0,
+      "elapsed_sec": 3.826004103757441e-06,
+      "cached": true,
+      "dead": false,
+      "reason": "fallback_search",
+      "candidates": 1,
+      "proofs": [
+        {
+          "dead": false,
+          "reason": "invalid_bound_input",
+          "nodes": 0,
+          "pruned": 0,
+          "bounds": []
+        }
+      ],
+      "prediction_included": true
+    }
+  ]
+}

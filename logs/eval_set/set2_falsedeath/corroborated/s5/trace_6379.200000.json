@@ -1,0 +1,4231 @@
+{
+ "t_sec": 6379.2,
+ "context": {
+  "incoming": [
+   0,
+   0
+  ],
+  "boards": [
+   [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     5,
+     5,
+     0,
+     0,
+     0
+    ],
+    [
+     2,
+     2,
+     5,
+     0,
+     0,
+     0
+    ]
+   ],
+   [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     9,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     5,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     5,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     5,
+     3,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     2,
+     2,
+     0
+    ],
+    [
+     0,
+     0,
+     5,
+     9,
+     5,
+     0
+    ],
+    [
+     9,
+     9,
+     3,
+     2,
+     1,
+     0
+    ]
+   ]
+  ],
+  "replies": [
+   [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     5,
+     5,
+     0,
+     0,
+     0
+    ],
+    [
+     2,
+     2,
+     5,
+     0,
+     0,
+     0
+    ]
+   ],
+   [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     9,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     5,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     5,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     5,
+     3,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     2,
+     2,
+     0
+    ],
+    [
+     0,
+     0,
+     5,
+     9,
+     5,
+     0
+    ],
+    [
+     9,
+     9,
+     3,
+     2,
+     1,
+     0
+    ]
+   ]
+  ],
+  "credit": [
+   0,
+   0
+  ],
+  "certain": [
+   true,
+   true
+  ],
+  "hidden": [
+   {
+    "score": 540,
+    "options": [
+     {
+      "prefix": [
+       40,
+       540
+      ],
+      "colors": [
+       [
+        3
+       ],
+       [
+        1
+       ]
+      ],
+      "score": 540,
+      "board": [
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        5,
+        5,
+        0,
+        0,
+        0
+       ],
+       [
+        2,
+        2,
+        5,
+        0,
+        0,
+        0
+       ]
+      ],
+      "weight": 1.0
+     }
+    ],
+    "audit": {
+     "game": 4,
+     "side": "1P",
+     "chain_id": 20,
+     "trigger_sec": 6376.233333333334,
+     "reason": null,
+     "accepted": true,
+     "withdrawn": false,
+     "snapshot": {
+      "reason": null,
+      "board": [
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        5,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        1,
+        3,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        3,
+        3,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        1,
+        3,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        1,
+        2,
+        0,
+        0,
+        0
+       ],
+       [
+        0,
+        1,
+        5,
+        0,
+        0,
+        0
+       ],
+       [
+        2,
+        2,
+        5,
+        0,
+        0,
+        0
+       ]
+      ],
+      "start_sec": 6375.966666666667,
+      "end_sec": 6376.2,
+      "frames": 8
+     },
+     "used": false,
+     "uses": 0,
+     "predicted_score": 540.0,
+     "observations": [
+      {
+       "t_sec": 6376.233333333334,
+       "count": 1,
+       "score": 40,
+       "remaining": 1,
+       "filter_sec": 2.8459980967454612e-06
+      },
+      {
+       "t_sec": 6377.666666666667,
+       "count": 2,
+       "score": 540,
+       "remaining": 1,
+       "filter_sec": 5.410001904238015e-06
+      }
+     ],
+     "hidden_distributions": [
+      {
+       "0": 1.0
+      },
+      {
+       "0": 1.0
+      },
+      {
+       "0": 1.0
+      },
+      {
+       "0": 1.0
+      },
+      {
+       "0": 1.0
+      },
+      {
+       "0": 1.0
+      }
+     ],
+     "enumerated": 1,
+     "retained_mass": 1.0,
+     "enumeration_sec": 0.0003742870030691847
+    },
+    "prefire": true
+   },
+   null
+  ],
+  "verified": [
+   true,
+   true
+  ]
+ },
+ "latest": [
+  {
+   "t_sec": 6376.2,
+   "board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     5,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     3,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     3,
+     3,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     3,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     5,
+     0,
+     0,
+     0
+    ],
+    [
+     2,
+     2,
+     5,
+     0,
+     0,
+     0
+    ]
+   ],
+   "queue": [
+    2,
+    5,
+    2,
+    1
+   ]
+  },
+  {
+   "t_sec": 6379.2,
+   "board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     9,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     5,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     5,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     5,
+     3,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     2,
+     2,
+     0
+    ],
+    [
+     0,
+     0,
+     5,
+     9,
+     5,
+     0
+    ],
+    [
+     9,
+     9,
+     3,
+     2,
+     1,
+     0
+    ]
+   ],
+   "queue": [
+    1,
+    5,
+    3,
+    5
+   ]
+  }
+ ],
+ "chains": {
+  "(0, 1)": {
+   "side": "1P",
+   "chain_id": 1,
+   "trigger_sec": 6284.633333333333,
+   "observed_sec": 6284.666666666667,
+   "end_signal_sec": null,
+   "score_finalize_sec": null,
+   "score_delta": null,
+   "end_reason": null,
+   "end_signals": [],
+   "score_ready_sec": null,
+   "score_ready_reason": null,
+   "score_before": 10.0,
+   "formula_total": null,
+   "display_score": 51,
+   "stable_frames": 0,
+   "last_activity_sec": null,
+   "drop_bonus_score": 0.0,
+   "post_end_drop_sec": null,
+   "predicted_final_score": 40,
+   "predicted_chain_count": 1,
+   "predicted_final_board": null,
+   "end_confirmed": false
+  },
+  "(0, 2)": {
+   "side": "1P",
+   "chain_id": 2,
+   "trigger_sec": 6289.5,
+   "observed_sec": 6289.533333333334,
+   "end_signal_sec": null,
+   "score_finalize_sec": null,
+   "score_delta": null,
+   "end_reason": null,
+   "end_signals": [],
+   "score_ready_sec": null,
+   "score_ready_reason": null,
+   "score_before": 78.0,
+   "formula_total": null,
+   "display_score": 115,
+   "stable_frames": 0,
+   "last_activity_sec": null,
+   "drop_bonus_score": 0.0,
+   "post_end_drop_sec": null,
+   "predicted_final_score": 40.0,
+   "predicted_chain_count": 1,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     0,
+     0,
+     2
+    ],
+    [
+     2,
+     2,
+     5,
+     5,
+     2,
+     2
+    ]
+   ],
+   "end_confirmed": false
+  },
+  "(0, 3)": {
+   "side": "1P",
+   "chain_id": 3,
+   "trigger_sec": 6298.933333333333,
+   "observed_sec": 6298.966666666666,
+   "end_signal_sec": null,
+   "score_finalize_sec": null,
+   "score_delta": null,
+   "end_reason": null,
+   "end_signals": [],
+   "score_ready_sec": null,
+   "score_ready_reason": null,
+   "score_before": 178.0,
+   "formula_total": null,
+   "display_score": 232,
+   "stable_frames": 0,
+   "last_activity_sec": null,
+   "drop_bonus_score": 0.0,
+   "post_end_drop_sec": null,
+   "predicted_final_score": 100,
+   "predicted_chain_count": 1,
+   "predicted_final_board": null,
+   "end_confirmed": false
+  },
+  "(1, 7)": {
+   "side": "2P",
+   "chain_id": 7,
+   "trigger_sec": 6306.0,
+   "observed_sec": 6306.0,
+   "end_signal_sec": 6307.5,
+   "score_finalize_sec": null,
+   "score_delta": 400,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6307.5,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6307.5,
+   "score_ready_reason": "formula_match",
+   "score_before": 248.0,
+   "formula_total": 440,
+   "display_score": 648,
+   "stable_frames": 1,
+   "last_activity_sec": 6306.833333333333,
+   "drop_bonus_score": 5.0,
+   "post_end_drop_sec": 6307.8,
+   "predicted_final_score": 400.0,
+   "predicted_chain_count": 1,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     2,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     2,
+     0,
+     0,
+     3,
+     0
+    ],
+    [
+     5,
+     2,
+     0,
+     0,
+     1,
+     3
+    ],
+    [
+     5,
+     5,
+     2,
+     0,
+     1,
+     1
+    ],
+    [
+     3,
+     3,
+     2,
+     3,
+     2,
+     2
+    ],
+    [
+     1,
+     1,
+     5,
+     2,
+     1,
+     2
+    ],
+    [
+     1,
+     5,
+     5,
+     1,
+     5,
+     1
+    ],
+    [
+     3,
+     2,
+     1,
+     5,
+     2,
+     1
+    ],
+    [
+     3,
+     3,
+     2,
+     1,
+     1,
+     2
+    ],
+    [
+     2,
+     2,
+     5,
+     1,
+     2,
+     2
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(1, 8)": {
+   "side": "2P",
+   "chain_id": 8,
+   "trigger_sec": 6309.933333333333,
+   "observed_sec": 6309.933333333333,
+   "end_signal_sec": 6311.2,
+   "score_finalize_sec": null,
+   "score_delta": 328.0,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6311.2,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6311.5,
+   "score_ready_reason": "display_stable",
+   "score_before": 700.0,
+   "formula_total": 760,
+   "display_score": 1028,
+   "stable_frames": 10,
+   "last_activity_sec": 6310.166666666667,
+   "drop_bonus_score": 12.0,
+   "post_end_drop_sec": 6312.7,
+   "predicted_final_score": 360.0,
+   "predicted_chain_count": 2,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     2,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     2,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     5,
+     2,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     5,
+     5,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     3,
+     3,
+     2,
+     0,
+     2,
+     2
+    ],
+    [
+     1,
+     1,
+     5,
+     2,
+     1,
+     2
+    ],
+    [
+     1,
+     5,
+     5,
+     1,
+     5,
+     1
+    ],
+    [
+     3,
+     2,
+     1,
+     5,
+     2,
+     1
+    ],
+    [
+     3,
+     3,
+     2,
+     1,
+     1,
+     2
+    ],
+    [
+     2,
+     2,
+     5,
+     1,
+     2,
+     2
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(0, 9)": {
+   "side": "1P",
+   "chain_id": 9,
+   "trigger_sec": 6310.233333333334,
+   "observed_sec": 6310.233333333334,
+   "end_signal_sec": 6312.066666666667,
+   "score_finalize_sec": 6312.633333333333,
+   "score_delta": 40,
+   "end_reason": "ojama",
+   "end_signals": [
+    {
+     "t_sec": 6312.066666666667,
+     "reason": "ojama"
+    }
+   ],
+   "score_ready_sec": 6312.066666666667,
+   "score_ready_reason": "formula_match",
+   "score_before": 249.0,
+   "formula_total": 40,
+   "display_score": 289,
+   "stable_frames": 1,
+   "last_activity_sec": 6311.2,
+   "drop_bonus_score": 0.0,
+   "post_end_drop_sec": 6313.2,
+   "predicted_final_score": 0.0,
+   "predicted_chain_count": 0,
+   "predicted_final_board": null,
+   "end_confirmed": true
+  },
+  "(1, 10)": {
+   "side": "2P",
+   "chain_id": 10,
+   "trigger_sec": 6313.0,
+   "observed_sec": 6313.0,
+   "end_signal_sec": 6314.1,
+   "score_finalize_sec": 6316.433333333333,
+   "score_delta": 600,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6314.1,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6314.1,
+   "score_ready_reason": "formula_match",
+   "score_before": 1059.0,
+   "formula_total": 600,
+   "display_score": 1659,
+   "stable_frames": 1,
+   "last_activity_sec": 6313.866666666667,
+   "drop_bonus_score": 25.0,
+   "post_end_drop_sec": 6323.1,
+   "predicted_final_score": 600.0,
+   "predicted_chain_count": 1,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     5
+    ],
+    [
+     5,
+     0,
+     0,
+     0,
+     0,
+     3
+    ],
+    [
+     5,
+     5,
+     0,
+     0,
+     0,
+     1
+    ],
+    [
+     3,
+     3,
+     0,
+     0,
+     2,
+     2
+    ],
+    [
+     1,
+     1,
+     5,
+     2,
+     1,
+     2
+    ],
+    [
+     1,
+     5,
+     5,
+     1,
+     5,
+     1
+    ],
+    [
+     3,
+     2,
+     1,
+     5,
+     2,
+     1
+    ],
+    [
+     3,
+     3,
+     2,
+     1,
+     1,
+     2
+    ],
+    [
+     2,
+     2,
+     5,
+     1,
+     2,
+     2
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(0, 11)": {
+   "side": "1P",
+   "chain_id": 11,
+   "trigger_sec": 6313.466666666666,
+   "observed_sec": 6313.466666666666,
+   "end_signal_sec": 6317.066666666667,
+   "score_finalize_sec": null,
+   "score_delta": 360,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6317.066666666667,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6317.066666666667,
+   "score_ready_reason": "formula_match",
+   "score_before": 293.0,
+   "formula_total": 360,
+   "display_score": 653,
+   "stable_frames": 1,
+   "last_activity_sec": 6315.866666666667,
+   "drop_bonus_score": 2.0,
+   "post_end_drop_sec": 6318.8,
+   "predicted_final_score": 360.0,
+   "predicted_chain_count": 2,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     9,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     9,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     9,
+     3,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     5,
+     5,
+     2,
+     0,
+     0,
+     1
+    ],
+    [
+     2,
+     2,
+     1,
+     1,
+     0,
+     2
+    ],
+    [
+     2,
+     5,
+     5,
+     1,
+     0,
+     2
+    ],
+    [
+     3,
+     5,
+     3,
+     2,
+     2,
+     5
+    ],
+    [
+     1,
+     1,
+     5,
+     2,
+     1,
+     5
+    ],
+    [
+     1,
+     5,
+     5,
+     1,
+     5,
+     1
+    ],
+    [
+     3,
+     2,
+     1,
+     5,
+     2,
+     1
+    ],
+    [
+     3,
+     3,
+     2,
+     1,
+     1,
+     2
+    ],
+    [
+     2,
+     2,
+     5,
+     1,
+     2,
+     2
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(0, 12)": {
+   "side": "1P",
+   "chain_id": 12,
+   "trigger_sec": 6319.1,
+   "observed_sec": 6319.1,
+   "end_signal_sec": 6324.666666666667,
+   "score_finalize_sec": 6326.866666666667,
+   "score_delta": 2700,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6324.666666666667,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6324.666666666667,
+   "score_ready_reason": "formula_match",
+   "score_before": 696.0,
+   "formula_total": 2700,
+   "display_score": 3396,
+   "stable_frames": 1,
+   "last_activity_sec": 6324.033333333334,
+   "drop_bonus_score": 33.0,
+   "post_end_drop_sec": 6329.133333333333,
+   "predicted_final_score": 2700.0,
+   "predicted_chain_count": 4,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     3
+    ],
+    [
+     0,
+     9,
+     0,
+     0,
+     0,
+     3
+    ],
+    [
+     9,
+     1,
+     0,
+     0,
+     5,
+     1
+    ],
+    [
+     3,
+     3,
+     3,
+     2,
+     2,
+     5
+    ],
+    [
+     1,
+     1,
+     5,
+     2,
+     1,
+     5
+    ],
+    [
+     1,
+     5,
+     5,
+     1,
+     5,
+     1
+    ],
+    [
+     3,
+     2,
+     1,
+     5,
+     2,
+     1
+    ],
+    [
+     3,
+     3,
+     2,
+     1,
+     1,
+     2
+    ],
+    [
+     2,
+     2,
+     5,
+     1,
+     2,
+     2
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(1, 13)": {
+   "side": "2P",
+   "chain_id": 13,
+   "trigger_sec": 6323.933333333333,
+   "observed_sec": 6323.933333333333,
+   "end_signal_sec": 6330.466666666666,
+   "score_finalize_sec": null,
+   "score_delta": 5160,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6330.466666666666,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6330.466666666666,
+   "score_ready_reason": "formula_match",
+   "score_before": 1700.0,
+   "formula_total": 5160,
+   "display_score": 6860,
+   "stable_frames": 1,
+   "last_activity_sec": 6330.3,
+   "drop_bonus_score": 12.0,
+   "post_end_drop_sec": 6331.366666666667,
+   "predicted_final_score": 5160.0,
+   "predicted_chain_count": 5,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     3
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     3,
+     2
+    ],
+    [
+     0,
+     0,
+     0,
+     2,
+     1,
+     3
+    ],
+    [
+     0,
+     0,
+     0,
+     2,
+     1,
+     5
+    ],
+    [
+     0,
+     0,
+     0,
+     2,
+     1,
+     5
+    ],
+    [
+     0,
+     0,
+     0,
+     5,
+     3,
+     3
+    ],
+    [
+     0,
+     0,
+     0,
+     1,
+     3,
+     1
+    ],
+    [
+     0,
+     0,
+     0,
+     1,
+     2,
+     2
+    ],
+    [
+     0,
+     0,
+     0,
+     2,
+     1,
+     2
+    ],
+    [
+     0,
+     0,
+     0,
+     1,
+     5,
+     1
+    ],
+    [
+     3,
+     2,
+     1,
+     5,
+     2,
+     1
+    ],
+    [
+     3,
+     3,
+     2,
+     1,
+     1,
+     2
+    ],
+    [
+     2,
+     2,
+     5,
+     1,
+     2,
+     2
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(0, 14)": {
+   "side": "1P",
+   "chain_id": 14,
+   "trigger_sec": 6329.433333333333,
+   "observed_sec": 6329.433333333333,
+   "end_signal_sec": 6336.433333333333,
+   "score_finalize_sec": null,
+   "score_delta": 5400,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6336.433333333333,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6336.433333333333,
+   "score_ready_reason": "formula_match",
+   "score_before": 3423.0,
+   "formula_total": 2340,
+   "display_score": 8823,
+   "stable_frames": 1,
+   "last_activity_sec": 6335.833333333333,
+   "drop_bonus_score": 27.0,
+   "post_end_drop_sec": 6338.6,
+   "predicted_final_score": 5400.0,
+   "predicted_chain_count": 5,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     1
+    ],
+    [
+     0,
+     2,
+     0,
+     0,
+     0,
+     5
+    ],
+    [
+     1,
+     1,
+     5,
+     0,
+     1,
+     5
+    ],
+    [
+     1,
+     5,
+     5,
+     1,
+     5,
+     1
+    ],
+    [
+     3,
+     2,
+     1,
+     5,
+     2,
+     1
+    ],
+    [
+     3,
+     3,
+     2,
+     1,
+     1,
+     2
+    ],
+    [
+     2,
+     2,
+     5,
+     1,
+     2,
+     2
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(1, 15)": {
+   "side": "2P",
+   "chain_id": 15,
+   "trigger_sec": 6331.666666666667,
+   "observed_sec": 6331.666666666667,
+   "end_signal_sec": 6338.666666666667,
+   "score_finalize_sec": 6340.566666666667,
+   "score_delta": 8430.0,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6338.666666666667,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6338.966666666666,
+   "score_ready_reason": "display_stable",
+   "score_before": 6962.0,
+   "formula_total": 13590,
+   "display_score": 15392,
+   "stable_frames": 10,
+   "last_activity_sec": 6338.1,
+   "drop_bonus_score": 102.0,
+   "post_end_drop_sec": 6349.8,
+   "predicted_final_score": 8430.0,
+   "predicted_chain_count": 5,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     2,
+     0,
+     2
+    ],
+    [
+     0,
+     0,
+     0,
+     2,
+     0,
+     3
+    ],
+    [
+     0,
+     0,
+     0,
+     2,
+     0,
+     5
+    ],
+    [
+     0,
+     0,
+     0,
+     5,
+     0,
+     5
+    ],
+    [
+     0,
+     0,
+     0,
+     2,
+     0,
+     1
+    ],
+    [
+     0,
+     0,
+     0,
+     1,
+     2,
+     2
+    ],
+    [
+     0,
+     0,
+     5,
+     5,
+     5,
+     2
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(0, 16)": {
+   "side": "1P",
+   "chain_id": 16,
+   "trigger_sec": 6343.566666666667,
+   "observed_sec": 6343.566666666667,
+   "end_signal_sec": 6351.7,
+   "score_finalize_sec": 6360.733333333334,
+   "score_delta": 28900.0,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6351.7,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6352.0,
+   "score_ready_reason": "display_stable",
+   "score_before": 10014.0,
+   "formula_total": 29960,
+   "display_score": 38914,
+   "stable_frames": 10,
+   "last_activity_sec": 6351.1,
+   "drop_bonus_score": 131.0,
+   "post_end_drop_sec": 6361.933333333333,
+   "predicted_final_score": 29960.0,
+   "predicted_chain_count": 9,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     1,
+     0,
+     0,
+     0,
+     0,
+     1
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(1, 17)": {
+   "side": "2P",
+   "chain_id": 17,
+   "trigger_sec": 6350.666666666667,
+   "observed_sec": 6350.666666666667,
+   "end_signal_sec": 6361.866666666667,
+   "score_finalize_sec": null,
+   "score_delta": 30450,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6361.866666666667,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6361.866666666667,
+   "score_ready_reason": "formula_match",
+   "score_before": 15399.0,
+   "formula_total": 30450,
+   "display_score": 45849,
+   "stable_frames": 1,
+   "last_activity_sec": 6361.233333333334,
+   "drop_bonus_score": 7.0,
+   "post_end_drop_sec": 6370.266666666666,
+   "predicted_final_score": 0.0,
+   "predicted_chain_count": 0,
+   "predicted_final_board": null,
+   "end_confirmed": true
+  },
+  "(0, 18)": {
+   "side": "1P",
+   "chain_id": 18,
+   "trigger_sec": 6362.333333333333,
+   "observed_sec": 6362.333333333333,
+   "end_signal_sec": 6370.3,
+   "score_finalize_sec": 6375.033333333334,
+   "score_delta": 10960,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6370.3,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6370.3,
+   "score_ready_reason": "formula_match",
+   "score_before": 38979.0,
+   "formula_total": 10960,
+   "display_score": 49939,
+   "stable_frames": 1,
+   "last_activity_sec": 6370.133333333333,
+   "drop_bonus_score": 65.0,
+   "post_end_drop_sec": 6375.533333333334,
+   "predicted_final_score": 10960.0,
+   "predicted_chain_count": 6,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     2,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(1, 19)": {
+   "side": "2P",
+   "chain_id": 19,
+   "trigger_sec": 6370.566666666667,
+   "observed_sec": 6370.566666666667,
+   "end_signal_sec": 6377.2,
+   "score_finalize_sec": null,
+   "score_delta": 4650,
+   "end_reason": "next",
+   "end_signals": [
+    {
+     "t_sec": 6377.2,
+     "reason": "next"
+    }
+   ],
+   "score_ready_sec": 6377.2,
+   "score_ready_reason": "formula_match",
+   "score_before": 45969.0,
+   "formula_total": 4650,
+   "display_score": 50619,
+   "stable_frames": 1,
+   "last_activity_sec": 6375.566666666667,
+   "drop_bonus_score": 29.0,
+   "post_end_drop_sec": 6379.166666666667,
+   "predicted_final_score": 4650.0,
+   "predicted_chain_count": 4,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     1,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     5,
+     0,
+     5,
+     0
+    ],
+    [
+     0,
+     0,
+     3,
+     2,
+     1,
+     0
+    ]
+   ],
+   "end_confirmed": true
+  },
+  "(0, 20)": {
+   "side": "1P",
+   "chain_id": 20,
+   "trigger_sec": 6376.233333333334,
+   "observed_sec": 6376.233333333334,
+   "end_signal_sec": null,
+   "score_finalize_sec": null,
+   "score_delta": null,
+   "end_reason": null,
+   "end_signals": [],
+   "score_ready_sec": null,
+   "score_ready_reason": null,
+   "score_before": 49939.0,
+   "formula_total": 540,
+   "display_score": 50479,
+   "stable_frames": 0,
+   "last_activity_sec": 6378.533333333334,
+   "drop_bonus_score": 0.0,
+   "post_end_drop_sec": null,
+   "predicted_final_score": 540.0,
+   "predicted_chain_count": 2,
+   "predicted_final_board": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     5,
+     5,
+     0,
+     0,
+     0
+    ],
+    [
+     2,
+     2,
+     5,
+     0,
+     0,
+     0
+    ]
+   ],
+   "end_confirmed": false
+  }
+ },
+ "elapsed": {
+  "(0, 1)": 2.933333333333394,
+  "(0, 2)": 7.800000000000182,
+  "(0, 3)": 17.233333333333576,
+  "(1, 7)": 24.300000000000182,
+  "(1, 8)": 28.233333333333576,
+  "(0, 9)": 28.233333333333576,
+  "(1, 10)": 31.300000000000182,
+  "(0, 11)": 31.300000000000182,
+  "(0, 12)": 37.400000000000546,
+  "(1, 13)": 37.400000000000546,
+  "(0, 14)": 37.400000000000546,
+  "(1, 15)": 37.400000000000546,
+  "(0, 16)": 37.400000000000546,
+  "(1, 17)": 37.400000000000546,
+  "(0, 18)": 80.63333333333321,
+  "(1, 19)": 80.63333333333321,
+  "(0, 20)": 80.63333333333321
+ },
+ "ledger": {
+  "game": 4,
+  "events": [
+   [
+    "send",
+    [
+     0,
+     3
+    ],
+    1
+   ],
+   [
+    "send",
+    [
+     1,
+     7
+    ],
+    5
+   ],
+   [
+    "send",
+    [
+     1,
+     8
+    ],
+    10
+   ],
+   [
+    "send",
+    [
+     1,
+     8
+    ],
+    4
+   ],
+   [
+    "send",
+    [
+     1,
+     10
+    ],
+    8
+   ],
+   [
+    "send",
+    [
+     0,
+     11
+    ],
+    22
+   ],
+   [
+    "send",
+    [
+     0,
+     11
+    ],
+    23
+   ],
+   [
+    "send",
+    [
+     0,
+     11
+    ],
+    5
+   ],
+   [
+    "drop",
+    [
+     0,
+     0
+    ],
+    20
+   ],
+   [
+    "send",
+    [
+     0,
+     12
+    ],
+    38
+   ],
+   [
+    "send",
+    [
+     1,
+     13
+    ],
+    134
+   ],
+   [
+    "send",
+    [
+     1,
+     13
+    ],
+    141
+   ],
+   [
+    "send",
+    [
+     0,
+     14
+    ],
+    77
+   ],
+   [
+    "send",
+    [
+     1,
+     13
+    ],
+    73
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ],
+   [
+    "send",
+    [
+     1,
+     15
+    ],
+    120
+   ],
+   [
+    "send",
+    [
+     1,
+     15
+    ],
+    157
+   ],
+   [
+    "send",
+    [
+     1,
+     15
+    ],
+    194
+   ],
+   [
+    "send",
+    [
+     1,
+     15
+    ],
+    120
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    14
+   ],
+   [
+    "send",
+    [
+     0,
+     16
+    ],
+    428
+   ],
+   [
+    "send",
+    [
+     1,
+     17
+    ],
+    426
+   ],
+   [
+    "send",
+    [
+     0,
+     16
+    ],
+    412
+   ],
+   [
+    "drop",
+    [
+     0,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     0,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     0,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     0,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     0,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     0,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     0,
+     0
+    ],
+    14
+   ],
+   [
+    "send",
+    [
+     1,
+     17
+    ],
+    418
+   ],
+   [
+    "send",
+    [
+     1,
+     17
+    ],
+    435
+   ],
+   [
+    "send",
+    [
+     0,
+     18
+    ],
+    156
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    6
+   ],
+   [
+    "send",
+    [
+     1,
+     19
+    ],
+    66
+   ],
+   [
+    "send",
+    [
+     0,
+     20
+    ],
+    7
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ],
+   [
+    "drop",
+    [
+     1,
+     0
+    ],
+    30
+   ]
+  ],
+  "totals": {
+   "(0, 1)": [
+    0,
+    false
+   ],
+   "(0, 2)": [
+    0,
+    false
+   ],
+   "(0, 3)": [
+    1,
+    false
+   ],
+   "(1, 7)": [
+    5,
+    true
+   ],
+   "(1, 8)": [
+    4,
+    true
+   ],
+   "(0, 9)": [
+    0,
+    true
+   ],
+   "(1, 10)": [
+    8,
+    true
+   ],
+   "(0, 11)": [
+    5,
+    true
+   ],
+   "(0, 12)": [
+    38,
+    true
+   ],
+   "(1, 13)": [
+    73,
+    true
+   ],
+   "(0, 14)": [
+    77,
+    true
+   ],
+   "(1, 15)": [
+    120,
+    true
+   ],
+   "(0, 16)": [
+    412,
+    true
+   ],
+   "(1, 17)": [
+    435,
+    true
+   ],
+   "(0, 18)": [
+    156,
+    true
+   ],
+   "(1, 19)": [
+    66,
+    true
+   ],
+   "(0, 20)": [
+    7,
+    true
+   ]
+  },
+  "dropped": [
+   214,
+   350
+  ],
+  "chunks": [
+   [
+    [
+     [
+      1,
+      19
+     ],
+     59
+    ]
+   ],
+   []
+  ]
+ },
+ "guards": [
+  {
+   "accepted": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     5,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     3,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     3,
+     3,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     3,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     5,
+     0,
+     0,
+     0
+    ],
+    [
+     2,
+     2,
+     5,
+     0,
+     0,
+     0
+    ]
+   ],
+   "score": 49939,
+   "key": [
+    "000000000000000000000000000000000000000000000000000000000000000500000000000100000000000103000000000303000000000103000000000102000000000105000000020205000000",
+    [
+     2,
+     5,
+     2,
+     1
+    ]
+   ],
+   "since": 6376.1,
+   "reason": null
+  },
+  {
+   "accepted": [
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     3,
+     1,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     3,
+     1,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     2,
+     0,
+     0,
+     0
+    ],
+    [
+     0,
+     1,
+     3,
+     1,
+     0,
+     0
+    ],
+    [
+     0,
+     2,
+     5,
+     2,
+     0,
+     0
+    ],
+    [
+     0,
+     3,
+     2,
+     3,
+     5,
+     0
+    ],
+    [
+     0,
+     3,
+     3,
+     1,
+     1,
+     0
+    ],
+    [
+     0,
+     2,
+     1,
+     3,
+     3,
+     3
+    ],
+    [
+     0,
+     2,
+     3,
+     2,
+     3,
+     3
+    ]
+   ],
+   "score": 50591,
+   "key": [
+    "000000000000000000000000000000000000000000000000000000000000000009000000000002000000000001050000000001050000000001050300000002020200000005090500090903020100",
+    [
+     1,
+     5,
+     3,
+     5
+    ]
+   ],
+   "since": 6379.166666666667,
+   "reason": "color_score_mismatch"
+  }
+ ],
+ "history": [
+  [
+   {
+    "t_sec": 6376.133333333333,
+    "board": [
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      5,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      3,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      3,
+      3,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      3,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      2,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      5,
+      0,
+      0,
+      0
+     ],
+     [
+      2,
+      2,
+      5,
+      0,
+      0,
+      0
+     ]
+    ],
+    "queue": [
+     2,
+     5,
+     2,
+     1
+    ]
+   },
+   {
+    "t_sec": 6376.166666666667,
+    "board": [
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      5,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      3,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      3,
+      3,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      3,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      2,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      5,
+      0,
+      0,
+      0
+     ],
+     [
+      2,
+      2,
+      5,
+      0,
+      0,
+      0
+     ]
+    ],
+    "queue": [
+     2,
+     5,
+     2,
+     1
+    ]
+   },
+   {
+    "t_sec": 6376.2,
+    "board": [
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      5,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      3,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      3,
+      3,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      3,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      2,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      5,
+      0,
+      0,
+      0
+     ],
+     [
+      2,
+      2,
+      5,
+      0,
+      0,
+      0
+     ]
+    ],
+    "queue": [
+     2,
+     5,
+     2,
+     1
+    ]
+   }
+  ],
+  [
+   {
+    "t_sec": 6378.766666666666,
+    "board": [
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      9,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      2,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      1,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      1,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      1,
+      5,
+      3,
+      0
+     ],
+     [
+      0,
+      0,
+      2,
+      2,
+      2,
+      0
+     ],
+     [
+      0,
+      0,
+      5,
+      9,
+      5,
+      0
+     ],
+     [
+      9,
+      9,
+      3,
+      2,
+      1,
+      0
+     ]
+    ],
+    "queue": [
+     1,
+     1,
+     5,
+     1
+    ]
+   },
+   {
+    "t_sec": 6379.166666666667,
+    "board": [
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      9,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      2,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      1,
+      5,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      1,
+      5,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      1,
+      5,
+      3,
+      0
+     ],
+     [
+      0,
+      0,
+      2,
+      2,
+      2,
+      0
+     ],
+     [
+      0,
+      0,
+      5,
+      9,
+      5,
+      0
+     ],
+     [
+      9,
+      9,
+      3,
+      2,
+      1,
+      0
+     ]
+    ],
+    "queue": [
+     1,
+     5,
+     3,
+     5
+    ]
+   },
+   {
+    "t_sec": 6379.2,
+    "board": [
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      9,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      2,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      1,
+      5,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      1,
+      5,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      1,
+      5,
+      3,
+      0
+     ],
+     [
+      0,
+      0,
+      2,
+      2,
+      2,
+      0
+     ],
+     [
+      0,
+      0,
+      5,
+      9,
+      5,
+      0
+     ],
+     [
+      9,
+      9,
+      3,
+      2,
+      1,
+      0
+     ]
+    ],
+    "queue": [
+     1,
+     5,
+     3,
+     5
+    ]
+   }
+  ]
+ ]
+}

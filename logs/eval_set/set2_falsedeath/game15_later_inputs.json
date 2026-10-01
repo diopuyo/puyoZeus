@@ -1,0 +1,330 @@
+﻿{
+    "kind":  "update",
+    "args":  {
+                 "tuple":  [
+                               {
+                                   "namespace":  {
+                                                     "p1":  {
+                                                                "namespace":  {
+                                                                                  "state":  {
+                                                                                                "state":  "STABLE"
+                                                                                            },
+                                                                                  "confirmed_board":  {
+                                                                                                          "board":  {
+                                                                                                                        "array":  [
+                                                                                                                                      [
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          5,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          3,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ],
+                                                                                                                                      [
+                                                                                                                                          3,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0,
+                                                                                                                                          0
+                                                                                                                                      ]
+                                                                                                                                  ],
+                                                                                                                        "dtype":  "|u1"
+                                                                                                                    }
+                                                                                                      },
+                                                                                  "score":  44444,
+                                                                                  "next_pair":  {
+                                                                                                    "tuple":  [
+                                                                                                                  3,
+                                                                                                                  4
+                                                                                                              ]
+                                                                                                },
+                                                                                  "dnext_pair":  {
+                                                                                                     "tuple":  [
+                                                                                                                   3,
+                                                                                                                   1
+                                                                                                               ]
+                                                                                                 },
+                                                                                  "next_slide_motion":  false,
+                                                                                  "chain_event":  null,
+                                                                                  "midchain_board":  null
+                                                                              }
+                                                            },
+                                                     "p2":  {
+                                                                "namespace":  {
+                                                                                  "state":  {
+                                                                                                "state":  "CHAIN"
+                                                                                            },
+                                                                                  "confirmed_board":  null,
+                                                                                  "score":  72863,
+                                                                                  "next_pair":  {
+                                                                                                    "tuple":  [
+                                                                                                                  3,
+                                                                                                                  5
+                                                                                                              ]
+                                                                                                },
+                                                                                  "dnext_pair":  {
+                                                                                                     "tuple":  [
+                                                                                                                   4,
+                                                                                                                   5
+                                                                                                               ]
+                                                                                                 },
+                                                                                  "next_slide_motion":  false,
+                                                                                  "prefire_snapshot":  {
+                                                                                                           "reason":  null,
+                                                                                                           "board":  [
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             4,
+                                                                                                                             0
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             3,
+                                                                                                                             3,
+                                                                                                                             1
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             3,
+                                                                                                                             3,
+                                                                                                                             1
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             5,
+                                                                                                                             1,
+                                                                                                                             4,
+                                                                                                                             1
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             1,
+                                                                                                                             1,
+                                                                                                                             4,
+                                                                                                                             4
+                                                                                                                         ],
+                                                                                                                         [
+                                                                                                                             0,
+                                                                                                                             0,
+                                                                                                                             5,
+                                                                                                                             4,
+                                                                                                                             3,
+                                                                                                                             3
+                                                                                                                         ]
+                                                                                                                     ],
+                                                                                                           "start_sec":  4616.266666666666,
+                                                                                                           "end_sec":  4616.366666666666,
+                                                                                                           "frames":  4
+                                                                                                       },
+                                                                                  "chain_event":  {
+                                                                                                      "namespace":  {
+                                                                                                                        "trigger_sec":  4616.4,
+                                                                                                                        "mechanism":  "formula_read",
+                                                                                                                        "chain_count":  2,
+                                                                                                                        "total_score":  360
+                                                                                                                    }
+                                                                                                  },
+                                                                                  "midchain_board":  null
+                                                                              }
+                                                            },
+                                                     "confirmed_dead_sides":  {
+                                                                                  "tuple":  [
+
+                                                                                            ]
+                                                                              },
+                                                     "terminal_evidence_available":  true
+                                                 }
+                               },
+                               {
+                                   "namespace":  {
+                                                     "net_balance_capped":  -36,
+                                                     "forecast_p1":  36,
+                                                     "total_dropped_to_p1":  240,
+                                                     "total_dropped_to_p2":  17
+                                                 }
+                               },
+                               {
+                                   "namespace":  {
+                                                     "finalized_count_p1":  2,
+                                                     "finalized_count_p2":  2,
+                                                     "chain_total_score_p1":  42810,
+                                                     "chain_total_score_p2":  38460
+                                                 }
+                               },
+                               4620.7,
+                               4,
+                               {
+                                   "tuple":  [
+                                                 42800,
+                                                 360
+                                             ]
+                               },
+                               {
+                                   "tuple":  [
+                                                 44444,
+                                                 72863
+                                             ]
+                               },
+                               {
+                                   "tuple":  [
+                                                 false,
+                                                 false
+                                             ]
+                               }
+                           ]
+             }
+}

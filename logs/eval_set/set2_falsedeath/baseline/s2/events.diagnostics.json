@@ -1,0 +1,663 @@
+{
+  "counts": {
+    "missing_prefire_board": 88,
+    "unknown_firing_side": 5,
+    "E16_fire_after_observed_death": 16
+  },
+  "events": [
+    {
+      "game_idx": 0,
+      "t_sec": 4263.333333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4263.533333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4263.833333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4263.9,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4263.966666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4264.033333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4264.2,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4264.233333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4264.566666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4264.966666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4265.0,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4265.2,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4265.266666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4265.333333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4265.4,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4265.566666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4266.133333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4266.4,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4266.533333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4266.6,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4266.666666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4266.733333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4266.8,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4266.9,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4267.866666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4267.933333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4268.0,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4268.066666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4268.133333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4268.266666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4268.8,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4269.233333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4269.3,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4269.366666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4269.433333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4269.633333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4270.633333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4270.7,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4270.766666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4270.833333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4271.033333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4271.966666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4272.033333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4272.1,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4272.166666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4272.366666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4272.6,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4272.733333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4273.4,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4273.466666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4273.533333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4273.6,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4273.666666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4273.733333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4274.8,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4274.866666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4274.933333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4275.0,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4275.333333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4275.466666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4276.166666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4276.233333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4276.3,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4276.366666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4277.5,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4277.566666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4277.633333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4277.7,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4277.766666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4278.866666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4278.933333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4279.0,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4279.066666666667,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4279.4,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4280.266666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4280.333333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4280.4,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4280.466666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4280.533333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4280.966666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4281.466666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4281.633333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4281.7,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4281.766666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4281.833333333333,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4281.9,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4282.266666666666,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4292.333333333333,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 4331.066666666667,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 4331.466666666666,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 4331.9,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 2,
+      "t_sec": 4448.6,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 4,
+      "t_sec": 4620.833333333333,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 4,
+      "t_sec": 4620.833333333333,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 4,
+      "t_sec": 4623.133333333333,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 5,
+      "t_sec": 4656.233333333334,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 6,
+      "t_sec": 4660.3,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 6,
+      "t_sec": 4727.066666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 4752.1,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 4753.766666666666,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 4757.566666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 4757.566666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 8,
+      "t_sec": 4814.9,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 9,
+      "t_sec": 4862.2,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 9,
+      "t_sec": 4862.2,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 9,
+      "t_sec": 4862.3,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 9,
+      "t_sec": 4862.5,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 10,
+      "t_sec": 4918.866666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 10,
+      "t_sec": 4923.933333333333,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    }
+  ]
+}

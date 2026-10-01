@@ -1,0 +1,170 @@
+{
+  "counts": {
+    "E16_fire_after_observed_death": 24,
+    "unknown_firing_side": 3
+  },
+  "events": [
+    {
+      "game_idx": 0,
+      "t_sec": 4918.883333333333,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 4921.016666666666,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 4970.083333333333,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 4970.916666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 4973.716666666666,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 4976.116666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 2,
+      "t_sec": 5023.516666666666,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 3,
+      "t_sec": 5057.783333333334,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 3,
+      "t_sec": 5058.816666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 3,
+      "t_sec": 5058.816666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 4,
+      "t_sec": 5124.416666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 5,
+      "t_sec": 5165.416666666667,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 5,
+      "t_sec": 5184.95,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 5,
+      "t_sec": 5186.016666666666,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 6,
+      "t_sec": 5223.483333333334,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 6,
+      "t_sec": 5250.016666666666,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 6,
+      "t_sec": 5250.15,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 6,
+      "t_sec": 5253.25,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 6,
+      "t_sec": 5255.316666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 5279.916666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 8,
+      "t_sec": 5364.316666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 9,
+      "t_sec": 5418.95,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 9,
+      "t_sec": 5420.016666666666,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 9,
+      "t_sec": 5422.483333333334,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 10,
+      "t_sec": 5477.616666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 10,
+      "t_sec": 5478.983333333334,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 10,
+      "t_sec": 5480.85,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+{
+  "counts": {
+    "missing_prefire_board": 3,
+    "E16_fire_after_observed_death": 9,
+    "unknown_firing_side": 14
+  },
+  "events": [
+    {
+      "game_idx": 0,
+      "t_sec": 1298.7166666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 1336.0833333333333,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 1336.45,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 1336.55,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 1337.7833333333333,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 1338.8166666666666,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 1338.8833333333334,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 1355.3166666666666,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 2,
+      "t_sec": 1356.8833333333334,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 2,
+      "t_sec": 1386.1833333333334,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 2,
+      "t_sec": 1394.65,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 2,
+      "t_sec": 1396.4166666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 3,
+      "t_sec": 1396.95,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 3,
+      "t_sec": 1425.05,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 4,
+      "t_sec": 1503.05,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 5,
+      "t_sec": 1580.25,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 6,
+      "t_sec": 1622.9166666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 6,
+      "t_sec": 1623.6833333333334,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 1625.35,
+      "reason": "missing_prefire_board",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 1668.3833333333334,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 1718.15,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 1719.5166666666667,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 1725.4833333333333,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 1726.3833333333334,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 1727.3166666666666,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 7,
+      "t_sec": 1727.4833333333333,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    }
+  ]
+}

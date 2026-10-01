@@ -1,0 +1,7 @@
+diag: セット2の誤った負け確定6件を追跡・反事実検証
+
+実画面、認識書込み、死亡証明、相殺台帳を照合し、既存5記録と両セットで修正候補の副作用を監査する。
+srcと本番採用設定は変更しない。
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01ViPFW8MJKgWCr8ptH62vn2

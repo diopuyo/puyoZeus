@@ -1,0 +1,51 @@
+{
+  "counts": {
+    "missing_display_score_or_baseline": 3,
+    "E16_fire_after_observed_death": 3,
+    "unknown_firing_side": 1
+  },
+  "events": [
+    {
+      "game_idx": 0,
+      "t_sec": 9.366666666666667,
+      "reason": "missing_display_score_or_baseline",
+      "requested_stage": "S3"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 16.1,
+      "reason": "missing_display_score_or_baseline",
+      "requested_stage": "S3"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 54.43333333333333,
+      "reason": "unknown_firing_side",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 0,
+      "t_sec": 76.9,
+      "reason": "missing_display_score_or_baseline",
+      "requested_stage": "S3"
+    },
+    {
+      "game_idx": 2,
+      "t_sec": 224.5,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 3,
+      "t_sec": 268.1333333333333,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 4,
+      "t_sec": 326.03333333333336,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    }
+  ]
+}

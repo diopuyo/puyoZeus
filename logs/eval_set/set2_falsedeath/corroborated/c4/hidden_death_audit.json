@@ -1,0 +1,423 @@
+{
+  "enumerated": 22,
+  "combinations": 830,
+  "accepted": 2,
+  "next_mismatch": 1,
+  "used": 0,
+  "uses": 0,
+  "skipped": {
+    "ineligible": 502
+  },
+  "rows": [
+    {
+      "game": 0,
+      "side": "2P",
+      "chain_id": 2,
+      "candidate_sec": 1277.4166666666667,
+      "unknown": 2,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 25,
+      "candidates": 25,
+      "outcome": "accepted",
+      "used": false,
+      "uses": 0,
+      "verified_sec": 1277.4833333333333,
+      "observed_count": 4,
+      "observed_score": 5760,
+      "matching": 25,
+      "maximum_score": 63140
+    },
+    {
+      "game": 1,
+      "side": "2P",
+      "chain_id": 1,
+      "candidate_sec": 1321.7166666666667,
+      "unknown": 1,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 2,
+      "side": "1P",
+      "chain_id": 1,
+      "candidate_sec": 1385.95,
+      "unknown": 1,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "trials": 5,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 4,
+      "side": "2P",
+      "chain_id": 4,
+      "candidate_sec": 1464.55,
+      "unknown": 3,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "trials": 125,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 2,
+      "candidate_sec": 1535.55,
+      "unknown": 1,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "trials": 5,
+      "candidates": 5,
+      "outcome": "next_mismatch",
+      "used": false,
+      "uses": 0,
+      "verified_sec": 1536.35,
+      "observed_count": 2,
+      "observed_score": 540,
+      "matching": 0
+    },
+    {
+      "game": 5,
+      "side": "2P",
+      "chain_id": 7,
+      "candidate_sec": 1553.7833333333333,
+      "unknown": 1,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "trials": 5,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 8,
+      "candidate_sec": 1554.1833333333334,
+      "unknown": 2,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "trials": 25,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 9,
+      "candidate_sec": 1557.8166666666666,
+      "unknown": 3,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "trials": 125,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 11,
+      "candidate_sec": 1560.35,
+      "unknown": 3,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "trials": 125,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 12,
+      "candidate_sec": 1565.6166666666666,
+      "unknown": 2,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "trials": 25,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 6,
+      "side": "2P",
+      "chain_id": 3,
+      "candidate_sec": 1614.45,
+      "unknown": 2,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "trials": 25,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 6,
+      "side": "1P",
+      "chain_id": 5,
+      "candidate_sec": 1618.0166666666667,
+      "unknown": 2,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "trials": 25,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 6,
+      "side": "2P",
+      "chain_id": 6,
+      "candidate_sec": 1620.55,
+      "unknown": 2,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "trials": 25,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 7,
+      "side": "1P",
+      "chain_id": 4,
+      "candidate_sec": 1658.5166666666667,
+      "unknown": 1,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 7,
+      "side": "2P",
+      "chain_id": 5,
+      "candidate_sec": 1662.8833333333334,
+      "unknown": 1,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 7,
+      "side": "2P",
+      "chain_id": 6,
+      "candidate_sec": 1664.9166666666667,
+      "unknown": 1,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 7,
+      "side": "1P",
+      "chain_id": 7,
+      "candidate_sec": 1666.9166666666667,
+      "unknown": 3,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 125,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 7,
+      "side": "2P",
+      "chain_id": 8,
+      "candidate_sec": 1667.55,
+      "unknown": 1,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 7,
+      "side": "1P",
+      "chain_id": 10,
+      "candidate_sec": 1672.5166666666667,
+      "unknown": 1,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 7,
+      "side": "1P",
+      "chain_id": 12,
+      "candidate_sec": 1678.65,
+      "unknown": 3,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 125,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 7,
+      "side": "1P",
+      "chain_id": 14,
+      "candidate_sec": 1682.85,
+      "unknown": 1,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 0,
+      "outcome": "awaiting_formula",
+      "used": false,
+      "uses": 0
+    },
+    {
+      "game": 7,
+      "side": "1P",
+      "chain_id": 16,
+      "candidate_sec": 1696.9833333333333,
+      "unknown": 1,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "trials": 5,
+      "candidates": 5,
+      "outcome": "accepted",
+      "used": false,
+      "uses": 0,
+      "verified_sec": 1697.0833333333333,
+      "observed_count": 3,
+      "observed_score": 2060,
+      "matching": 5,
+      "maximum_score": 67420
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+[
+ {
+  "file": "game15_later_-1.0.jpg",
+  "frame": 277182,
+  "t_sec": 4619.7
+ },
+ {
+  "file": "game15_later_-0.2.jpg",
+  "frame": 277230,
+  "t_sec": 4620.5
+ },
+ {
+  "file": "game15_later_+0.0.jpg",
+  "frame": 277242,
+  "t_sec": 4620.7
+ },
+ {
+  "file": "game15_later_+0.2.jpg",
+  "frame": 277254,
+  "t_sec": 4620.9
+ },
+ {
+  "file": "game15_later_+1.0.jpg",
+  "frame": 277302,
+  "t_sec": 4621.7
+ },
+ {
+  "file": "game58_write_-1.0.jpg",
+  "frame": 420091,
+  "t_sec": 7001.516666666666
+ },
+ {
+  "file": "game58_write_-0.2.jpg",
+  "frame": 420139,
+  "t_sec": 7002.316666666667
+ },
+ {
+  "file": "game58_write_+0.0.jpg",
+  "frame": 420151,
+  "t_sec": 7002.516666666666
+ },
+ {
+  "file": "game58_write_+0.2.jpg",
+  "frame": 420163,
+  "t_sec": 7002.716666666666
+ },
+ {
+  "file": "game58_write_+1.0.jpg",
+  "frame": 420211,
+  "t_sec": 7003.516666666666
+ },
+ {
+  "file": "game45_write_-1.0.jpg",
+  "frame": 378456,
+  "t_sec": 6307.6
+ },
+ {
+  "file": "game45_write_-0.2.jpg",
+  "frame": 378504,
+  "t_sec": 6308.4
+ },
+ {
+  "file": "game45_write_+0.0.jpg",
+  "frame": 378516,
+  "t_sec": 6308.6
+ },
+ {
+  "file": "game45_write_+0.2.jpg",
+  "frame": 378528,
+  "t_sec": 6308.8
+ },
+ {
+  "file": "game45_write_+1.0.jpg",
+  "frame": 378576,
+  "t_sec": 6309.6
+ },
+ {
+  "file": "game13_write_-1.0.jpg",
+  "frame": 264982,
+  "t_sec": 4416.366666666667
+ },
+ {
+  "file": "game13_write_-0.2.jpg",
+  "frame": 265030,
+  "t_sec": 4417.166666666667
+ },
+ {
+  "file": "game13_write_+0.0.jpg",
+  "frame": 265042,
+  "t_sec": 4417.366666666667
+ },
+ {
+  "file": "game13_write_+0.2.jpg",
+  "frame": 265054,
+  "t_sec": 4417.566666666667
+ },
+ {
+  "file": "game13_write_+1.0.jpg",
+  "frame": 265102,
+  "t_sec": 4418.366666666667
+ },
+ {
+  "file": "game45_later_-1.0.jpg",
+  "frame": 382692,
+  "t_sec": 6378.2
+ },
+ {
+  "file": "game45_later_-0.2.jpg",
+  "frame": 382740,
+  "t_sec": 6379.0
+ },
+ {
+  "file": "game45_later_+0.0.jpg",
+  "frame": 382752,
+  "t_sec": 6379.2
+ },
+ {
+  "file": "game45_later_+0.2.jpg",
+  "frame": 382764,
+  "t_sec": 6379.4
+ },
+ {
+  "file": "game45_later_+1.0.jpg",
+  "frame": 382812,
+  "t_sec": 6380.2
+ }
+]

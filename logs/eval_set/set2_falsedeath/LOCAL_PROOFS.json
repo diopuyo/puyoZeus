@@ -1,0 +1,300 @@
+[
+ {
+  "game": 13,
+  "incoming": 81,
+  "hands": 2,
+  "queue": [
+   1,
+   4,
+   1,
+   1
+  ],
+  "palette": [
+   1,
+   3,
+   4,
+   5
+  ],
+  "visible_edits": [
+   [
+    1,
+    1,
+    0
+   ]
+  ],
+  "proofs": {
+   "original": {
+    "board_dead": false,
+    "dead": true,
+    "reason": "post_counter_upper_bound",
+    "nodes": 7,
+    "pruned": 6
+   },
+   "unknown_queue": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 3,
+    "pruned": 0
+   },
+   "plus_two_hands": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 4,
+    "pruned": 0
+   },
+   "visible_cell_corrected": {
+    "board_dead": false,
+    "dead": true,
+    "reason": "post_counter_upper_bound",
+    "nodes": 9,
+    "pruned": 8
+   }
+  }
+ },
+ {
+  "game": 15,
+  "incoming": 501,
+  "hands": 1,
+  "queue": [
+   1,
+   1,
+   3,
+   3
+  ],
+  "palette": [
+   1,
+   3,
+   4,
+   5
+  ],
+  "visible_edits": [],
+  "proofs": {
+   "original": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 12,
+    "pruned": 0
+   },
+   "unknown_queue": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 8,
+    "pruned": 0
+   },
+   "plus_two_hands": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 12,
+    "pruned": 0
+   }
+  }
+ },
+ {
+  "game": 41,
+  "incoming": 282,
+  "hands": 1,
+  "queue": [
+   3,
+   1,
+   3,
+   5
+  ],
+  "palette": [
+   1,
+   2,
+   3,
+   5
+  ],
+  "visible_edits": [],
+  "proofs": {
+   "original": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 51,
+    "pruned": 42
+   },
+   "unknown_queue": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 50,
+    "pruned": 41
+   },
+   "plus_two_hands": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 108,
+    "pruned": 97
+   }
+  }
+ },
+ {
+  "game": 43,
+  "incoming": 53,
+  "hands": 1,
+  "queue": [
+   1,
+   1,
+   1,
+   5
+  ],
+  "palette": [
+   1,
+   2,
+   4,
+   5
+  ],
+  "visible_edits": [
+   [
+    3,
+    2,
+    2
+   ]
+  ],
+  "proofs": {
+   "original": {
+    "board_dead": false,
+    "dead": true,
+    "reason": "post_counter_upper_bound",
+    "nodes": 1,
+    "pruned": 0
+   },
+   "unknown_queue": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 1,
+    "pruned": 0
+   },
+   "plus_two_hands": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 3,
+    "pruned": 0
+   },
+   "visible_cell_corrected": {
+    "board_dead": false,
+    "dead": true,
+    "reason": "post_counter_upper_bound",
+    "nodes": 1,
+    "pruned": 0
+   }
+  }
+ },
+ {
+  "game": 45,
+  "incoming": 14,
+  "hands": 8,
+  "queue": [
+   3,
+   5,
+   5,
+   2
+  ],
+  "palette": [
+   1,
+   2,
+   3,
+   5
+  ],
+  "visible_edits": [
+   [
+    1,
+    2,
+    0
+   ]
+  ],
+  "proofs": {
+   "original": {
+    "board_dead": true,
+    "dead": false,
+    "reason": "invalid_bound_input",
+    "nodes": 0,
+    "pruned": 0
+   },
+   "unknown_queue": {
+    "board_dead": true,
+    "dead": false,
+    "reason": "invalid_bound_input",
+    "nodes": 0,
+    "pruned": 0
+   },
+   "plus_two_hands": {
+    "board_dead": true,
+    "dead": false,
+    "reason": "invalid_bound_input",
+    "nodes": 0,
+    "pruned": 0
+   },
+   "visible_cell_corrected": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 25,
+    "pruned": 0
+   }
+  }
+ },
+ {
+  "game": 58,
+  "incoming": 313,
+  "hands": 4,
+  "queue": [
+   5,
+   3,
+   2,
+   2
+  ],
+  "palette": [
+   2,
+   3,
+   4,
+   5
+  ],
+  "visible_edits": [
+   [
+    1,
+    2,
+    0
+   ]
+  ],
+  "proofs": {
+   "original": {
+    "board_dead": true,
+    "dead": false,
+    "reason": "invalid_bound_input",
+    "nodes": 0,
+    "pruned": 0
+   },
+   "unknown_queue": {
+    "board_dead": true,
+    "dead": false,
+    "reason": "invalid_bound_input",
+    "nodes": 0,
+    "pruned": 0
+   },
+   "plus_two_hands": {
+    "board_dead": true,
+    "dead": false,
+    "reason": "invalid_bound_input",
+    "nodes": 0,
+    "pruned": 0
+   },
+   "visible_cell_corrected": {
+    "board_dead": false,
+    "dead": false,
+    "reason": "optimistic_survivor",
+    "nodes": 163,
+    "pruned": 149
+   }
+  }
+ }
+]

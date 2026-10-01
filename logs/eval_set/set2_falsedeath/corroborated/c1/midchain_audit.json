@@ -1,0 +1,28 @@
+{
+  "candidates": 3,
+  "accepted": 0,
+  "accepted_chains": 0,
+  "next_mismatch": 1,
+  "final_mismatch": 0,
+  "final_unresolved": 0,
+  "skipped": {
+    "unknown_or_floating": 504,
+    "no_remaining_chain": 82,
+    "missing_formula": 11
+  },
+  "rows": [
+    {
+      "game": 2,
+      "side": "1P",
+      "chain_id": 5,
+      "candidate_sec": 180.86666666666667,
+      "t_sec": 186.0,
+      "next_count": 6,
+      "observed_count": 9,
+      "observed_score": 36800,
+      "expected_score": 11140,
+      "predicted_final_score": 36800,
+      "outcome": "next_mismatch"
+    }
+  ]
+}

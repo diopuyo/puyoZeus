@@ -1,0 +1,45 @@
+{
+  "candidates": 6,
+  "accepted": 2,
+  "accepted_chains": 2,
+  "next_mismatch": 0,
+  "final_mismatch": 0,
+  "final_unresolved": 0,
+  "skipped": {
+    "unknown_or_floating": 537,
+    "no_remaining_chain": 89,
+    "missing_formula": 14
+  },
+  "rows": [
+    {
+      "game": 3,
+      "side": "2P",
+      "chain_id": 3,
+      "candidate_sec": 1016.2166666666667,
+      "t_sec": 1016.3166666666667,
+      "next_count": 2,
+      "observed_count": 2,
+      "observed_score": 700,
+      "expected_score": 700,
+      "predicted_final_score": 6640,
+      "outcome": "accepted",
+      "final_score": 6640,
+      "final_mismatch": false
+    },
+    {
+      "game": 3,
+      "side": "1P",
+      "chain_id": 4,
+      "candidate_sec": 1023.0833333333334,
+      "t_sec": 1023.2166666666667,
+      "next_count": 7,
+      "observed_count": 7,
+      "observed_score": 16940,
+      "expected_score": 16940,
+      "predicted_final_score": 96920,
+      "outcome": "accepted",
+      "final_score": 96920,
+      "final_mismatch": false
+    }
+  ]
+}

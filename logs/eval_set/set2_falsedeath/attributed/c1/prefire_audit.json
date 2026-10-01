@@ -1,0 +1,8454 @@
+{
+  "rows": [
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 1,
+      "trigger_sec": 1.4,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.4174998796079308e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 2,
+      "trigger_sec": 6.8,
+      "reason": "palette",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            9,
+            9,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            9,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        ],
+        "start_sec": 5.6,
+        "end_sec": 6.766666666666667,
+        "frames": 36
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 4.492099833441898e-05
+    },
+    {
+      "game": 0,
+      "side": "2P",
+      "chain_id": 3,
+      "trigger_sec": 9.0,
+      "reason": "palette",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          [
+            9,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            9,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            9,
+            9,
+            9
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            9,
+            2,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            2,
+            2,
+            2
+          ]
+        ],
+        "start_sec": 8.533333333333333,
+        "end_sec": 8.633333333333333,
+        "frames": 4
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 3.8587997551076114e-05
+    },
+    {
+      "game": 0,
+      "side": "2P",
+      "chain_id": 5,
+      "trigger_sec": 13.633333333333333,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.5915997209958732e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 7,
+      "trigger_sec": 22.2,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.6162004612851888e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 8,
+      "trigger_sec": 27.566666666666666,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.635400258237496e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 9,
+      "trigger_sec": 32.93333333333333,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.5340003301389515e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 10,
+      "trigger_sec": 38.3,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.566999708302319e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 11,
+      "trigger_sec": 43.666666666666664,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 2.1921994630247355e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 12,
+      "trigger_sec": 49.03333333333333,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.7909005691763014e-05
+    },
+    {
+      "game": 0,
+      "side": "2P",
+      "chain_id": 13,
+      "trigger_sec": 49.53333333333333,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.7835998733062297e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 15,
+      "trigger_sec": 59.766666666666666,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.812600385164842e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 16,
+      "trigger_sec": 65.13333333333334,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.8523998733144253e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 17,
+      "trigger_sec": 70.5,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.8645994714461267e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 18,
+      "trigger_sec": 75.86666666666666,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.760899613145739e-05
+    },
+    {
+      "game": 0,
+      "side": "1P",
+      "chain_id": 20,
+      "trigger_sec": 84.7,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 2.0006998965982348e-05
+    },
+    {
+      "game": 1,
+      "side": "1P",
+      "chain_id": 1,
+      "trigger_sec": 89.73333333333333,
+      "reason": "no_landed_window",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": "no_landed_window",
+        "board": null
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 1.5841993445064873e-05
+    },
+    {
+      "game": 1,
+      "side": "1P",
+      "chain_id": 2,
+      "trigger_sec": 94.7,
+      "reason": "missing_first_formula",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            3,
+            4,
+            0,
+            0
+          ],
+          [
+            0,
+            2,
+            4,
+            3,
+            0,
+            0
+          ],
+          [
+            4,
+            4,
+            3,
+            1,
+            0,
+            0
+          ]
+        ],
+        "start_sec": 93.9,
+        "end_sec": 94.33333333333334,
+        "frames": 14
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.00031090999982552603
+    },
+    {
+      "game": 1,
+      "side": "1P",
+      "chain_id": 3,
+      "trigger_sec": 113.33333333333333,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            2,
+            4,
+            0,
+            3
+          ],
+          [
+            1,
+            4,
+            2,
+            4,
+            4,
+            4
+          ],
+          [
+            4,
+            3,
+            4,
+            1,
+            1,
+            3
+          ],
+          [
+            3,
+            2,
+            4,
+            1,
+            3,
+            2
+          ],
+          [
+            3,
+            3,
+            2,
+            4,
+            3,
+            2
+          ],
+          [
+            4,
+            4,
+            1,
+            4,
+            1,
+            2
+          ],
+          [
+            4,
+            1,
+            1,
+            3,
+            1,
+            1
+          ],
+          [
+            2,
+            4,
+            3,
+            4,
+            4,
+            2
+          ],
+          [
+            2,
+            2,
+            4,
+            3,
+            3,
+            4
+          ],
+          [
+            4,
+            4,
+            3,
+            1,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 112.8,
+        "end_sec": 113.3,
+        "frames": 16
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 40.0,
+      "observations": [
+        {
+          "t_sec": 113.33333333333333,
+          "count": 1,
+          "score": 40,
+          "remaining": 1,
+          "filter_sec": 2.9939983505755663e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.00028950400155736133
+    },
+    {
+      "game": 1,
+      "side": "2P",
+      "chain_id": 4,
+      "trigger_sec": 113.56666666666666,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            4,
+            4,
+            0
+          ],
+          [
+            0,
+            0,
+            2,
+            3,
+            4,
+            0
+          ],
+          [
+            2,
+            4,
+            1,
+            4,
+            4,
+            0
+          ],
+          [
+            1,
+            1,
+            4,
+            3,
+            3,
+            2
+          ],
+          [
+            1,
+            2,
+            1,
+            4,
+            3,
+            2
+          ],
+          [
+            4,
+            4,
+            2,
+            4,
+            1,
+            1
+          ],
+          [
+            4,
+            1,
+            1,
+            1,
+            3,
+            1
+          ],
+          [
+            3,
+            4,
+            2,
+            4,
+            3,
+            3
+          ],
+          [
+            3,
+            3,
+            4,
+            2,
+            4,
+            4
+          ],
+          [
+            4,
+            4,
+            2,
+            2,
+            4,
+            3
+          ]
+        ],
+        "start_sec": 113.06666666666666,
+        "end_sec": 113.53333333333333,
+        "frames": 15
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 420.0,
+      "observations": [
+        {
+          "t_sec": 113.56666666666666,
+          "count": 1,
+          "score": 100,
+          "remaining": 1,
+          "filter_sec": 2.630004019010812e-06
+        },
+        {
+          "t_sec": 114.9,
+          "count": 2,
+          "score": 420,
+          "remaining": 1,
+          "filter_sec": 4.898000042885542e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.00027518600109033287
+    },
+    {
+      "game": 1,
+      "side": "1P",
+      "chain_id": 5,
+      "trigger_sec": 115.6,
+      "reason": "missing_first_formula",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            2,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            4,
+            2,
+            1,
+            3,
+            3
+          ],
+          [
+            4,
+            3,
+            4,
+            1,
+            1,
+            3
+          ],
+          [
+            3,
+            2,
+            4,
+            1,
+            3,
+            2
+          ],
+          [
+            3,
+            3,
+            2,
+            4,
+            3,
+            2
+          ],
+          [
+            4,
+            4,
+            1,
+            4,
+            1,
+            2
+          ],
+          [
+            4,
+            1,
+            1,
+            3,
+            1,
+            1
+          ],
+          [
+            2,
+            4,
+            3,
+            4,
+            4,
+            2
+          ],
+          [
+            2,
+            2,
+            4,
+            3,
+            3,
+            4
+          ],
+          [
+            4,
+            4,
+            3,
+            1,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 114.93333333333332,
+        "end_sec": 115.33333333333333,
+        "frames": 13
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.00026289899687981233
+    },
+    {
+      "game": 1,
+      "side": "1P",
+      "chain_id": 6,
+      "trigger_sec": 123.7,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            3,
+            4,
+            0
+          ],
+          [
+            1,
+            1,
+            2,
+            1,
+            4,
+            2
+          ],
+          [
+            1,
+            4,
+            2,
+            1,
+            3,
+            2
+          ],
+          [
+            4,
+            3,
+            4,
+            1,
+            3,
+            4
+          ],
+          [
+            3,
+            2,
+            4,
+            1,
+            3,
+            2
+          ],
+          [
+            3,
+            3,
+            2,
+            4,
+            4,
+            2
+          ],
+          [
+            4,
+            4,
+            1,
+            4,
+            1,
+            2
+          ],
+          [
+            4,
+            1,
+            1,
+            3,
+            1,
+            1
+          ],
+          [
+            2,
+            4,
+            3,
+            4,
+            4,
+            2
+          ],
+          [
+            2,
+            2,
+            4,
+            3,
+            3,
+            4
+          ],
+          [
+            4,
+            4,
+            3,
+            1,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 123.26666666666667,
+        "end_sec": 123.66666666666667,
+        "frames": 13
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 3200.0,
+      "observations": [
+        {
+          "t_sec": 123.7,
+          "count": 1,
+          "score": 40,
+          "remaining": 1,
+          "filter_sec": 2.97200313070789e-06
+        },
+        {
+          "t_sec": 125.13333333333334,
+          "count": 2,
+          "score": 360,
+          "remaining": 1,
+          "filter_sec": 4.412999260239303e-06
+        },
+        {
+          "t_sec": 126.53333333333333,
+          "count": 3,
+          "score": 1500,
+          "remaining": 1,
+          "filter_sec": 4.696004907600582e-06
+        },
+        {
+          "t_sec": 127.86666666666666,
+          "count": 4,
+          "score": 3200,
+          "remaining": 1,
+          "filter_sec": 4.462999640963972e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.00044499799696495757
+    },
+    {
+      "game": 1,
+      "side": "2P",
+      "chain_id": 7,
+      "trigger_sec": 123.9,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            10,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            4,
+            2,
+            3,
+            4,
+            4,
+            1
+          ],
+          [
+            3,
+            3,
+            9,
+            4,
+            4,
+            1
+          ],
+          [
+            1,
+            2,
+            2,
+            2,
+            3,
+            9
+          ],
+          [
+            2,
+            4,
+            1,
+            4,
+            3,
+            3
+          ],
+          [
+            1,
+            1,
+            4,
+            1,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            1,
+            4,
+            4,
+            2
+          ],
+          [
+            4,
+            4,
+            2,
+            4,
+            1,
+            1
+          ],
+          [
+            4,
+            1,
+            1,
+            1,
+            3,
+            1
+          ],
+          [
+            3,
+            4,
+            2,
+            4,
+            3,
+            3
+          ],
+          [
+            3,
+            3,
+            4,
+            2,
+            4,
+            4
+          ],
+          [
+            4,
+            4,
+            2,
+            2,
+            4,
+            3
+          ]
+        ],
+        "start_sec": 123.63333333333334,
+        "end_sec": 123.86666666666667,
+        "frames": 8
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 80.0,
+      "observations": [
+        {
+          "t_sec": 123.9,
+          "count": 1,
+          "score": 40,
+          "remaining": 5,
+          "filter_sec": 3.072003892157227e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 5,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0015691869994043373
+    },
+    {
+      "game": 1,
+      "side": "2P",
+      "chain_id": 8,
+      "trigger_sec": 128.7,
+      "reason": "origin_difference",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            10,
+            10,
+            0,
+            10,
+            10
+          ],
+          [
+            2,
+            4,
+            4,
+            0,
+            1,
+            2
+          ],
+          [
+            4,
+            2,
+            3,
+            0,
+            3,
+            1
+          ],
+          [
+            3,
+            3,
+            3,
+            0,
+            1,
+            1
+          ],
+          [
+            1,
+            2,
+            2,
+            2,
+            3,
+            9
+          ],
+          [
+            2,
+            4,
+            1,
+            4,
+            3,
+            3
+          ],
+          [
+            1,
+            1,
+            4,
+            1,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            1,
+            4,
+            4,
+            2
+          ],
+          [
+            4,
+            4,
+            2,
+            4,
+            1,
+            1
+          ],
+          [
+            4,
+            1,
+            1,
+            1,
+            3,
+            1
+          ],
+          [
+            3,
+            4,
+            2,
+            4,
+            3,
+            3
+          ],
+          [
+            3,
+            3,
+            4,
+            2,
+            4,
+            4
+          ],
+          [
+            4,
+            4,
+            2,
+            2,
+            4,
+            3
+          ]
+        ],
+        "start_sec": 128.36666666666665,
+        "end_sec": 128.6,
+        "frames": 8
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 0.00013186500291340053
+    },
+    {
+      "game": 2,
+      "side": "1P",
+      "chain_id": 1,
+      "trigger_sec": 144.8,
+      "reason": "missing_first_formula",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            4,
+            1,
+            3,
+            3,
+            0
+          ],
+          [
+            1,
+            1,
+            3,
+            5,
+            5,
+            0
+          ]
+        ],
+        "start_sec": 143.70000000000002,
+        "end_sec": 144.33333333333334,
+        "frames": 20
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0002890269970521331
+    },
+    {
+      "game": 2,
+      "side": "2P",
+      "chain_id": 2,
+      "trigger_sec": 162.0,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            5,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            1,
+            4,
+            5,
+            0,
+            4
+          ],
+          [
+            1,
+            4,
+            3,
+            5,
+            5,
+            5
+          ],
+          [
+            1,
+            4,
+            4,
+            1,
+            1,
+            5
+          ],
+          [
+            5,
+            5,
+            1,
+            3,
+            1,
+            1
+          ],
+          [
+            3,
+            3,
+            4,
+            3,
+            4,
+            1
+          ],
+          [
+            3,
+            4,
+            1,
+            4,
+            5,
+            4
+          ],
+          [
+            4,
+            1,
+            3,
+            4,
+            5,
+            4
+          ],
+          [
+            4,
+            4,
+            1,
+            3,
+            3,
+            3
+          ],
+          [
+            1,
+            1,
+            3,
+            5,
+            5,
+            5
+          ]
+        ],
+        "start_sec": 161.66666666666666,
+        "end_sec": 161.96666666666667,
+        "frames": 10
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 1020.0,
+      "observations": [
+        {
+          "t_sec": 162.0,
+          "count": 1,
+          "score": 700,
+          "remaining": 1,
+          "filter_sec": 2.487999154254794e-06
+        },
+        {
+          "t_sec": 163.43333333333334,
+          "count": 2,
+          "score": 1020,
+          "remaining": 1,
+          "filter_sec": 4.902998625766486e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0002882150001823902
+    },
+    {
+      "game": 2,
+      "side": "1P",
+      "chain_id": 3,
+      "trigger_sec": 164.66666666666666,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": true,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            10,
+            10,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            3,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            4,
+            1,
+            0,
+            5,
+            0
+          ],
+          [
+            3,
+            5,
+            5,
+            0,
+            1,
+            1
+          ],
+          [
+            1,
+            4,
+            5,
+            5,
+            5,
+            5
+          ],
+          [
+            4,
+            4,
+            3,
+            4,
+            1,
+            5
+          ],
+          [
+            3,
+            3,
+            4,
+            5,
+            5,
+            3
+          ],
+          [
+            4,
+            1,
+            3,
+            4,
+            5,
+            1
+          ],
+          [
+            4,
+            1,
+            3,
+            4,
+            1,
+            1
+          ],
+          [
+            3,
+            3,
+            5,
+            1,
+            4,
+            4
+          ],
+          [
+            4,
+            1,
+            3,
+            4,
+            5,
+            4
+          ],
+          [
+            4,
+            4,
+            1,
+            3,
+            3,
+            3
+          ],
+          [
+            1,
+            1,
+            3,
+            5,
+            5,
+            5
+          ]
+        ],
+        "start_sec": 163.83333333333331,
+        "end_sec": 163.93333333333334,
+        "frames": 4
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 1458.3826429980277,
+      "observations": [
+        {
+          "t_sec": 164.66666666666666,
+          "count": 1,
+          "score": 280,
+          "remaining": 120,
+          "filter_sec": 5.973399674985558e-05
+        },
+        {
+          "t_sec": 166.06666666666666,
+          "count": 2,
+          "score": 1160,
+          "remaining": 0,
+          "filter_sec": 9.758099622558802e-05
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "3": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "3": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "3": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 120,
+      "retained_mass": 0.990234375,
+      "enumeration_sec": 0.045891926005424466,
+      "withdraw_sec": 166.06666666666666,
+      "withdraw_reason": "stage_score"
+    },
+    {
+      "game": 2,
+      "side": "2P",
+      "chain_id": 4,
+      "trigger_sec": 169.0,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            10,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            5,
+            5,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            5,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            1,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            4,
+            3,
+            3,
+            0,
+            0
+          ],
+          [
+            1,
+            4,
+            4,
+            3,
+            0,
+            0
+          ],
+          [
+            5,
+            5,
+            1,
+            3,
+            4,
+            0
+          ],
+          [
+            3,
+            3,
+            4,
+            3,
+            4,
+            0
+          ],
+          [
+            3,
+            4,
+            1,
+            4,
+            5,
+            0
+          ],
+          [
+            4,
+            1,
+            3,
+            4,
+            5,
+            0
+          ],
+          [
+            4,
+            4,
+            1,
+            3,
+            3,
+            3
+          ],
+          [
+            1,
+            1,
+            3,
+            5,
+            5,
+            5
+          ]
+        ],
+        "start_sec": 168.76666666666668,
+        "end_sec": 168.96666666666667,
+        "frames": 7
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 6650.0,
+      "observations": [
+        {
+          "t_sec": 169.0,
+          "count": 1,
+          "score": 100,
+          "remaining": 5,
+          "filter_sec": 3.3670003176666796e-06
+        },
+        {
+          "t_sec": 170.33333333333334,
+          "count": 2,
+          "score": 600,
+          "remaining": 5,
+          "filter_sec": 7.071997970342636e-06
+        },
+        {
+          "t_sec": 171.73333333333332,
+          "count": 3,
+          "score": 1500,
+          "remaining": 5,
+          "filter_sec": 6.670998118352145e-06
+        },
+        {
+          "t_sec": 173.1,
+          "count": 4,
+          "score": 2780,
+          "remaining": 5,
+          "filter_sec": 6.868001946713775e-06
+        },
+        {
+          "t_sec": 174.5,
+          "count": 5,
+          "score": 6080,
+          "remaining": 4,
+          "filter_sec": 8.087998139671981e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "3": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 5,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0021513710016733967
+    },
+    {
+      "game": 2,
+      "side": "1P",
+      "chain_id": 5,
+      "trigger_sec": 174.03333333333333,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": true,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            0,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            5,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            3,
+            1,
+            3,
+            0,
+            0
+          ],
+          [
+            1,
+            3,
+            1,
+            3,
+            5,
+            3
+          ],
+          [
+            4,
+            1,
+            3,
+            3,
+            5,
+            1
+          ],
+          [
+            4,
+            1,
+            3,
+            5,
+            1,
+            1
+          ],
+          [
+            3,
+            3,
+            5,
+            1,
+            4,
+            4
+          ],
+          [
+            4,
+            1,
+            3,
+            4,
+            5,
+            4
+          ],
+          [
+            4,
+            4,
+            1,
+            3,
+            3,
+            3
+          ],
+          [
+            1,
+            1,
+            3,
+            5,
+            5,
+            5
+          ]
+        ],
+        "start_sec": 173.7,
+        "end_sec": 174.0,
+        "frames": 10
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 36800.0,
+      "observations": [
+        {
+          "t_sec": 174.03333333333333,
+          "count": 1,
+          "score": 100,
+          "remaining": 1,
+          "filter_sec": 3.6239944165572524e-06
+        },
+        {
+          "t_sec": 175.4,
+          "count": 2,
+          "score": 600,
+          "remaining": 1,
+          "filter_sec": 3.7950012483634055e-06
+        },
+        {
+          "t_sec": 176.9,
+          "count": 3,
+          "score": 1240,
+          "remaining": 1,
+          "filter_sec": 5.3679978009313345e-06
+        },
+        {
+          "t_sec": 178.3,
+          "count": 4,
+          "score": 2940,
+          "remaining": 1,
+          "filter_sec": 4.437999450601637e-06
+        },
+        {
+          "t_sec": 179.73333333333332,
+          "count": 5,
+          "score": 6240,
+          "remaining": 1,
+          "filter_sec": 6.171998393256217e-06
+        },
+        {
+          "t_sec": 186.0,
+          "count": 9,
+          "score": 36800,
+          "remaining": 0,
+          "filter_sec": 5.9820013120770454e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0005043470009695739,
+      "withdraw_sec": 186.0,
+      "withdraw_reason": "stage_gap"
+    },
+    {
+      "game": 2,
+      "side": "2P",
+      "chain_id": 6,
+      "trigger_sec": 186.63333333333333,
+      "reason": "first_score",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            3,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            5,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            5,
+            1,
+            0,
+            0,
+            4,
+            4
+          ],
+          [
+            5,
+            1,
+            0,
+            3,
+            1,
+            4
+          ],
+          [
+            1,
+            3,
+            0,
+            3,
+            5,
+            3
+          ],
+          [
+            1,
+            3,
+            0,
+            5,
+            4,
+            3
+          ],
+          [
+            5,
+            4,
+            4,
+            5,
+            4,
+            1
+          ],
+          [
+            5,
+            4,
+            1,
+            4,
+            5,
+            1
+          ],
+          [
+            4,
+            1,
+            3,
+            4,
+            5,
+            1
+          ],
+          [
+            4,
+            4,
+            1,
+            3,
+            3,
+            3
+          ],
+          [
+            1,
+            1,
+            3,
+            5,
+            5,
+            5
+          ]
+        ],
+        "start_sec": 185.63333333333333,
+        "end_sec": 185.9,
+        "frames": 9
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "3": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 5,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0007181510009104386
+    },
+    {
+      "game": 2,
+      "side": "1P",
+      "chain_id": 7,
+      "trigger_sec": 201.06666666666666,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            10,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            3,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            5,
+            1,
+            0,
+            4,
+            0
+          ],
+          [
+            0,
+            4,
+            5,
+            0,
+            4,
+            0
+          ],
+          [
+            5,
+            4,
+            4,
+            4,
+            5,
+            0
+          ],
+          [
+            5,
+            1,
+            1,
+            3,
+            5,
+            0
+          ],
+          [
+            1,
+            4,
+            1,
+            5,
+            4,
+            0
+          ],
+          [
+            1,
+            4,
+            3,
+            5,
+            3,
+            0
+          ],
+          [
+            4,
+            3,
+            3,
+            5,
+            3,
+            0
+          ],
+          [
+            4,
+            1,
+            5,
+            3,
+            5,
+            0
+          ],
+          [
+            3,
+            1,
+            1,
+            5,
+            5,
+            3
+          ]
+        ],
+        "start_sec": 200.93333333333334,
+        "end_sec": 201.03333333333333,
+        "frames": 4
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 28053.75,
+      "observations": [
+        {
+          "t_sec": 201.06666666666666,
+          "count": 1,
+          "score": 40,
+          "remaining": 5,
+          "filter_sec": 3.815002855844796e-06
+        },
+        {
+          "t_sec": 202.46666666666667,
+          "count": 2,
+          "score": 360,
+          "remaining": 5,
+          "filter_sec": 6.189999112393707e-06
+        },
+        {
+          "t_sec": 203.8,
+          "count": 3,
+          "score": 1500,
+          "remaining": 5,
+          "filter_sec": 9.040006261784583e-06
+        },
+        {
+          "t_sec": 205.2,
+          "count": 4,
+          "score": 2780,
+          "remaining": 4,
+          "filter_sec": 9.611998393666e-06
+        },
+        {
+          "t_sec": 206.6,
+          "count": 5,
+          "score": 6080,
+          "remaining": 4,
+          "filter_sec": 5.7779980124905705e-06
+        },
+        {
+          "t_sec": 207.96666666666667,
+          "count": 6,
+          "score": 10980,
+          "remaining": 3,
+          "filter_sec": 8.418006473220885e-06
+        },
+        {
+          "t_sec": 209.3,
+          "count": 7,
+          "score": 16100,
+          "remaining": 2,
+          "filter_sec": 8.364993846043944e-06
+        },
+        {
+          "t_sec": 210.66666666666666,
+          "count": 8,
+          "score": 30950,
+          "remaining": 2,
+          "filter_sec": 5.652997060678899e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "3": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 5,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0021629449984175153
+    },
+    {
+      "game": 2,
+      "side": "2P",
+      "chain_id": 8,
+      "trigger_sec": 211.8,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            3,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            1,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            1,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            5,
+            3
+          ],
+          [
+            0,
+            0,
+            4,
+            4,
+            5,
+            5
+          ],
+          [
+            0,
+            0,
+            4,
+            5,
+            1,
+            4
+          ],
+          [
+            0,
+            0,
+            5,
+            4,
+            1,
+            4
+          ],
+          [
+            0,
+            5,
+            1,
+            3,
+            1,
+            3
+          ],
+          [
+            0,
+            4,
+            1,
+            3,
+            4,
+            3
+          ]
+        ],
+        "start_sec": 211.5,
+        "end_sec": 211.73333333333335,
+        "frames": 8
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 10540.0,
+      "observations": [
+        {
+          "t_sec": 211.8,
+          "count": 1,
+          "score": 100,
+          "remaining": 1,
+          "filter_sec": 2.548003976698965e-06
+        },
+        {
+          "t_sec": 213.16666666666666,
+          "count": 2,
+          "score": 420,
+          "remaining": 1,
+          "filter_sec": 4.039000486955047e-06
+        },
+        {
+          "t_sec": 214.56666666666666,
+          "count": 3,
+          "score": 1060,
+          "remaining": 1,
+          "filter_sec": 4.372996045276523e-06
+        },
+        {
+          "t_sec": 215.93333333333334,
+          "count": 4,
+          "score": 2340,
+          "remaining": 1,
+          "filter_sec": 3.929002559743822e-06
+        },
+        {
+          "t_sec": 217.36666666666667,
+          "count": 5,
+          "score": 5640,
+          "remaining": 1,
+          "filter_sec": 4.009001713711768e-06
+        },
+        {
+          "t_sec": 218.73333333333332,
+          "count": 6,
+          "score": 10540,
+          "remaining": 1,
+          "filter_sec": 4.098998033441603e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0008072720011114143
+    },
+    {
+      "game": 3,
+      "side": "1P",
+      "chain_id": 1,
+      "trigger_sec": 239.23333333333332,
+      "reason": "missing_first_formula",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            2,
+            2,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            3,
+            1,
+            3,
+            4,
+            0
+          ],
+          [
+            4,
+            4,
+            3,
+            1,
+            1,
+            0
+          ],
+          [
+            3,
+            3,
+            1,
+            4,
+            4,
+            0
+          ]
+        ],
+        "start_sec": 238.36666666666665,
+        "end_sec": 238.96666666666664,
+        "frames": 19
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.00033777500357246026
+    },
+    {
+      "game": 3,
+      "side": "1P",
+      "chain_id": 3,
+      "trigger_sec": 256.03333333333336,
+      "reason": "missing_first_formula",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            10,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            2,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            0,
+            4,
+            4,
+            0
+          ],
+          [
+            4,
+            1,
+            2,
+            3,
+            3,
+            2
+          ],
+          [
+            1,
+            3,
+            1,
+            4,
+            3,
+            3
+          ],
+          [
+            3,
+            3,
+            1,
+            4,
+            4,
+            3
+          ],
+          [
+            1,
+            4,
+            4,
+            1,
+            2,
+            2
+          ],
+          [
+            1,
+            1,
+            4,
+            1,
+            3,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            3,
+            2,
+            3
+          ],
+          [
+            4,
+            3,
+            1,
+            3,
+            4,
+            4
+          ],
+          [
+            4,
+            4,
+            3,
+            1,
+            1,
+            1
+          ],
+          [
+            3,
+            3,
+            1,
+            4,
+            4,
+            3
+          ]
+        ],
+        "start_sec": 255.83333333333337,
+        "end_sec": 255.93333333333337,
+        "frames": 4
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 5,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0014200930017977953
+    },
+    {
+      "game": 3,
+      "side": "2P",
+      "chain_id": 5,
+      "trigger_sec": 260.26666666666665,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            10,
+            0,
+            10,
+            10,
+            10
+          ],
+          [
+            3,
+            3,
+            0,
+            3,
+            3,
+            1
+          ],
+          [
+            2,
+            3,
+            4,
+            4,
+            4,
+            4
+          ],
+          [
+            2,
+            2,
+            3,
+            1,
+            3,
+            3
+          ],
+          [
+            3,
+            4,
+            2,
+            2,
+            3,
+            4
+          ],
+          [
+            3,
+            1,
+            2,
+            1,
+            4,
+            2
+          ],
+          [
+            1,
+            4,
+            3,
+            1,
+            4,
+            4
+          ],
+          [
+            1,
+            3,
+            4,
+            4,
+            2,
+            2
+          ],
+          [
+            1,
+            3,
+            4,
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            2,
+            1,
+            3,
+            1
+          ],
+          [
+            4,
+            3,
+            1,
+            3,
+            4,
+            3
+          ],
+          [
+            4,
+            4,
+            3,
+            1,
+            1,
+            4
+          ],
+          [
+            3,
+            3,
+            1,
+            4,
+            4,
+            3
+          ]
+        ],
+        "start_sec": 259.93333333333334,
+        "end_sec": 260.2333333333333,
+        "frames": 10
+      },
+      "used": true,
+      "uses": 8,
+      "predicted_score": 800.2366863905326,
+      "observations": [
+        {
+          "t_sec": 260.26666666666665,
+          "count": 1,
+          "score": 40,
+          "remaining": 585,
+          "filter_sec": 8.453500049654394e-05
+        },
+        {
+          "t_sec": 261.6,
+          "count": 2,
+          "score": 540,
+          "remaining": 356,
+          "filter_sec": 0.00046049900265643373
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "1": 1.0
+        }
+      ],
+      "enumerated": 585,
+      "retained_mass": 0.990234375,
+      "enumeration_sec": 0.19319017700036056
+    },
+    {
+      "game": 3,
+      "side": "1P",
+      "chain_id": 6,
+      "trigger_sec": 260.8333333333333,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            1,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            1,
+            2,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            3,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            3,
+            1,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            4,
+            4,
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            1,
+            4,
+            1,
+            3,
+            0
+          ],
+          [
+            2,
+            2,
+            2,
+            3,
+            2,
+            3
+          ],
+          [
+            4,
+            3,
+            1,
+            3,
+            4,
+            4
+          ],
+          [
+            4,
+            4,
+            3,
+            1,
+            1,
+            1
+          ],
+          [
+            3,
+            3,
+            1,
+            4,
+            4,
+            3
+          ]
+        ],
+        "start_sec": 260.3666666666667,
+        "end_sec": 260.79999999999995,
+        "frames": 14
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 6820.0,
+      "observations": [
+        {
+          "t_sec": 260.8333333333333,
+          "count": 1,
+          "score": 100,
+          "remaining": 1,
+          "filter_sec": 2.458000381011516e-06
+        },
+        {
+          "t_sec": 262.2,
+          "count": 2,
+          "score": 420,
+          "remaining": 1,
+          "filter_sec": 5.22199843544513e-06
+        },
+        {
+          "t_sec": 263.56666666666666,
+          "count": 3,
+          "score": 1820,
+          "remaining": 1,
+          "filter_sec": 5.335001333151013e-06
+        },
+        {
+          "t_sec": 264.96666666666664,
+          "count": 4,
+          "score": 3520,
+          "remaining": 1,
+          "filter_sec": 4.427005478646606e-06
+        },
+        {
+          "t_sec": 266.3333333333333,
+          "count": 5,
+          "score": 6820,
+          "remaining": 1,
+          "filter_sec": 4.893001460004598e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0002801220034598373
+    },
+    {
+      "game": 4,
+      "side": "1P",
+      "chain_id": 1,
+      "trigger_sec": 284.0,
+      "reason": "missing_first_formula",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            0,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            5,
+            0,
+            3,
+            0
+          ],
+          [
+            2,
+            2,
+            3,
+            0,
+            5,
+            0
+          ],
+          [
+            3,
+            3,
+            5,
+            3,
+            3,
+            2
+          ]
+        ],
+        "start_sec": 283.26666666666665,
+        "end_sec": 283.7,
+        "frames": 14
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.00045013600174570456
+    },
+    {
+      "game": 4,
+      "side": "1P",
+      "chain_id": 2,
+      "trigger_sec": 287.73333333333335,
+      "reason": "missing_first_formula",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            4,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            3,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            4,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            3,
+            5,
+            2,
+            3,
+            2
+          ],
+          [
+            2,
+            2,
+            3,
+            5,
+            5,
+            3
+          ],
+          [
+            3,
+            3,
+            5,
+            3,
+            3,
+            2
+          ]
+        ],
+        "start_sec": 287.1666666666667,
+        "end_sec": 287.6,
+        "frames": 14
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0003069030062761158
+    },
+    {
+      "game": 4,
+      "side": "2P",
+      "chain_id": 3,
+      "trigger_sec": 295.3,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            5,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            2,
+            0,
+            0,
+            0,
+            2
+          ],
+          [
+            2,
+            2,
+            0,
+            5,
+            4,
+            2
+          ],
+          [
+            4,
+            5,
+            5,
+            3,
+            3,
+            3
+          ],
+          [
+            3,
+            3,
+            5,
+            2,
+            2,
+            3
+          ],
+          [
+            3,
+            2,
+            4,
+            2,
+            4,
+            2
+          ],
+          [
+            2,
+            3,
+            5,
+            4,
+            3,
+            2
+          ],
+          [
+            2,
+            2,
+            3,
+            5,
+            5,
+            2
+          ],
+          [
+            3,
+            3,
+            5,
+            3,
+            3,
+            4
+          ]
+        ],
+        "start_sec": 295.03333333333336,
+        "end_sec": 295.26666666666665,
+        "frames": 8
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 1960.0,
+      "observations": [
+        {
+          "t_sec": 295.3,
+          "count": 1,
+          "score": 40,
+          "remaining": 1,
+          "filter_sec": 2.61999957729131e-06
+        },
+        {
+          "t_sec": 296.6666666666667,
+          "count": 2,
+          "score": 1960,
+          "remaining": 1,
+          "filter_sec": 5.843001417815685e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0003432969970162958
+    },
+    {
+      "game": 4,
+      "side": "1P",
+      "chain_id": 4,
+      "trigger_sec": 297.43333333333334,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            0,
+            0,
+            0,
+            0,
+            4
+          ],
+          [
+            2,
+            3,
+            0,
+            0,
+            0,
+            4
+          ],
+          [
+            2,
+            3,
+            0,
+            3,
+            3,
+            4
+          ],
+          [
+            3,
+            5,
+            5,
+            5,
+            4,
+            2
+          ],
+          [
+            2,
+            3,
+            5,
+            2,
+            2,
+            4
+          ],
+          [
+            2,
+            4,
+            3,
+            2,
+            4,
+            5
+          ],
+          [
+            2,
+            3,
+            3,
+            4,
+            5,
+            5
+          ],
+          [
+            4,
+            4,
+            4,
+            5,
+            2,
+            2
+          ],
+          [
+            2,
+            3,
+            5,
+            2,
+            3,
+            2
+          ],
+          [
+            2,
+            2,
+            3,
+            5,
+            5,
+            3
+          ],
+          [
+            3,
+            3,
+            5,
+            3,
+            3,
+            2
+          ]
+        ],
+        "start_sec": 297.1333333333333,
+        "end_sec": 297.3333333333333,
+        "frames": 7
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 5100.0,
+      "observations": [
+        {
+          "t_sec": 297.43333333333334,
+          "count": 1,
+          "score": 40,
+          "remaining": 1,
+          "filter_sec": 2.515000232961029e-06
+        },
+        {
+          "t_sec": 298.9,
+          "count": 2,
+          "score": 360,
+          "remaining": 1,
+          "filter_sec": 5.317000614013523e-06
+        },
+        {
+          "t_sec": 300.23333333333335,
+          "count": 3,
+          "score": 1260,
+          "remaining": 1,
+          "filter_sec": 4.63199830846861e-06
+        },
+        {
+          "t_sec": 301.7,
+          "count": 4,
+          "score": 2540,
+          "remaining": 1,
+          "filter_sec": 5.083995347376913e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.00031698900420451537
+    },
+    {
+      "game": 4,
+      "side": "2P",
+      "chain_id": 5,
+      "trigger_sec": 302.8333333333333,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            2,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            5,
+            3,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            2,
+            2,
+            3,
+            0,
+            0
+          ],
+          [
+            4,
+            2,
+            4,
+            5,
+            0,
+            0
+          ],
+          [
+            3,
+            3,
+            4,
+            5,
+            4,
+            0
+          ],
+          [
+            3,
+            2,
+            4,
+            5,
+            4,
+            0
+          ],
+          [
+            2,
+            3,
+            5,
+            4,
+            3,
+            3
+          ],
+          [
+            2,
+            2,
+            3,
+            5,
+            5,
+            3
+          ],
+          [
+            3,
+            3,
+            5,
+            3,
+            3,
+            4
+          ]
+        ],
+        "start_sec": 302.5,
+        "end_sec": 302.76666666666665,
+        "frames": 9
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 22210.0,
+      "observations": [
+        {
+          "t_sec": 302.8333333333333,
+          "count": 1,
+          "score": 40,
+          "remaining": 1,
+          "filter_sec": 2.4420005502179265e-06
+        },
+        {
+          "t_sec": 304.2,
+          "count": 2,
+          "score": 360,
+          "remaining": 1,
+          "filter_sec": 3.6569981602951884e-06
+        },
+        {
+          "t_sec": 305.6,
+          "count": 3,
+          "score": 1000,
+          "remaining": 1,
+          "filter_sec": 4.90999809699133e-06
+        },
+        {
+          "t_sec": 307.0,
+          "count": 4,
+          "score": 2700,
+          "remaining": 1,
+          "filter_sec": 5.218003934714943e-06
+        },
+        {
+          "t_sec": 308.3666666666667,
+          "count": 5,
+          "score": 5260,
+          "remaining": 1,
+          "filter_sec": 5.120004061609507e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.000326022993249353
+    },
+    {
+      "game": 4,
+      "side": "1P",
+      "chain_id": 6,
+      "trigger_sec": 304.3,
+      "reason": "missing_first_formula",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            3,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            3,
+            4,
+            2
+          ],
+          [
+            0,
+            0,
+            0,
+            2,
+            2,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            2,
+            4,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            4,
+            5,
+            5
+          ],
+          [
+            0,
+            4,
+            4,
+            5,
+            2,
+            2
+          ],
+          [
+            2,
+            3,
+            5,
+            2,
+            3,
+            2
+          ],
+          [
+            2,
+            2,
+            3,
+            5,
+            5,
+            3
+          ],
+          [
+            3,
+            3,
+            5,
+            3,
+            3,
+            2
+          ]
+        ],
+        "start_sec": 303.90000000000003,
+        "end_sec": 304.06666666666666,
+        "frames": 6
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0002735329981078394
+    },
+    {
+      "game": 4,
+      "side": "2P",
+      "chain_id": 8,
+      "trigger_sec": 316.5,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            2,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            4,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            3,
+            3,
+            3,
+            0
+          ],
+          [
+            0,
+            5,
+            2,
+            5,
+            3,
+            0
+          ],
+          [
+            0,
+            3,
+            4,
+            5,
+            4,
+            0
+          ],
+          [
+            0,
+            2,
+            2,
+            5,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 316.1666666666667,
+        "end_sec": 316.46666666666664,
+        "frames": 10
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 40.0,
+      "observations": [
+        {
+          "t_sec": 316.5,
+          "count": 1,
+          "score": 40,
+          "remaining": 1,
+          "filter_sec": 2.8670037863776088e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0003119259999948554
+    },
+    {
+      "game": 4,
+      "side": "1P",
+      "chain_id": 9,
+      "trigger_sec": 323.7,
+      "reason": "missing_first_formula",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            5,
+            5,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            5,
+            3,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            2,
+            3,
+            3
+          ],
+          [
+            2,
+            0,
+            0,
+            3,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 323.3333333333333,
+        "end_sec": 323.66666666666663,
+        "frames": 11
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0002724410005612299
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 1,
+      "trigger_sec": 347.3666666666667,
+      "reason": "missing_first_formula",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            4,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            5,
+            4,
+            1,
+            0,
+            2
+          ],
+          [
+            1,
+            5,
+            5,
+            2,
+            5,
+            2
+          ],
+          [
+            4,
+            1,
+            2,
+            4,
+            4,
+            5
+          ],
+          [
+            4,
+            4,
+            1,
+            2,
+            2,
+            5
+          ],
+          [
+            1,
+            1,
+            2,
+            5,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 346.4666666666667,
+        "end_sec": 347.1,
+        "frames": 20
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0003058869988308288
+    },
+    {
+      "game": 5,
+      "side": "2P",
+      "chain_id": 3,
+      "trigger_sec": 355.43333333333334,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            4,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            5,
+            1,
+            1,
+            5,
+            0
+          ],
+          [
+            5,
+            4,
+            5,
+            1,
+            4,
+            4
+          ],
+          [
+            4,
+            4,
+            5,
+            1,
+            1,
+            4
+          ],
+          [
+            5,
+            5,
+            1,
+            5,
+            2,
+            5
+          ],
+          [
+            5,
+            1,
+            1,
+            4,
+            4,
+            5
+          ],
+          [
+            2,
+            2,
+            2,
+            4,
+            2,
+            2
+          ],
+          [
+            4,
+            1,
+            5,
+            2,
+            4,
+            2
+          ],
+          [
+            4,
+            4,
+            1,
+            5,
+            5,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            5,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 355.23333333333335,
+        "end_sec": 355.4,
+        "frames": 6
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 100.0,
+      "observations": [
+        {
+          "t_sec": 355.43333333333334,
+          "count": 1,
+          "score": 100,
+          "remaining": 1,
+          "filter_sec": 2.345994289498776e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0003244619947508909
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 4,
+      "trigger_sec": 358.46666666666664,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            10
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            5
+          ],
+          [
+            9,
+            2,
+            0,
+            9,
+            1,
+            4
+          ],
+          [
+            5,
+            5,
+            5,
+            4,
+            1,
+            4
+          ],
+          [
+            5,
+            9,
+            4,
+            4,
+            2,
+            4
+          ],
+          [
+            5,
+            1,
+            5,
+            5,
+            4,
+            1
+          ],
+          [
+            1,
+            4,
+            4,
+            5,
+            1,
+            1
+          ],
+          [
+            1,
+            5,
+            4,
+            1,
+            2,
+            2
+          ],
+          [
+            1,
+            5,
+            5,
+            2,
+            5,
+            2
+          ],
+          [
+            4,
+            1,
+            2,
+            4,
+            4,
+            5
+          ],
+          [
+            4,
+            4,
+            1,
+            2,
+            2,
+            5
+          ],
+          [
+            1,
+            1,
+            2,
+            5,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 358.1333333333333,
+        "end_sec": 358.4333333333333,
+        "frames": 10
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 100.0,
+      "observations": [
+        {
+          "t_sec": 358.46666666666664,
+          "count": 1,
+          "score": 100,
+          "remaining": 5,
+          "filter_sec": 3.4710028558038175e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        }
+      ],
+      "enumerated": 5,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0010105109977303073
+    },
+    {
+      "game": 5,
+      "side": "2P",
+      "chain_id": 5,
+      "trigger_sec": 359.6666666666667,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            2,
+            0,
+            0,
+            0,
+            5
+          ],
+          [
+            1,
+            4,
+            0,
+            0,
+            0,
+            5
+          ],
+          [
+            1,
+            5,
+            5,
+            0,
+            2,
+            5
+          ],
+          [
+            5,
+            4,
+            5,
+            0,
+            5,
+            4
+          ],
+          [
+            4,
+            4,
+            5,
+            0,
+            4,
+            4
+          ],
+          [
+            5,
+            5,
+            1,
+            5,
+            2,
+            5
+          ],
+          [
+            5,
+            1,
+            1,
+            4,
+            4,
+            5
+          ],
+          [
+            2,
+            2,
+            2,
+            4,
+            2,
+            2
+          ],
+          [
+            4,
+            1,
+            5,
+            2,
+            4,
+            2
+          ],
+          [
+            4,
+            4,
+            1,
+            5,
+            5,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            5,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 359.1666666666667,
+        "end_sec": 359.2666666666667,
+        "frames": 4
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 5660.0,
+      "observations": [
+        {
+          "t_sec": 359.6666666666667,
+          "count": 1,
+          "score": 40,
+          "remaining": 1,
+          "filter_sec": 2.4080000002868474e-06
+        },
+        {
+          "t_sec": 361.0,
+          "count": 2,
+          "score": 360,
+          "remaining": 1,
+          "filter_sec": 4.242996510583907e-06
+        },
+        {
+          "t_sec": 362.4,
+          "count": 3,
+          "score": 1000,
+          "remaining": 1,
+          "filter_sec": 4.756999260280281e-06
+        },
+        {
+          "t_sec": 363.8,
+          "count": 4,
+          "score": 3100,
+          "remaining": 1,
+          "filter_sec": 5.181995220482349e-06
+        },
+        {
+          "t_sec": 365.1333333333333,
+          "count": 5,
+          "score": 5660,
+          "remaining": 1,
+          "filter_sec": 4.747002094518393e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0003043990000151098
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 6,
+      "trigger_sec": 364.53333333333336,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            10,
+            0,
+            10,
+            10,
+            10
+          ],
+          [
+            0,
+            5,
+            0,
+            1,
+            4,
+            5
+          ],
+          [
+            0,
+            5,
+            5,
+            1,
+            1,
+            5
+          ],
+          [
+            0,
+            1,
+            4,
+            9,
+            1,
+            4
+          ],
+          [
+            0,
+            2,
+            5,
+            4,
+            1,
+            4
+          ],
+          [
+            5,
+            2,
+            4,
+            4,
+            2,
+            4
+          ],
+          [
+            5,
+            1,
+            5,
+            5,
+            4,
+            1
+          ],
+          [
+            1,
+            4,
+            4,
+            5,
+            1,
+            1
+          ],
+          [
+            1,
+            5,
+            4,
+            1,
+            2,
+            2
+          ],
+          [
+            1,
+            5,
+            5,
+            2,
+            5,
+            2
+          ],
+          [
+            4,
+            1,
+            2,
+            4,
+            4,
+            5
+          ],
+          [
+            4,
+            4,
+            1,
+            2,
+            2,
+            5
+          ],
+          [
+            1,
+            1,
+            2,
+            5,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 364.1666666666667,
+        "end_sec": 364.5,
+        "frames": 11
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 7816.883629191322,
+      "observations": [
+        {
+          "t_sec": 364.53333333333336,
+          "count": 1,
+          "score": 100,
+          "remaining": 585,
+          "filter_sec": 7.97769971541129e-05
+        },
+        {
+          "t_sec": 365.8666666666667,
+          "count": 2,
+          "score": 1140,
+          "remaining": 92,
+          "filter_sec": 0.0005780249994131736
+        },
+        {
+          "t_sec": 367.6333333333333,
+          "count": 3,
+          "score": 1780,
+          "remaining": 71,
+          "filter_sec": 7.660899427719414e-05
+        },
+        {
+          "t_sec": 368.73333333333335,
+          "count": 4,
+          "score": 3060,
+          "remaining": 46,
+          "filter_sec": 6.982099876040593e-05
+        },
+        {
+          "t_sec": 370.1333333333333,
+          "count": 5,
+          "score": 8420,
+          "remaining": 46,
+          "filter_sec": 2.9050002922303975e-05
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        }
+      ],
+      "enumerated": 585,
+      "retained_mass": 0.990234375,
+      "enumeration_sec": 0.24731166200217558
+    },
+    {
+      "game": 5,
+      "side": "2P",
+      "chain_id": 7,
+      "trigger_sec": 366.93333333333334,
+      "reason": "origin_difference",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            2,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            5,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            4,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            5,
+            2,
+            5
+          ],
+          [
+            0,
+            2,
+            2,
+            4,
+            4,
+            5
+          ],
+          [
+            0,
+            4,
+            4,
+            4,
+            2,
+            2
+          ],
+          [
+            4,
+            1,
+            5,
+            2,
+            4,
+            2
+          ],
+          [
+            4,
+            4,
+            1,
+            5,
+            5,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            5,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 365.93333333333334,
+        "end_sec": 366.0,
+        "frames": 3
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 0.00013505300012184307
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 8,
+      "trigger_sec": 373.6,
+      "reason": "first_score",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            5
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            5
+          ],
+          [
+            0,
+            5,
+            0,
+            0,
+            2,
+            5
+          ],
+          [
+            2,
+            5,
+            0,
+            0,
+            4,
+            1
+          ],
+          [
+            5,
+            1,
+            0,
+            0,
+            1,
+            1
+          ],
+          [
+            5,
+            2,
+            2,
+            1,
+            2,
+            2
+          ],
+          [
+            5,
+            2,
+            1,
+            2,
+            5,
+            2
+          ],
+          [
+            4,
+            1,
+            2,
+            4,
+            4,
+            5
+          ],
+          [
+            4,
+            4,
+            1,
+            2,
+            2,
+            5
+          ],
+          [
+            1,
+            1,
+            2,
+            5,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 372.83333333333337,
+        "end_sec": 372.9666666666667,
+        "frames": 5
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0003477220016065985
+    },
+    {
+      "game": 5,
+      "side": "2P",
+      "chain_id": 9,
+      "trigger_sec": 375.4,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            5,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            5,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            2,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            5,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            4,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            2,
+            5
+          ],
+          [
+            0,
+            5,
+            5,
+            5,
+            4,
+            5
+          ]
+        ],
+        "start_sec": 375.1333333333333,
+        "end_sec": 375.3666666666666,
+        "frames": 8
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 100.0,
+      "observations": [
+        {
+          "t_sec": 375.4,
+          "count": 1,
+          "score": 100,
+          "remaining": 1,
+          "filter_sec": 2.282002242282033e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.00027936599508393556
+    },
+    {
+      "game": 5,
+      "side": "2P",
+      "chain_id": 10,
+      "trigger_sec": 384.6,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            10
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            9
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            9
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            9,
+            9
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            9,
+            1
+          ],
+          [
+            0,
+            2,
+            0,
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            1,
+            4
+          ],
+          [
+            0,
+            1,
+            5,
+            0,
+            1,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            5,
+            2,
+            5
+          ],
+          [
+            2,
+            9,
+            2,
+            9,
+            5,
+            4
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            4,
+            4
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            2,
+            5
+          ],
+          [
+            9,
+            5,
+            5,
+            5,
+            4,
+            5
+          ]
+        ],
+        "start_sec": 384.33333333333337,
+        "end_sec": 384.56666666666666,
+        "frames": 8
+      },
+      "used": true,
+      "uses": 31,
+      "predicted_score": 360.0,
+      "observations": [
+        {
+          "t_sec": 384.6,
+          "count": 1,
+          "score": 40,
+          "remaining": 5,
+          "filter_sec": 3.2079988159239292e-06
+        },
+        {
+          "t_sec": 386.03333333333336,
+          "count": 2,
+          "score": 360,
+          "remaining": 5,
+          "filter_sec": 5.824003892485052e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        }
+      ],
+      "enumerated": 5,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0008566819960833527
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 11,
+      "trigger_sec": 391.6333333333333,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            4,
+            9,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            4,
+            1,
+            4,
+            0
+          ],
+          [
+            9,
+            0,
+            9,
+            2,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            2,
+            4,
+            4,
+            0
+          ],
+          [
+            2,
+            9,
+            2,
+            1,
+            9,
+            0
+          ],
+          [
+            4,
+            4,
+            2,
+            1,
+            5,
+            0
+          ],
+          [
+            4,
+            2,
+            1,
+            5,
+            2,
+            0
+          ],
+          [
+            2,
+            2,
+            1,
+            5,
+            4,
+            1
+          ],
+          [
+            4,
+            1,
+            2,
+            4,
+            4,
+            9
+          ],
+          [
+            4,
+            4,
+            1,
+            2,
+            2,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            5,
+            4,
+            4
+          ]
+        ],
+        "start_sec": 391.09999999999997,
+        "end_sec": 391.59999999999997,
+        "frames": 16
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 42820.0,
+      "observations": [
+        {
+          "t_sec": 391.6333333333333,
+          "count": 1,
+          "score": 40,
+          "remaining": 1,
+          "filter_sec": 2.5190020096488297e-06
+        },
+        {
+          "t_sec": 392.96666666666664,
+          "count": 2,
+          "score": 360,
+          "remaining": 1,
+          "filter_sec": 4.8720030463300645e-06
+        },
+        {
+          "t_sec": 394.4,
+          "count": 3,
+          "score": 1260,
+          "remaining": 1,
+          "filter_sec": 4.597997758537531e-06
+        },
+        {
+          "t_sec": 395.8333333333333,
+          "count": 4,
+          "score": 2540,
+          "remaining": 1,
+          "filter_sec": 5.0960006774403155e-06
+        },
+        {
+          "t_sec": 397.2,
+          "count": 5,
+          "score": 5100,
+          "remaining": 1,
+          "filter_sec": 5.189001967664808e-06
+        },
+        {
+          "t_sec": 398.6333333333333,
+          "count": 6,
+          "score": 8940,
+          "remaining": 1,
+          "filter_sec": 4.330999217927456e-06
+        },
+        {
+          "t_sec": 399.96666666666664,
+          "count": 7,
+          "score": 14060,
+          "remaining": 1,
+          "filter_sec": 4.769994120579213e-06
+        },
+        {
+          "t_sec": 401.3333333333333,
+          "count": 8,
+          "score": 23840,
+          "remaining": 1,
+          "filter_sec": 4.752000677399337e-06
+        },
+        {
+          "t_sec": 402.73333333333335,
+          "count": 9,
+          "score": 31520,
+          "remaining": 1,
+          "filter_sec": 4.98400186188519e-06
+        },
+        {
+          "t_sec": 404.1333333333333,
+          "count": 10,
+          "score": 42820,
+          "remaining": 1,
+          "filter_sec": 5.7349971029907465e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0003447090057306923
+    },
+    {
+      "game": 5,
+      "side": "2P",
+      "chain_id": 12,
+      "trigger_sec": 404.1666666666667,
+      "reason": "first_score",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            0,
+            0,
+            10,
+            10,
+            10
+          ],
+          [
+            2,
+            0,
+            0,
+            2,
+            4,
+            9
+          ],
+          [
+            2,
+            0,
+            0,
+            1,
+            5,
+            9
+          ],
+          [
+            4,
+            5,
+            0,
+            2,
+            9,
+            9
+          ],
+          [
+            4,
+            2,
+            0,
+            2,
+            9,
+            1
+          ],
+          [
+            4,
+            1,
+            0,
+            2,
+            1,
+            2
+          ],
+          [
+            2,
+            4,
+            2,
+            4,
+            1,
+            4
+          ],
+          [
+            2,
+            4,
+            5,
+            4,
+            1,
+            4
+          ],
+          [
+            4,
+            1,
+            5,
+            4,
+            2,
+            5
+          ],
+          [
+            4,
+            4,
+            1,
+            5,
+            5,
+            4
+          ],
+          [
+            1,
+            1,
+            5,
+            9,
+            4,
+            4
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            2,
+            5
+          ],
+          [
+            9,
+            5,
+            5,
+            5,
+            4,
+            5
+          ]
+        ],
+        "start_sec": 403.3666666666667,
+        "end_sec": 403.43333333333334,
+        "frames": 3
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        }
+      ],
+      "enumerated": 585,
+      "retained_mass": 0.990234375,
+      "enumeration_sec": 0.03980778199911583
+    },
+    {
+      "game": 6,
+      "side": "2P",
+      "chain_id": 1,
+      "trigger_sec": 433.3666666666667,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            4,
+            0,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            4,
+            0,
+            3
+          ],
+          [
+            4,
+            3,
+            1,
+            1,
+            4,
+            1
+          ],
+          [
+            4,
+            3,
+            4,
+            1,
+            1,
+            3
+          ],
+          [
+            4,
+            1,
+            1,
+            4,
+            4,
+            3
+          ],
+          [
+            3,
+            3,
+            1,
+            4,
+            1,
+            3
+          ],
+          [
+            4,
+            1,
+            4,
+            3,
+            4,
+            4
+          ],
+          [
+            1,
+            2,
+            3,
+            2,
+            3,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            3,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            3,
+            3,
+            2,
+            3
+          ]
+        ],
+        "start_sec": 433.06666666666666,
+        "end_sec": 433.3333333333333,
+        "frames": 9
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 880.0,
+      "observations": [
+        {
+          "t_sec": 433.3666666666667,
+          "count": 1,
+          "score": 40,
+          "remaining": 1,
+          "filter_sec": 2.7039932319894433e-06
+        },
+        {
+          "t_sec": 434.73333333333335,
+          "count": 2,
+          "score": 880,
+          "remaining": 1,
+          "filter_sec": 5.191999662201852e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0003085310017922893
+    },
+    {
+      "game": 6,
+      "side": "1P",
+      "chain_id": 2,
+      "trigger_sec": 434.6666666666667,
+      "reason": "first_score",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            4,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            4,
+            0,
+            0
+          ],
+          [
+            4,
+            0,
+            0,
+            3,
+            1,
+            1
+          ],
+          [
+            3,
+            4,
+            4,
+            3,
+            3,
+            1
+          ],
+          [
+            1,
+            1,
+            3,
+            1,
+            4,
+            4
+          ],
+          [
+            1,
+            3,
+            3,
+            1,
+            4,
+            3
+          ],
+          [
+            4,
+            4,
+            4,
+            1,
+            3,
+            4
+          ],
+          [
+            1,
+            2,
+            3,
+            2,
+            4,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            3,
+            2,
+            3
+          ],
+          [
+            2,
+            2,
+            3,
+            3,
+            2,
+            2
+          ]
+        ],
+        "start_sec": 433.7666666666667,
+        "end_sec": 434.03333333333336,
+        "frames": 9
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0002917519959737547
+    },
+    {
+      "game": 6,
+      "side": "2P",
+      "chain_id": 3,
+      "trigger_sec": 440.1666666666667,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            3,
+            3,
+            3
+          ],
+          [
+            4,
+            3,
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            4,
+            3,
+            2,
+            2,
+            1,
+            3
+          ],
+          [
+            4,
+            1,
+            1,
+            2,
+            1,
+            3
+          ],
+          [
+            3,
+            3,
+            1,
+            4,
+            1,
+            3
+          ],
+          [
+            4,
+            1,
+            4,
+            3,
+            4,
+            4
+          ],
+          [
+            1,
+            2,
+            3,
+            2,
+            3,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            3,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            3,
+            3,
+            2,
+            3
+          ]
+        ],
+        "start_sec": 439.8666666666667,
+        "end_sec": 440.1333333333333,
+        "frames": 9
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 1080.0,
+      "observations": [
+        {
+          "t_sec": 440.1666666666667,
+          "count": 1,
+          "score": 1080,
+          "remaining": 1,
+          "filter_sec": 2.944994776044041e-06
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 1,
+      "retained_mass": 1.0,
+      "enumeration_sec": 0.0003585840022424236
+    },
+    {
+      "game": 6,
+      "side": "1P",
+      "chain_id": 4,
+      "trigger_sec": 442.73333333333335,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            0,
+            10,
+            0,
+            10,
+            10,
+            10
+          ],
+          [
+            0,
+            9,
+            0,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            9,
+            3,
+            2,
+            9,
+            3
+          ],
+          [
+            9,
+            9,
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            9,
+            1,
+            9,
+            4,
+            4,
+            9
+          ],
+          [
+            4,
+            2,
+            9,
+            2,
+            9,
+            1
+          ],
+          [
+            3,
+            9,
+            9,
+            9,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            3,
+            1,
+            4,
+            4
+          ],
+          [
+            1,
+            3,
+            3,
+            1,
+            4,
+            3
+          ],
+          [
+            4,
+            4,
+            4,
+            1,
+            3,
+            4
+          ],
+          [
+            1,
+            2,
+            3,
+            2,
+            4,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            3,
+            2,
+            3
+          ],
+          [
+            2,
+            2,
+            3,
+            3,
+            2,
+            2
+          ]
+        ],
+        "start_sec": 442.33333333333337,
+        "end_sec": 442.7,
+        "frames": 12
+      },
+      "used": true,
+      "uses": 34,
+      "predicted_score": 40.0,
+      "observations": [
+        {
+          "t_sec": 442.73333333333335,
+          "count": 1,
+          "score": 40,
+          "remaining": 585,
+          "filter_sec": 0.00010777499846881256
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        }
+      ],
+      "enumerated": 585,
+      "retained_mass": 0.990234375,
+      "enumeration_sec": 0.23070157899928745
+    },
+    {
+      "game": 6,
+      "side": "1P",
+      "chain_id": 5,
+      "trigger_sec": 446.3,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            10,
+            10,
+            10,
+            0,
+            0
+          ],
+          [
+            1,
+            3,
+            2,
+            9,
+            0,
+            0
+          ],
+          [
+            9,
+            9,
+            2,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            9,
+            2,
+            2,
+            9,
+            9
+          ],
+          [
+            9,
+            1,
+            3,
+            4,
+            4,
+            3
+          ],
+          [
+            4,
+            2,
+            9,
+            2,
+            9,
+            1
+          ],
+          [
+            3,
+            9,
+            9,
+            9,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            3,
+            1,
+            4,
+            4
+          ],
+          [
+            1,
+            3,
+            3,
+            1,
+            4,
+            3
+          ],
+          [
+            4,
+            4,
+            4,
+            1,
+            3,
+            4
+          ],
+          [
+            1,
+            2,
+            3,
+            2,
+            4,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            3,
+            2,
+            3
+          ],
+          [
+            2,
+            2,
+            3,
+            3,
+            2,
+            2
+          ]
+        ],
+        "start_sec": 445.76666666666665,
+        "end_sec": 446.26666666666665,
+        "frames": 16
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 54.11735700197239,
+      "observations": [
+        {
+          "t_sec": 446.3,
+          "count": 1,
+          "score": 40,
+          "remaining": 585,
+          "filter_sec": 0.00012909500219393522
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 585,
+      "retained_mass": 0.990234375,
+      "enumeration_sec": 0.10825073700107168
+    },
+    {
+      "game": 6,
+      "side": "1P",
+      "chain_id": 6,
+      "trigger_sec": 449.8333333333333,
+      "reason": null,
+      "accepted": true,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            10,
+            0,
+            0,
+            10,
+            0
+          ],
+          [
+            1,
+            1,
+            0,
+            0,
+            4,
+            0
+          ],
+          [
+            9,
+            1,
+            0,
+            3,
+            4,
+            9
+          ],
+          [
+            9,
+            3,
+            3,
+            3,
+            9,
+            9
+          ],
+          [
+            9,
+            1,
+            3,
+            4,
+            4,
+            3
+          ],
+          [
+            4,
+            2,
+            9,
+            2,
+            9,
+            1
+          ],
+          [
+            3,
+            9,
+            9,
+            9,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            3,
+            1,
+            4,
+            4
+          ],
+          [
+            1,
+            3,
+            3,
+            1,
+            4,
+            3
+          ],
+          [
+            4,
+            4,
+            4,
+            1,
+            3,
+            4
+          ],
+          [
+            1,
+            2,
+            3,
+            2,
+            4,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            3,
+            2,
+            3
+          ],
+          [
+            2,
+            2,
+            3,
+            3,
+            2,
+            2
+          ]
+        ],
+        "start_sec": 449.5,
+        "end_sec": 449.79999999999995,
+        "frames": 10
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": 1168.500986193294,
+      "observations": [
+        {
+          "t_sec": 449.8333333333333,
+          "count": 1,
+          "score": 100,
+          "remaining": 120,
+          "filter_sec": 1.942300150403753e-05
+        },
+        {
+          "t_sec": 451.6666666666667,
+          "count": 2,
+          "score": 980,
+          "remaining": 61,
+          "filter_sec": 8.900700049707666e-05
+        }
+      ],
+      "hidden_distributions": [
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 120,
+      "retained_mass": 0.990234375,
+      "enumeration_sec": 0.03210083099838812
+    },
+    {
+      "game": 6,
+      "side": "2P",
+      "chain_id": 7,
+      "trigger_sec": 449.8333333333333,
+      "reason": "origin_difference",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            10,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            3,
+            0,
+            2,
+            0,
+            0
+          ],
+          [
+            2,
+            2,
+            9,
+            2,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            3,
+            3,
+            3,
+            0
+          ],
+          [
+            4,
+            3,
+            1,
+            3,
+            2,
+            0
+          ],
+          [
+            4,
+            3,
+            2,
+            2,
+            4,
+            3
+          ],
+          [
+            4,
+            1,
+            1,
+            2,
+            4,
+            3
+          ],
+          [
+            3,
+            3,
+            1,
+            4,
+            1,
+            3
+          ],
+          [
+            4,
+            1,
+            4,
+            3,
+            4,
+            4
+          ],
+          [
+            1,
+            2,
+            3,
+            2,
+            3,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            3,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            3,
+            3,
+            2,
+            3
+          ]
+        ],
+        "start_sec": 449.59999999999997,
+        "end_sec": 449.79999999999995,
+        "frames": 7
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [],
+      "enumerated": 0,
+      "retained_mass": 0.0,
+      "enumeration_sec": 0.00014508400636259466
+    },
+    {
+      "game": 6,
+      "side": "1P",
+      "chain_id": 8,
+      "trigger_sec": 459.4,
+      "reason": "first_score",
+      "accepted": false,
+      "withdrawn": false,
+      "snapshot": {
+        "reason": null,
+        "board": [
+          [
+            10,
+            0,
+            10,
+            0,
+            10,
+            0
+          ],
+          [
+            4,
+            0,
+            2,
+            0,
+            3,
+            0
+          ],
+          [
+            3,
+            0,
+            2,
+            0,
+            2,
+            3
+          ],
+          [
+            3,
+            0,
+            2,
+            4,
+            2,
+            3
+          ],
+          [
+            1,
+            1,
+            4,
+            4,
+            2,
+            3
+          ],
+          [
+            4,
+            2,
+            2,
+            2,
+            3,
+            1
+          ],
+          [
+            3,
+            9,
+            9,
+            9,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            3,
+            1,
+            4,
+            4
+          ],
+          [
+            1,
+            3,
+            3,
+            1,
+            4,
+            3
+          ],
+          [
+            4,
+            4,
+            4,
+            1,
+            3,
+            4
+          ],
+          [
+            1,
+            2,
+            3,
+            2,
+            4,
+            4
+          ],
+          [
+            1,
+            1,
+            2,
+            3,
+            2,
+            3
+          ],
+          [
+            2,
+            2,
+            3,
+            3,
+            2,
+            2
+          ]
+        ],
+        "start_sec": 458.5,
+        "end_sec": 458.56666666666666,
+        "frames": 3
+      },
+      "used": false,
+      "uses": 0,
+      "predicted_score": null,
+      "observations": [],
+      "hidden_distributions": [
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 1.0
+        },
+        {
+          "0": 0.5,
+          "1": 0.125,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125
+        },
+        {
+          "0": 1.0
+        }
+      ],
+      "enumerated": 120,
+      "retained_mass": 0.990234375,
+      "enumeration_sec": 0.009266835004382301
+    }
+  ],
+  "calibration": [
+    {
+      "prior_sec": 8.633333333333333,
+      "observed_sec": 9.0,
+      "col": 0,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "2P"
+    },
+    {
+      "prior_sec": 8.633333333333333,
+      "observed_sec": 9.0,
+      "col": 1,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "2P"
+    },
+    {
+      "prior_sec": 8.633333333333333,
+      "observed_sec": 9.0,
+      "col": 2,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "2P"
+    },
+    {
+      "prior_sec": 8.633333333333333,
+      "observed_sec": 9.0,
+      "col": 3,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "2P"
+    },
+    {
+      "prior_sec": 8.633333333333333,
+      "observed_sec": 9.0,
+      "col": 4,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "2P"
+    },
+    {
+      "prior_sec": 8.633333333333333,
+      "observed_sec": 9.0,
+      "col": 5,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "2P"
+    },
+    {
+      "prior_sec": 8.566666666666666,
+      "observed_sec": 9.266666666666667,
+      "col": 0,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 8.566666666666666,
+      "observed_sec": 9.266666666666667,
+      "col": 1,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 8.566666666666666,
+      "observed_sec": 9.266666666666667,
+      "col": 2,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 8.566666666666666,
+      "observed_sec": 9.266666666666667,
+      "col": 3,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 8.566666666666666,
+      "observed_sec": 9.266666666666667,
+      "col": 4,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 8.566666666666666,
+      "observed_sec": 9.266666666666667,
+      "col": 5,
+      "row": 12,
+      "probs": {
+        "0": 1.0
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 1.0,
+      "hit": true,
+      "log_loss": -0.0,
+      "game": 0,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 49.166666666666664,
+      "observed_sec": 54.4,
+      "col": 0,
+      "row": 8,
+      "probs": {
+        "0": 0.5,
+        "1": 0.125,
+        "2": 0.125,
+        "3": 0.125,
+        "4": 0.125
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 0.5,
+      "hit": true,
+      "log_loss": 0.6931471805599453,
+      "game": 0,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 49.166666666666664,
+      "observed_sec": 54.4,
+      "col": 3,
+      "row": 12,
+      "probs": {
+        "0": 0.5,
+        "1": 0.125,
+        "2": 0.125,
+        "3": 0.125,
+        "4": 0.125
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 0.5,
+      "hit": true,
+      "log_loss": 0.6931471805599453,
+      "game": 0,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 49.166666666666664,
+      "observed_sec": 54.4,
+      "col": 4,
+      "row": 11,
+      "probs": {
+        "0": 0.5,
+        "1": 0.125,
+        "2": 0.125,
+        "3": 0.125,
+        "4": 0.125
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 0.5,
+      "hit": true,
+      "log_loss": 0.6931471805599453,
+      "game": 0,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 49.166666666666664,
+      "observed_sec": 54.4,
+      "col": 5,
+      "row": 12,
+      "probs": {
+        "0": 0.5,
+        "1": 0.125,
+        "2": 0.125,
+        "3": 0.125,
+        "4": 0.125
+      },
+      "actual": 3,
+      "predicted": 0,
+      "confidence": 0.5,
+      "hit": false,
+      "log_loss": 2.0794415416798357,
+      "game": 0,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 446.26666666666665,
+      "observed_sec": 447.73333333333335,
+      "col": 1,
+      "row": 2,
+      "probs": {
+        "0": 0.5,
+        "1": 0.125,
+        "2": 0.125,
+        "3": 0.125,
+        "4": 0.125
+      },
+      "actual": 1,
+      "predicted": 0,
+      "confidence": 0.5,
+      "hit": false,
+      "log_loss": 2.0794415416798357,
+      "game": 6,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 446.26666666666665,
+      "observed_sec": 447.73333333333335,
+      "col": 2,
+      "row": 3,
+      "probs": {
+        "0": 0.5,
+        "1": 0.125,
+        "2": 0.125,
+        "3": 0.125,
+        "4": 0.125
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 0.5,
+      "hit": true,
+      "log_loss": 0.6931471805599453,
+      "game": 6,
+      "side": "1P"
+    },
+    {
+      "prior_sec": 446.26666666666665,
+      "observed_sec": 447.73333333333335,
+      "col": 3,
+      "row": 3,
+      "probs": {
+        "0": 0.5,
+        "1": 0.125,
+        "2": 0.125,
+        "3": 0.125,
+        "4": 0.125
+      },
+      "actual": 0,
+      "predicted": 0,
+      "confidence": 0.5,
+      "hit": true,
+      "log_loss": 0.6931471805599453,
+      "game": 6,
+      "side": "1P"
+    }
+  ]
+}
