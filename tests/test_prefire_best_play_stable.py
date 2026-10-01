@@ -162,3 +162,18 @@ def test_no_choice_leaves_value_bit_identical(monkeypatch: pytest.MonkeyPatch) -
     overlay, layer = fake_overlay(probability=.4123456789), StableBestPlayLayer(hold_sec=0.0)
     layer.apply(overlay, 2.0, 0)
     assert overlay.tracker.probability == .4123456789 and overlay.tracker.source == 'G_fe'
+
+
+def test_latency_shows_latest_arrived_result_even_after_input_changed(counted: list) -> None:
+    overlay, layer = fake_overlay(), StableBestPlayLayer(latency_sec=.3, hold_sec=0.0)
+    layer.apply(overlay, 2.0, 0)
+    assert overlay.tracker.probability == .4                      # まだ届いていない
+    layer.restore(overlay)
+    grid = overlay._history[1][-1].board._grid.copy()
+    grid[11, 5] = 3                                                 # 相手側の盤面が変わる (新しい入力)
+    for i in range(3):
+        overlay._history[1].append(history_item(2.1 + i * FRAME, grid, (*P2, *P3)))
+    layer.apply(overlay, 2.2, 0)
+    layer.restore(overlay)
+    layer.apply(overlay, 2.31, 0)                                   # 2.0 の結果が届く (入力は変わっているが使う)
+    assert overlay.tracker.probability == .95

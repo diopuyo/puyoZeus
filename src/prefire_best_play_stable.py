@@ -95,37 +95,58 @@ class StableBestPlayLayer(BestPlayPrefireLayer):
         self._colors: set[int] = set()
         self._color_game: int | None = None
         self._hold_game: int | None = None
+        self._pending: list[tuple[float, tuple]] = []
+        self._shown_key: tuple | None = None
 
     def apply(self, overlay: Any, t_sec: float, game_idx: int) -> None:
         """毎フレーム呼ぶ。静止区間なら保持つきの最善手の値で表示値を差し替える。"""
         self.queues.update(overlay)
         if overlay._game != self._hold_game:
-            self.hold.reset()
+            self._drop()
             self._hold_game = overlay._game
         tracker = overlay.tracker
-        if tracker.current is not None or tracker.source != 'G_fe' or tracker.probability is None:
-            self.hold.reset()
-            return
         latest = self._latest(overlay)
-        if latest is None:
-            self.hold.reset()
+        if tracker.current is not None or tracker.source != 'G_fe' or tracker.probability is None or latest is None:
+            self._drop()
             return
         sides, known = self._stable_sides(latest)
         colors = self._game_colors(overlay, latest, known)
         elapsed = max(0.0, t_sec - overlay._start)
         key = (tuple((s.board._grid.tobytes(), k, s.queue.tobytes()) for s, k in zip(sides, known)),
                colors, sim.effective_rate(elapsed), overlay._game)
-        if key not in self._cache:
+        self._schedule(overlay, key, sides, elapsed, known, colors, t_sec)
+        self._show(tracker, t_sec, game_idx)
+
+    def _drop(self) -> None:
+        """撃ち合い・試合境界: 保持と、届く前の結果・表示中の結果を捨てる (撃ち合い前の盤面の結果を後で使わない)。"""
+        self.hold.reset()
+        self._pending.clear()
+        self._shown_key = None
+
+    def _schedule(self, overlay: Any, key: tuple, sides: tuple, elapsed: float, known: tuple,
+                  colors: tuple[int, ...], t_sec: float) -> None:
+        """非同期の模擬: 新しい入力の結果は計算開始から latency_sec 後に届き、届いた最新の結果を表示に使う。
+
+        届くまでの間に入力が変わっても、届いた結果は使う (実時間の作業者は最新の完了結果を出す。時刻 t までの観測だけ)。
+        計算済みの入力に戻ったときは、その結果をすぐ使う (再計算しない。まだ届いていない古い入力の結果は捨てる)。
+        """
+        if key in self._cache:
+            self._shown_key = key        # 今の入力の結果が既にある: 届く前の古い入力の結果は要らない
+            self._pending.clear()
+        else:
             started = _now_ms()
             self._cache[key] = self._compute_stable(overlay, sides, elapsed, known, colors)
             self.computes.append((t_sec, _now_ms() - started))
-            self._ready[key] = t_sec + self.latency_sec   # 非同期の結果は計算開始から latency_sec 後に届く
-        self._show(tracker, t_sec, game_idx, key)
+            self._ready[key] = t_sec + self.latency_sec
+            self._pending.append((self._ready[key], key))
+        while self._pending and self._pending[0][0] <= t_sec:
+            self._shown_key = self._pending.pop(0)[1]
 
-    def _show(self, tracker: Any, t_sec: float, game_idx: int, key: tuple) -> None:
+    def _show(self, tracker: Any, t_sec: float, game_idx: int) -> None:
         """保持を通して表示値を決め、内訳を trace に残す。"""
         p0 = tracker.probability
-        ready = t_sec >= self._ready[key]
+        key = self._shown_key
+        ready = key is not None
         best = self._cache[key] if ready else (None, None)
         value, chosen = combine(p0, best) if ready else (p0, NO_SIDE)
         hand, lethal = _decision_detail(best, chosen)
@@ -134,7 +155,8 @@ class StableBestPlayLayer(BestPlayPrefireLayer):
         self.trace.append((t_sec, game_idx, p0, shown, *(np.nan if b is None else b.value for b in best),
                            *(0 if b is None else b.hand for b in best),
                            *(False if b is None else b.lethal for b in best),
-                           chosen, hand, self.hold.accepted[0], held, shown_lethal, self._ready[key]))
+                           chosen, hand, self.hold.accepted[0], held, shown_lethal,
+                           self._ready.get(key, np.nan) if ready else np.nan))
         if shown == p0:
             return   # 補正なしなら表示も由来も書き換えない (OFF とビット一致)
         self._written = (shown, p0, tracker.source)
