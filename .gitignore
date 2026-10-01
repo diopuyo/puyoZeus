@@ -132,3 +132,6 @@ data/verify/*
 # archive / examples 除外
 archive/
 examples/
+
+# worktree内だけで使用する5Bのnativeビルド成果物
+/puyo_core.so

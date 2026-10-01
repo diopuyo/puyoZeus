@@ -1,0 +1,58 @@
+{
+  "before": {
+    "samples": 100,
+    "transitions": 94600,
+    "mismatches": 0,
+    "missed": 52
+  },
+  "after": {
+    "samples": 100,
+    "transitions": 94600,
+    "mismatches": 0,
+    "missed": 0
+  },
+  "failed_branches": 104,
+  "dropped_attack": 60,
+  "dropped_response": 64,
+  "missing_by_side": [
+    {
+      "denominator": 15276,
+      "in_hand_unassigned": 9746,
+      "next_unread_in_record": 1134,
+      "next2_unread_in_record": 1193,
+      "less_than_three_identical_frames": 9564,
+      "no_adopted_reading": 7788,
+      "before_promotion_next2_unavailable": 5941
+    },
+    {
+      "denominator": 23761,
+      "in_hand_unassigned": 18952,
+      "next_unread_in_record": 11326,
+      "next2_unread_in_record": 11460,
+      "less_than_three_identical_frames": 7294,
+      "no_adopted_reading": 16849,
+      "before_promotion_next2_unavailable": 4892
+    }
+  ],
+  "all_observation_reasons_by_side": [
+    {
+      "board_unknown": 10669,
+      "in_hand_unassigned": 23195,
+      "next_unread_in_record": 15991,
+      "next2_unread_in_record": 15722,
+      "less_than_three_identical_frames": 17759,
+      "no_adopted_reading": 21219,
+      "before_promotion_next2_unavailable": 21162
+    },
+    {
+      "in_hand_unassigned": 21275,
+      "next_unread_in_record": 14724,
+      "next2_unread_in_record": 14938,
+      "less_than_three_identical_frames": 15328,
+      "no_adopted_reading": 19312,
+      "board_unknown": 57,
+      "before_promotion_next2_unavailable": 22010
+    }
+  ],
+  "diagnostic_denominator_per_side": 60426
+}

@@ -1,0 +1,43 @@
+{
+  "source": "review",
+  "denominator": 3485,
+  "matched": 3485,
+  "all_rows_by_side": [
+    {
+      "in_hand_unassigned": 995,
+      "less_than_three_identical_frames": 1421,
+      "no_adopted_reading": 758,
+      "before_promotion_next2_unavailable": 1559,
+      "next_unread_in_record": 224,
+      "next2_unread_in_record": 211
+    },
+    {
+      "in_hand_unassigned": 563,
+      "before_promotion_next2_unavailable": 1668,
+      "next_unread_in_record": 163,
+      "next2_unread_in_record": 185,
+      "less_than_three_identical_frames": 1114,
+      "no_adopted_reading": 516
+    }
+  ],
+  "missing_rows_by_side": [
+    {
+      "denominator": 1492,
+      "in_hand_unassigned": 972,
+      "less_than_three_identical_frames": 954,
+      "no_adopted_reading": 721,
+      "before_promotion_next2_unavailable": 700,
+      "next_unread_in_record": 104,
+      "next2_unread_in_record": 108
+    },
+    {
+      "denominator": 859,
+      "in_hand_unassigned": 482,
+      "before_promotion_next2_unavailable": 323,
+      "next_unread_in_record": 40,
+      "next2_unread_in_record": 47,
+      "less_than_three_identical_frames": 499,
+      "no_adopted_reading": 445
+    }
+  ]
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -11,8 +12,12 @@ from src import prefire_v5_value as value
 from src.prefire_best_play_stable import StableBestPlayLayer
 from src.prefire_best_play_layer import PREFIRE_SOURCE, logit_mean
 from src.prefire_exchange_layer import _now_ms
+from src import prefire_v5b_search as exhaustive
+from src.prefire_v5b_queue import StableQueuesV5B
+from src.prefire_v5b_value import CachedM0, CachedStatic
 
 WAITING = 4
+VALUE_CACHE_SIZE = 32768
 TRACE_COLUMNS = ('t_sec', 'game_idx', 'p_current', 'p_shown', 'v_1p', 'v_2p',
                  'hand_1p', 'hand_2p', 'status_1p', 'status_2p', 'ready_sec', 'used', 'held')
 
@@ -32,6 +37,9 @@ class BestPlayV5Layer(StableBestPlayLayer):
         if not np.isfinite(latency_sec) or latency_sec < 0:
             raise ValueError('遅れは有限の非負秒が必要')
         super().__init__(latency_sec=latency_sec)
+        self.queues = StableQueuesV5B()
+        self._m0_cache: CachedM0 | None = None
+        self._static_cache: CachedStatic | None = None
         self._active_key: tuple | None = None
 
     def apply(self, overlay: Any, t_sec: float, game_idx: int) -> None:
@@ -51,7 +59,12 @@ class BestPlayV5Layer(StableBestPlayLayer):
         elapsed = max(0.0, t_sec-overlay._start)
         key = (states, elapsed, overlay._game)
         # 経過秒は評価器の入力。丸めて別局面の結果を流用しない。
-        identity = (states, statuses, search.sim.effective_rate(elapsed), overlay._game)
+        phases = tuple(np.searchsorted(overlay.tracker.models.elapsed_thresholds,
+                       elapsed + hand * value.SEC_PER_HAND, side='left')
+                       for hand in range(exhaustive.MAX_KNOWN_HANDS))
+        rates = tuple(search.sim.effective_rate(elapsed + hand * value.SEC_PER_HAND)
+                      for hand in range(exhaustive.MAX_KNOWN_HANDS))
+        identity = (states, statuses, rates, phases, overlay._game)
         if identity != self._active_key:
             self._active_key = identity
             self._shown_key = key
@@ -66,14 +79,23 @@ class BestPlayV5Layer(StableBestPlayLayer):
         started = _now_ms()
         result = (None, None)
         if all(s == search.OK for s in statuses):
+            if self._m0_cache is None or self._m0_cache.original is not overlay._m0:
+                self._m0_cache = CachedM0(overlay._m0)
+            if self._static_cache is None or self._static_cache.original is not overlay._build_static:
+                self._static_cache = CachedStatic(overlay._build_static)
+            proxy = SimpleNamespace(_m0=self._m0_cache, _build_static=self._static_cache,
+                                    _snapshots=overlay._snapshots, tracker=overlay.tracker)
             values: dict[tuple, float] = {}
             def evaluator(exchange: search.Exchange, time: float) -> float:
                 # 同一計算内の左右探索で、評価器に渡す入力が同一なら再利用する。
                 state_key = (tuple((p.board, p.queue, p.pending) for p in exchange.sides), time)
                 if state_key not in values:
-                    values[state_key] = value.evaluate(overlay, exchange, time)
+                    if len(values) >= VALUE_CACHE_SIZE:
+                        values.pop(next(iter(values)))
+                    values[state_key] = value.evaluate(proxy, exchange, time)
                 return values[state_key]
-            result = tuple(value.choose(states, side, elapsed, evaluator) for side in (0, 1))
+            result = tuple(exhaustive.choose(states, side, elapsed, evaluator,
+                           unknown_rollouts=exhaustive.UNKNOWN_ROLLOUTS) for side in (0, 1))
         self._cache[key] = result
         self._ready[key] = t_sec + self.latency_sec
         self.computes.append((t_sec, _now_ms()-started))

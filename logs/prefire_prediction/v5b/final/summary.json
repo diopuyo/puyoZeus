@@ -1,0 +1,17 @@
+{
+  "before": {
+    "samples": 100,
+    "transitions": 94600,
+    "mismatches": 0,
+    "missed": 52
+  },
+  "after": {
+    "samples": 100,
+    "transitions": 94600,
+    "mismatches": 0,
+    "missed": 0
+  },
+  "failed_branches": 104,
+  "dropped_attack": 60,
+  "dropped_response": 64
+}

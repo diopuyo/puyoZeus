@@ -1,0 +1,142 @@
+{
+  "q_7gc4TgFig": {
+    "denominator": 14107,
+    "matched": 14107,
+    "missing_any": 6800,
+    "eligible_both": 5453,
+    "by_side": [
+      {
+        "status_3": 3991,
+        "known_hands_0": 4873,
+        "status_1": 2686,
+        "status_2": 239,
+        "status_0": 7191,
+        "known_hands_2": 3501,
+        "known_hands_1": 1714,
+        "known_hands_3": 4019
+      },
+      {
+        "status_1": 5132,
+        "known_hands_0": 4874,
+        "status_3": 1421,
+        "status_2": 180,
+        "known_hands_1": 1602,
+        "status_0": 7374,
+        "known_hands_2": 3418,
+        "known_hands_3": 4213
+      }
+    ]
+  },
+  "fcXG83vInDY": {
+    "denominator": 14181,
+    "matched": 14181,
+    "missing_any": 8062,
+    "eligible_both": 4887,
+    "by_side": [
+      {
+        "status_3": 5181,
+        "known_hands_0": 6014,
+        "status_1": 2279,
+        "status_2": 355,
+        "known_hands_1": 1563,
+        "known_hands_2": 2885,
+        "known_hands_3": 3719,
+        "status_0": 6366
+      },
+      {
+        "status_1": 6706,
+        "known_hands_0": 5868,
+        "status_3": 854,
+        "status_2": 377,
+        "known_hands_1": 1494,
+        "status_0": 6244,
+        "known_hands_2": 2863,
+        "known_hands_3": 3956
+      }
+    ]
+  },
+  "mia8KCjr52g": {
+    "denominator": 14836,
+    "matched": 14836,
+    "missing_any": 8700,
+    "eligible_both": 5361,
+    "by_side": [
+      {
+        "status_3": 3826,
+        "known_hands_0": 5311,
+        "status_2": 576,
+        "status_1": 3197,
+        "status_0": 7237,
+        "known_hands_2": 2741,
+        "known_hands_3": 4960,
+        "known_hands_1": 1824
+      },
+      {
+        "status_1": 6892,
+        "known_hands_0": 5191,
+        "status_0": 7522,
+        "known_hands_2": 3183,
+        "known_hands_1": 1807,
+        "known_hands_3": 4655,
+        "status_2": 233,
+        "status_3": 189
+      }
+    ]
+  },
+  "review": {
+    "denominator": 3485,
+    "matched": 3485,
+    "missing_any": 2142,
+    "eligible_both": 1018,
+    "by_side": [
+      {
+        "status_1": 1799,
+        "known_hands_0": 1415,
+        "known_hands_1": 486,
+        "status_0": 1489,
+        "known_hands_3": 508,
+        "known_hands_2": 1076,
+        "status_2": 117,
+        "status_3": 80
+      },
+      {
+        "status_1": 1015,
+        "known_hands_0": 496,
+        "status_0": 2261,
+        "known_hands_2": 999,
+        "known_hands_3": 1411,
+        "known_hands_1": 579,
+        "status_2": 129,
+        "status_3": 80
+      }
+    ]
+  },
+  "zenchi": {
+    "denominator": 13817,
+    "matched": 13817,
+    "missing_any": 8296,
+    "eligible_both": 4515,
+    "by_side": [
+      {
+        "status_1": 6806,
+        "known_hands_0": 5150,
+        "known_hands_1": 1984,
+        "status_0": 6127,
+        "known_hands_3": 2082,
+        "known_hands_2": 4601,
+        "status_2": 711,
+        "status_3": 173
+      },
+      {
+        "status_1": 4143,
+        "known_hands_0": 2139,
+        "status_0": 9167,
+        "known_hands_2": 3705,
+        "known_hands_1": 2143,
+        "known_hands_3": 5830,
+        "status_2": 225,
+        "status_3": 282
+      }
+    ]
+  }
+}

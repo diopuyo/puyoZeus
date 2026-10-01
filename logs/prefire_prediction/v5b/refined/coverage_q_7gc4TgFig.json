@@ -1,0 +1,86 @@
+{
+  "denominator": 14107,
+  "matched": 14107,
+  "missing_any": 3352,
+  "eligible_both": 8817,
+  "by_side": [
+    {
+      "status_3": 3991,
+      "known_hands_0": 4467,
+      "status_1": 677,
+      "status_2": 239,
+      "status_0": 9200,
+      "known_hands_2": 4870,
+      "known_hands_3": 4770
+    },
+    {
+      "status_1": 3247,
+      "known_hands_0": 4504,
+      "status_3": 1421,
+      "status_2": 180,
+      "known_hands_2": 4535,
+      "known_hands_3": 5068,
+      "status_0": 9259
+    }
+  ],
+  "observed_pair_accuracy_before": [
+    {
+      "in_hand": [
+        6122,
+        6309
+      ],
+      "next": [
+        5039,
+        5559
+      ],
+      "next2": [
+        1634,
+        2105
+      ]
+    },
+    {
+      "in_hand": [
+        5618,
+        5985
+      ],
+      "next": [
+        4332,
+        4939
+      ],
+      "next2": [
+        1444,
+        2347
+      ]
+    }
+  ],
+  "observed_pair_accuracy_after": [
+    {
+      "in_hand": [
+        6354,
+        8057
+      ],
+      "next": [
+        5655,
+        7073
+      ],
+      "next2": [
+        2075,
+        3107
+      ]
+    },
+    {
+      "in_hand": [
+        5551,
+        7700
+      ],
+      "next": [
+        4768,
+        6478
+      ],
+      "next2": [
+        1903,
+        3598
+      ]
+    }
+  ]
+}

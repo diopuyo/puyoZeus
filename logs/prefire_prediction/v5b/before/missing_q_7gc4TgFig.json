@@ -1,0 +1,44 @@
+{
+  "source": "q_7gc4TgFig",
+  "denominator": 14107,
+  "matched": 14107,
+  "all_rows_by_side": [
+    {
+      "board_unknown": 2100,
+      "in_hand_unassigned": 5323,
+      "next_unread_in_record": 4586,
+      "next2_unread_in_record": 4511,
+      "less_than_three_identical_frames": 3829,
+      "no_adopted_reading": 5432,
+      "before_promotion_next2_unavailable": 4973
+    },
+    {
+      "in_hand_unassigned": 5376,
+      "next_unread_in_record": 4364,
+      "next2_unread_in_record": 4343,
+      "less_than_three_identical_frames": 3721,
+      "no_adopted_reading": 5432,
+      "before_promotion_next2_unavailable": 4744
+    }
+  ],
+  "missing_rows_by_side": [
+    {
+      "denominator": 2223,
+      "in_hand_unassigned": 1351,
+      "next_unread_in_record": 219,
+      "next2_unread_in_record": 221,
+      "less_than_three_identical_frames": 1585,
+      "no_adopted_reading": 1497,
+      "before_promotion_next2_unavailable": 417
+    },
+    {
+      "denominator": 5047,
+      "in_hand_unassigned": 4086,
+      "next_unread_in_record": 2754,
+      "next2_unread_in_record": 2723,
+      "less_than_three_identical_frames": 1781,
+      "no_adopted_reading": 4050,
+      "before_promotion_next2_unavailable": 587
+    }
+  ]
+}

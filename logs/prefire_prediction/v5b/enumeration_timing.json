@@ -1,0 +1,906 @@
+{
+  "samples": 100,
+  "results": [
+    {
+      "index": 0,
+      "count": [
+        4066,
+        7015
+      ],
+      "matrix_size": 28522990,
+      "milliseconds": 93.26865699404152
+    },
+    {
+      "index": 1,
+      "count": [
+        5461,
+        8183
+      ],
+      "matrix_size": 44687363,
+      "milliseconds": 135.68572200165363
+    },
+    {
+      "index": 2,
+      "count": [
+        8884,
+        8569
+      ],
+      "matrix_size": 76126996,
+      "milliseconds": 153.93961999507155
+    },
+    {
+      "index": 3,
+      "count": [
+        8716,
+        8968
+      ],
+      "matrix_size": 78165088,
+      "milliseconds": 171.32514900004026
+    },
+    {
+      "index": 4,
+      "count": [
+        7468,
+        574
+      ],
+      "matrix_size": 4286632,
+      "milliseconds": 67.55410600453615
+    },
+    {
+      "index": 5,
+      "count": [
+        10648,
+        8842
+      ],
+      "matrix_size": 94149616,
+      "milliseconds": 178.64798099617474
+    },
+    {
+      "index": 6,
+      "count": [
+        1108,
+        2404
+      ],
+      "matrix_size": 2663632,
+      "milliseconds": 22.574594004254322
+    },
+    {
+      "index": 7,
+      "count": [
+        10648,
+        10648
+      ],
+      "matrix_size": 113379904,
+      "milliseconds": 213.50651599641424
+    },
+    {
+      "index": 8,
+      "count": [
+        9682,
+        10648
+      ],
+      "matrix_size": 103093936,
+      "milliseconds": 213.64763000019593
+    },
+    {
+      "index": 9,
+      "count": [
+        4852,
+        9199
+      ],
+      "matrix_size": 44633548,
+      "milliseconds": 176.75838300056057
+    },
+    {
+      "index": 10,
+      "count": [
+        4306,
+        3004
+      ],
+      "matrix_size": 12935224,
+      "milliseconds": 76.62666100077331
+    },
+    {
+      "index": 11,
+      "count": [
+        5648,
+        8265
+      ],
+      "matrix_size": 46680720,
+      "milliseconds": 216.9390819981345
+    },
+    {
+      "index": 12,
+      "count": [
+        7960,
+        10648
+      ],
+      "matrix_size": 84758080,
+      "milliseconds": 184.39032799506094
+    },
+    {
+      "index": 13,
+      "count": [
+        7246,
+        10648
+      ],
+      "matrix_size": 77155408,
+      "milliseconds": 275.55756199581083
+    },
+    {
+      "index": 14,
+      "count": [
+        9682,
+        10199
+      ],
+      "matrix_size": 98746718,
+      "milliseconds": 215.28959999704966
+    },
+    {
+      "index": 15,
+      "count": [
+        8338,
+        4348
+      ],
+      "matrix_size": 36253624,
+      "milliseconds": 199.38683699729154
+    },
+    {
+      "index": 16,
+      "count": [
+        6868,
+        6490
+      ],
+      "matrix_size": 44573320,
+      "milliseconds": 148.469893996662
+    },
+    {
+      "index": 17,
+      "count": [
+        7635,
+        8748
+      ],
+      "matrix_size": 66790980,
+      "milliseconds": 274.9786429994856
+    },
+    {
+      "index": 18,
+      "count": [
+        10648,
+        10648
+      ],
+      "matrix_size": 113379904,
+      "milliseconds": 225.4926349996822
+    },
+    {
+      "index": 19,
+      "count": [
+        5335,
+        7540
+      ],
+      "matrix_size": 40225900,
+      "milliseconds": 249.61987599817803
+    },
+    {
+      "index": 20,
+      "count": [
+        5398,
+        5954
+      ],
+      "matrix_size": 32139692,
+      "milliseconds": 141.3326770052663
+    },
+    {
+      "index": 21,
+      "count": [
+        4466,
+        6285
+      ],
+      "matrix_size": 28068810,
+      "milliseconds": 247.9477860033512
+    },
+    {
+      "index": 22,
+      "count": [
+        6314,
+        9640
+      ],
+      "matrix_size": 60866960,
+      "milliseconds": 168.41189700062387
+    },
+    {
+      "index": 23,
+      "count": [
+        10291,
+        10081
+      ],
+      "matrix_size": 103743571,
+      "milliseconds": 308.8340730027994
+    },
+    {
+      "index": 24,
+      "count": [
+        5942,
+        7015
+      ],
+      "matrix_size": 41683130,
+      "milliseconds": 126.54436000593705
+    },
+    {
+      "index": 25,
+      "count": [
+        9682,
+        9682
+      ],
+      "matrix_size": 93741124,
+      "milliseconds": 296.9599799980642
+    },
+    {
+      "index": 26,
+      "count": [
+        1304,
+        3120
+      ],
+      "matrix_size": 4068480,
+      "milliseconds": 47.32458799844608
+    },
+    {
+      "index": 27,
+      "count": [
+        1063,
+        3513
+      ],
+      "matrix_size": 3734319,
+      "milliseconds": 47.53897200134816
+    },
+    {
+      "index": 28,
+      "count": [
+        8632,
+        8149
+      ],
+      "matrix_size": 70342168,
+      "milliseconds": 159.96660200471524
+    },
+    {
+      "index": 29,
+      "count": [
+        9199,
+        9220
+      ],
+      "matrix_size": 84814780,
+      "milliseconds": 275.1453259988921
+    },
+    {
+      "index": 30,
+      "count": [
+        3348,
+        5600
+      ],
+      "matrix_size": 18748800,
+      "milliseconds": 91.07967300224118
+    },
+    {
+      "index": 31,
+      "count": [
+        4586,
+        6310
+      ],
+      "matrix_size": 28937660,
+      "milliseconds": 242.7540919961757
+    },
+    {
+      "index": 32,
+      "count": [
+        5149,
+        2902
+      ],
+      "matrix_size": 14942398,
+      "milliseconds": 82.13744200475048
+    },
+    {
+      "index": 33,
+      "count": [
+        9640,
+        7876
+      ],
+      "matrix_size": 75924640,
+      "milliseconds": 147.35233400278958
+    },
+    {
+      "index": 34,
+      "count": [
+        2206,
+        3382
+      ],
+      "matrix_size": 7460692,
+      "milliseconds": 171.93054500239668
+    },
+    {
+      "index": 35,
+      "count": [
+        7876,
+        8716
+      ],
+      "matrix_size": 68647216,
+      "milliseconds": 195.44539200433064
+    },
+    {
+      "index": 36,
+      "count": [
+        9716,
+        6952
+      ],
+      "matrix_size": 67545632,
+      "milliseconds": 300.850168998295
+    },
+    {
+      "index": 37,
+      "count": [
+        2395,
+        9220
+      ],
+      "matrix_size": 22081900,
+      "milliseconds": 117.82781599322334
+    },
+    {
+      "index": 38,
+      "count": [
+        8548,
+        8548
+      ],
+      "matrix_size": 73068304,
+      "milliseconds": 153.40427900082432
+    },
+    {
+      "index": 39,
+      "count": [
+        9682,
+        8191
+      ],
+      "matrix_size": 79305262,
+      "milliseconds": 347.17523099971004
+    },
+    {
+      "index": 40,
+      "count": [
+        3378,
+        4610
+      ],
+      "matrix_size": 15572580,
+      "milliseconds": 80.17068899789592
+    },
+    {
+      "index": 41,
+      "count": [
+        7939,
+        10606
+      ],
+      "matrix_size": 84201034,
+      "milliseconds": 150.05535000091186
+    },
+    {
+      "index": 42,
+      "count": [
+        8947,
+        9682
+      ],
+      "matrix_size": 86624854,
+      "milliseconds": 284.0832879955997
+    },
+    {
+      "index": 43,
+      "count": [
+        8442,
+        5887
+      ],
+      "matrix_size": 49698054,
+      "milliseconds": 135.46052500169026
+    },
+    {
+      "index": 44,
+      "count": [
+        8968,
+        4676
+      ],
+      "matrix_size": 41934368,
+      "milliseconds": 146.7146450013388
+    },
+    {
+      "index": 45,
+      "count": [
+        1295,
+        5634
+      ],
+      "matrix_size": 7296030,
+      "milliseconds": 251.53559599857545
+    },
+    {
+      "index": 46,
+      "count": [
+        1610,
+        3429
+      ],
+      "matrix_size": 5520690,
+      "milliseconds": 73.12553899828345
+    },
+    {
+      "index": 47,
+      "count": [
+        4508,
+        3429
+      ],
+      "matrix_size": 15457932,
+      "milliseconds": 61.6729790053796
+    },
+    {
+      "index": 48,
+      "count": [
+        5797,
+        5560
+      ],
+      "matrix_size": 32231320,
+      "milliseconds": 108.89796399715124
+    },
+    {
+      "index": 49,
+      "count": [
+        10648,
+        10648
+      ],
+      "matrix_size": 113379904,
+      "milliseconds": 369.4928789991536
+    },
+    {
+      "index": 50,
+      "count": [
+        8457,
+        7747
+      ],
+      "matrix_size": 65516379,
+      "milliseconds": 173.87797399715055
+    },
+    {
+      "index": 51,
+      "count": [
+        4781,
+        8769
+      ],
+      "matrix_size": 41924589,
+      "milliseconds": 131.24557199625997
+    },
+    {
+      "index": 52,
+      "count": [
+        10464,
+        4880
+      ],
+      "matrix_size": 51064320,
+      "milliseconds": 139.16713400249137
+    },
+    {
+      "index": 53,
+      "count": [
+        8401,
+        10648
+      ],
+      "matrix_size": 89453848,
+      "milliseconds": 389.6406130006653
+    },
+    {
+      "index": 54,
+      "count": [
+        6314,
+        6608
+      ],
+      "matrix_size": 41722912,
+      "milliseconds": 143.3759419960552
+    },
+    {
+      "index": 55,
+      "count": [
+        8964,
+        6004
+      ],
+      "matrix_size": 53819856,
+      "milliseconds": 158.3796320046531
+    },
+    {
+      "index": 56,
+      "count": [
+        6530,
+        6004
+      ],
+      "matrix_size": 39206120,
+      "milliseconds": 71.29735500348033
+    },
+    {
+      "index": 57,
+      "count": [
+        7494,
+        8009
+      ],
+      "matrix_size": 60019446,
+      "milliseconds": 348.5359959959169
+    },
+    {
+      "index": 58,
+      "count": [
+        3172,
+        2960
+      ],
+      "matrix_size": 9389120,
+      "milliseconds": 60.13685299694771
+    },
+    {
+      "index": 59,
+      "count": [
+        8928,
+        5081
+      ],
+      "matrix_size": 45363168,
+      "milliseconds": 144.72788700368255
+    },
+    {
+      "index": 60,
+      "count": [
+        8933,
+        5871
+      ],
+      "matrix_size": 52445643,
+      "milliseconds": 153.13567299745046
+    },
+    {
+      "index": 61,
+      "count": [
+        8124,
+        5520
+      ],
+      "matrix_size": 44844480,
+      "milliseconds": 356.0053990004235
+    },
+    {
+      "index": 62,
+      "count": [
+        10648,
+        9640
+      ],
+      "matrix_size": 102646720,
+      "milliseconds": 191.63083400053438
+    },
+    {
+      "index": 63,
+      "count": [
+        8191,
+        7603
+      ],
+      "matrix_size": 62276173,
+      "milliseconds": 157.9549070011126
+    },
+    {
+      "index": 64,
+      "count": [
+        7280,
+        5552
+      ],
+      "matrix_size": 40418560,
+      "milliseconds": 125.56097600463545
+    },
+    {
+      "index": 65,
+      "count": [
+        5964,
+        6796
+      ],
+      "matrix_size": 40531344,
+      "milliseconds": 359.0575050038751
+    },
+    {
+      "index": 66,
+      "count": [
+        2814,
+        8400
+      ],
+      "matrix_size": 23637600,
+      "milliseconds": 117.64587899961043
+    },
+    {
+      "index": 67,
+      "count": [
+        7750,
+        7750
+      ],
+      "matrix_size": 60062500,
+      "milliseconds": 164.83913800038863
+    },
+    {
+      "index": 68,
+      "count": [
+        5818,
+        7742
+      ],
+      "matrix_size": 45042956,
+      "milliseconds": 127.45235599868465
+    },
+    {
+      "index": 69,
+      "count": [
+        9199,
+        9199
+      ],
+      "matrix_size": 84621601,
+      "milliseconds": 475.8736010044231
+    },
+    {
+      "index": 70,
+      "count": [
+        7246,
+        7742
+      ],
+      "matrix_size": 56098532,
+      "milliseconds": 160.08966699882876
+    },
+    {
+      "index": 71,
+      "count": [
+        6811,
+        7750
+      ],
+      "matrix_size": 52785250,
+      "milliseconds": 152.72455500235083
+    },
+    {
+      "index": 72,
+      "count": [
+        4902,
+        3363
+      ],
+      "matrix_size": 16485426,
+      "milliseconds": 92.47041499475017
+    },
+    {
+      "index": 73,
+      "count": [
+        2912,
+        4626
+      ],
+      "matrix_size": 13470912,
+      "milliseconds": 76.72907400410622
+    },
+    {
+      "index": 74,
+      "count": [
+        9199,
+        10648
+      ],
+      "matrix_size": 97950952,
+      "milliseconds": 455.55513999715913
+    },
+    {
+      "index": 75,
+      "count": [
+        9306,
+        6438
+      ],
+      "matrix_size": 59912028,
+      "milliseconds": 193.10035899979994
+    },
+    {
+      "index": 76,
+      "count": [
+        472,
+        5842
+      ],
+      "matrix_size": 2757424,
+      "milliseconds": 75.87022700317902
+    },
+    {
+      "index": 77,
+      "count": [
+        4852,
+        5818
+      ],
+      "matrix_size": 28228936,
+      "milliseconds": 103.69189699849812
+    },
+    {
+      "index": 78,
+      "count": [
+        10648,
+        10648
+      ],
+      "matrix_size": 113379904,
+      "milliseconds": 190.5162080001901
+    },
+    {
+      "index": 79,
+      "count": [
+        4852,
+        4285
+      ],
+      "matrix_size": 20790820,
+      "milliseconds": 331.3381469997694
+    },
+    {
+      "index": 80,
+      "count": [
+        9073,
+        9199
+      ],
+      "matrix_size": 83462527,
+      "milliseconds": 173.97002499637892
+    },
+    {
+      "index": 81,
+      "count": [
+        7372,
+        7372
+      ],
+      "matrix_size": 54346384,
+      "milliseconds": 169.77146200224524
+    },
+    {
+      "index": 82,
+      "count": [
+        6889,
+        8149
+      ],
+      "matrix_size": 56138461,
+      "milliseconds": 152.7014980019885
+    },
+    {
+      "index": 83,
+      "count": [
+        9522,
+        6336
+      ],
+      "matrix_size": 60331392,
+      "milliseconds": 444.5801030014991
+    },
+    {
+      "index": 84,
+      "count": [
+        10522,
+        8296
+      ],
+      "matrix_size": 87290512,
+      "milliseconds": 241.01112900098087
+    },
+    {
+      "index": 85,
+      "count": [
+        6280,
+        10648
+      ],
+      "matrix_size": 66869440,
+      "milliseconds": 175.03814199881162
+    },
+    {
+      "index": 86,
+      "count": [
+        8926,
+        5797
+      ],
+      "matrix_size": 51744022,
+      "milliseconds": 177.48634400049923
+    },
+    {
+      "index": 87,
+      "count": [
+        9682,
+        9640
+      ],
+      "matrix_size": 93334480,
+      "milliseconds": 510.87000600091415
+    },
+    {
+      "index": 88,
+      "count": [
+        10648,
+        10648
+      ],
+      "matrix_size": 113379904,
+      "milliseconds": 332.3633999971207
+    },
+    {
+      "index": 89,
+      "count": [
+        9199,
+        10648
+      ],
+      "matrix_size": 97950952,
+      "milliseconds": 196.8945039989194
+    },
+    {
+      "index": 90,
+      "count": [
+        9136,
+        10522
+      ],
+      "matrix_size": 96128992,
+      "milliseconds": 474.5654910002486
+    },
+    {
+      "index": 91,
+      "count": [
+        6763,
+        9619
+      ],
+      "matrix_size": 65053297,
+      "milliseconds": 180.24147599498974
+    },
+    {
+      "index": 92,
+      "count": [
+        10320,
+        8301
+      ],
+      "matrix_size": 85666320,
+      "milliseconds": 213.5786860017106
+    },
+    {
+      "index": 93,
+      "count": [
+        10648,
+        10648
+      ],
+      "matrix_size": 113379904,
+      "milliseconds": 487.39580099936575
+    },
+    {
+      "index": 94,
+      "count": [
+        2920,
+        5046
+      ],
+      "matrix_size": 14734320,
+      "milliseconds": 95.9114139986923
+    },
+    {
+      "index": 95,
+      "count": [
+        8926,
+        10081
+      ],
+      "matrix_size": 89983006,
+      "milliseconds": 203.92800000263378
+    },
+    {
+      "index": 96,
+      "count": [
+        4852,
+        8884
+      ],
+      "matrix_size": 43105168,
+      "milliseconds": 171.525384997949
+    },
+    {
+      "index": 97,
+      "count": [
+        9052,
+        9052
+      ],
+      "matrix_size": 81938704,
+      "milliseconds": 213.62689099623822
+    },
+    {
+      "index": 98,
+      "count": [
+        6465,
+        7331
+      ],
+      "matrix_size": 47394915,
+      "milliseconds": 430.8364469980006
+    },
+    {
+      "index": 99,
+      "count": [
+        179,
+        3802
+      ],
+      "matrix_size": 680558,
+      "milliseconds": 36.066640001081396
+    }
+  ],
+  "p95_ms": 445.12885485128203
+}

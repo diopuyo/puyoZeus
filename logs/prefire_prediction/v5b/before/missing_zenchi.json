@@ -1,0 +1,43 @@
+{
+  "source": "zenchi",
+  "denominator": 13817,
+  "matched": 13817,
+  "all_rows_by_side": [
+    {
+      "in_hand_unassigned": 4383,
+      "less_than_three_identical_frames": 5557,
+      "no_adopted_reading": 3135,
+      "before_promotion_next2_unavailable": 6286,
+      "next_unread_in_record": 754,
+      "next2_unread_in_record": 699
+    },
+    {
+      "in_hand_unassigned": 2973,
+      "less_than_three_identical_frames": 4130,
+      "no_adopted_reading": 1675,
+      "before_promotion_next2_unavailable": 6487,
+      "next_unread_in_record": 623,
+      "next2_unread_in_record": 686
+    }
+  ],
+  "missing_rows_by_side": [
+    {
+      "denominator": 6253,
+      "in_hand_unassigned": 4246,
+      "less_than_three_identical_frames": 3666,
+      "no_adopted_reading": 2883,
+      "before_promotion_next2_unavailable": 3120,
+      "next_unread_in_record": 366,
+      "next2_unread_in_record": 330
+    },
+    {
+      "denominator": 4072,
+      "in_hand_unassigned": 2819,
+      "less_than_three_identical_frames": 1837,
+      "no_adopted_reading": 1487,
+      "before_promotion_next2_unavailable": 1970,
+      "next_unread_in_record": 151,
+      "next2_unread_in_record": 170
+    }
+  ]
+}

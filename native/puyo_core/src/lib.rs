@@ -13,6 +13,7 @@
 
 mod beam;
 mod bitboard;
+mod prefire;
 
 use std::sync::OnceLock;
 
@@ -937,6 +938,7 @@ fn beam_search_continue_py(
 /// PyO3 モジュール定義。
 #[pymodule]
 fn puyo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(prefire::prefire_terminals_py, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_chain_py, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_chain_with_steps_py, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_after_drops_py, m)?)?;
