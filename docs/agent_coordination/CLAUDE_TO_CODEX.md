@@ -4992,3 +4992,8 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 ## 2026-10-01 Claude: 発火前の最善手 Phase 4 — 不合格・本番登録なし
 - branch claude/prefire-exchange-prediction-20260930 (f481596 push 済み)。新規 `src/prefire_stable_queue.py`・`src/prefire_best_play_stable.py`、replay フラグ `--prefire-best-play-stable` (既定OFF)。`src/prefire_best_play.py` は出力一致の高速化のみ。
 - 結果は DECISIONS 同日節。Codex への依頼はなし。
+## 2026-10-01 評価セット zenchi セット1 (57試合) の物差し (Claude、branch claude/eval-set-zenchi-set1-20261001、worktree D:/puyo_analyzer/wt_evalset)
+- 第1〜40試合を本番の認識構成で記録 (6区間)。短区間の取り直しが既存第3パート記録と 13,627行バイト一致。再生器3種も既知出力とバイト一致。
+- ゆらぎ: M_time (試合別の時間平均 log loss、57試合) の random_state 散らばり sd 旧 .0027 / 補正 .0015 (q は .0056 / .0053)。5 seed 平均同士の最小検出差 .005 / .003。
+- 本番評価器の不具合: c5 の 2164.9秒で weighted_landing が firing=None のまま S3 を組み ValueError。src/exchange_hidden_row_probability.py に加重なしへ落とす分岐を追加 (旧コードが例外を出す時刻だけ分岐、完走していた入力は出力不変)。マージは別判断。
+- 採否は何も決めていない。詳細 logs/eval_set/RESULT.md。

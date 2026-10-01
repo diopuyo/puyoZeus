@@ -1,0 +1,39 @@
+{
+ "rejudge_J_orig_rs1": {
+  "display.npz": {
+   "identical": true,
+   "mine": "logs/eval_set/replay_rejudge/J_orig_rs1/on/zenchi/display.npz",
+   "known": "/mnt/d/puyo_analyzer/wt_nextfix/logs/next_shift_train/replay/J_orig_rs1/on/zenchi/display.npz"
+  },
+  "events.jsonl": {
+   "identical": true,
+   "mine": "logs/eval_set/replay_rejudge/J_orig_rs1/on/zenchi/events.jsonl",
+   "known": "/mnt/d/puyo_analyzer/wt_nextfix/logs/next_shift_train/replay/J_orig_rs1/on/zenchi/events.jsonl"
+  }
+ },
+ "rejudge_J_orig_rs0_vs_R0": {
+  "display.npz": {
+   "identical": true,
+   "mine": "logs/eval_set/replay_rejudge/J_orig_rs0/on/zenchi/display.npz",
+   "known": "/mnt/d/puyo_analyzer/wt_nextfix/logs/next_shift_train/replay/R0/on/zenchi/display.npz"
+  },
+  "events.jsonl": {
+   "identical": true,
+   "mine": "logs/eval_set/replay_rejudge/J_orig_rs0/on/zenchi/events.jsonl",
+   "known": "/mnt/d/puyo_analyzer/wt_nextfix/logs/next_shift_train/replay/R0/on/zenchi/events.jsonl"
+  }
+ },
+ "cli_prod": {
+  "display.npz": {
+   "identical": true,
+   "mine": "logs/eval_set/replay_cli/prod/zenchi/display.npz",
+   "known": "/mnt/d/puyo_analyzer/wt_switch/logs/switch_smoothing/cli_prod/zenchi/display.npz"
+  },
+  "events.jsonl": {
+   "identical": true,
+   "mine": "logs/eval_set/replay_cli/prod/zenchi/events.jsonl",
+   "known": "/mnt/d/puyo_analyzer/wt_switch/logs/switch_smoothing/cli_prod/zenchi/events.jsonl"
+  }
+ },
+ "passed": true
+}

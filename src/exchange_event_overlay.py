@@ -80,8 +80,7 @@ class ExchangeEventOverlay:
                  post_counter_death_bound: bool = False,
                  single_death_proof_guard: bool = False,
                  single_death_proof_negative_only: bool = False,
-                 post_counter_early_exit: bool = False,
-                 multilanding_node_limit: int | None = None,
+                 post_counter_early_exit: bool = False, multilanding_node_limit: int | None = None,
                  hidden_scenario_cap: int | None = None) -> None:
         from src.exchange_hidden_row_probability import validate_scenario_cap
         validate_scenario_cap(hidden_scenario_cap)
