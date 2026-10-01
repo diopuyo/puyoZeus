@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 
+from src.exchange_display_smoothing import SwitchAwareDisplayEMA
 from src.exchange_event_evaluator import FileExchangeModels, StaticInput
 from src.exchange_event_overlay import ExchangeEventOverlay
 from src.exchange_event_record import read_records, static_key
@@ -40,6 +41,8 @@ def display_row(overlay: ExchangeEventOverlay, inputs: tuple, context: dict,
                                          smoothing, context["t_sec"])
     if overlay.tracker.probability is not None:
         probability = overlay.tracker.probability
+    elif isinstance(smoothing, SwitchAwareDisplayEMA):
+        probability = context["fallback_p1"]  # 平滑前の確率列の定義 (M3・鮮度) を保つ。
     scores = [TIMELINE_DUMP_SCORE_NONE_SENTINEL if s.score is None else int(s.score)
               for s in (result.p1, result.p2)]
     return DisplayTimelineRow(t_sec=context["t_sec"], game_idx=context["game_idx"],
@@ -68,7 +71,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            single_death_proof_negative_only: bool = False,
            post_counter_early_exit: bool = False,
            multilanding_node_limit: int | None = None,
-           hidden_scenario_cap: int | None = None) -> dict:
+           hidden_scenario_cap: int | None = None,
+           switch_smoothing: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -107,7 +111,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         post_counter_early_exit=post_counter_early_exit,
         multilanding_node_limit=multilanding_node_limit, hidden_scenario_cap=hidden_scenario_cap)
     rows, frames, inputs = [], 0, None
-    smoothing = _ExchangeDisplayEMA()
+    smoothing = SwitchAwareDisplayEMA() if switch_smoothing else _ExchangeDisplayEMA()
+    fallback_unknown = (None, None) if switch_smoothing else (0.0, 0.5)  # 記録に旧評価器値の無い更新行
     for item in stream:
         if item["kind"] == "update":
             inputs = item["args"]
@@ -117,7 +122,7 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
             overlay.update(*inputs)
             if observer is not None:
                 observer(overlay, inputs)
-            _exchange_display(overlay, 0.0, 0.5, smoothing, inputs[3])
+            _exchange_display(overlay, *fallback_unknown, smoothing, inputs[3])
             frames += 1
         elif item["kind"] == "display":
             if inputs is None or inputs[3:5] != (item["t_sec"], item["game_idx"]):
@@ -197,6 +202,7 @@ def main() -> None:
         parser.add_argument("--" + name, action="store_true", default=False)
     parser.add_argument("--confirmed-death-hold", action="store_true", default=False)
     parser.add_argument("--landing-counter-prob", action="store_true", default=False)
+    parser.add_argument("--exchange-event-switch-smoothing", action="store_true", default=False)
     for name in ("count-sync", "death-guard", "evaluation-layers", "completion-check"):
         parser.add_argument("--exchange-event-" + name, action="store_true", default=False)
     parser.add_argument("--compare", type=Path)
@@ -228,7 +234,8 @@ def main() -> None:
                     single_death_proof_guard=options.single_death_proof_guard,
                     single_death_proof_negative_only=options.single_death_proof_negative_only,
                     post_counter_early_exit=options.post_counter_early_exit,
-                    hidden_scenario_cap=options.hidden_scenario_cap)
+                    hidden_scenario_cap=options.hidden_scenario_cap,
+                    switch_smoothing=options.exchange_event_switch_smoothing)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

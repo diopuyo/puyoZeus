@@ -42,6 +42,7 @@ from src.chain_detector import ChainEvent  # noqa: E402
 from src.exchange_event_evaluator import FileExchangeModels, StaticInput  # noqa: E402
 from src.exchange_event_features import D_COLUMNS  # noqa: E402
 from src.exchange_event_overlay import ExchangeEventOverlay, M0Predictor  # noqa: E402
+from src.exchange_display_smoothing import SwitchAwareDisplayEMA  # noqa: E402
 from src.death_confirmation import (  # noqa: E402
     DeathConfirmStats,  # Gate 3R-6 本体: 候補/猶予/確定/解除の母数付きカウンタ (dump専用)
     DeathConfirmTracker,  # Gate 3R-6 本体: 1サイド分の死亡確定状態機械 (既定OFF)
@@ -6356,10 +6357,26 @@ class _ExchangeDisplayEMA:
         return self.adv, self.probability
 
 
-def _exchange_display(overlay: ExchangeEventOverlay, adv: float,
-                      probability: float, smoothing: _ExchangeDisplayEMA | None = None,
+def _exchange_display_switch_aware(
+        overlay: ExchangeEventOverlay, adv: float | None, probability: float | None,
+        smoothing: SwitchAwareDisplayEMA, t_sec: float | None) -> tuple[float | None, float | None]:
+    """切替対応の表示平滑 (既定OFF)。旧評価器の値も EMA を通し、確定死亡だけ即時表示する。"""
+    value = overlay.tracker.probability
+    if value is not None:
+        target = (max(-100.0, min(100.0, _winprob_to_adv(value))), value)
+    else:
+        target = None if adv is None or probability is None else (adv, probability)
+    shown = smoothing.apply(overlay.tracker, target, 0.0 if t_sec is None else t_sec)
+    return (adv, probability) if shown is None else shown
+
+
+def _exchange_display(overlay: ExchangeEventOverlay, adv: float | None,
+                      probability: float | None,
+                      smoothing: "_ExchangeDisplayEMA | SwitchAwareDisplayEMA | None" = None,
                       t_sec: float | None = None) -> tuple[float, float]:
     """学習済みイベント確率を、既存表示の確率・有利不利変換へ接続する。"""
+    if isinstance(smoothing, SwitchAwareDisplayEMA):
+        return _exchange_display_switch_aware(overlay, adv, probability, smoothing, t_sec)
     value = overlay.tracker.probability
     if value is None:
         return adv, probability
@@ -6452,6 +6469,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              landing_counter_response: bool = False,
              confirmed_death_hold: bool = False,
              landing_counter_prob: bool = False,
+             exchange_event_switch_smoothing: bool = False,
              landing_hands_spec: bool = False,
              death_candidate_guard: bool = False,
              death_formula_guard: bool = False,
@@ -7297,7 +7315,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     b1 = b2 = None
     adv_ema = 0.0
     p1_last = 0.5
-    event_display_ema = _ExchangeDisplayEMA() if event_overlay is not None else None
+    event_display_ema = (SwitchAwareDisplayEMA() if exchange_event_switch_smoothing
+                         else _ExchangeDisplayEMA()) if event_overlay is not None else None
     model_adv_last = float("nan")
     drivers: list[tuple[str, float]] = []
     # kill_override が直近の settled 再計算で実際に発火したか (2026-08-22
@@ -8150,6 +8169,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 event_recorder.write(dict(kind="display", t_sec=t, game_idx=game_idx,
                     fallback_adv=disp_adv, fallback_p1=disp_p1, adv_raw_last=model_adv_last,
                     resolved_active=resolved_active, settled_ran=settled_ran_this_frame))
+            fallback_p1 = disp_p1  # 旧評価器の生の確率 (平滑前の確率列の定義を保つ)
             disp_adv, disp_p1 = _exchange_display(
                 event_overlay, disp_adv, disp_p1, event_display_ema, t)
             if event_overlay.tracker.probability is not None:
@@ -8174,7 +8194,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     # ONの確率列は平滑化前を維持し、鮮度とM3の定義を変えない。
                     display_p1=(event_overlay.tracker.probability
                         if event_overlay is not None and event_overlay.tracker.probability is not None
-                        else disp_p1), adv_raw_last=model_adv_last,
+                        else (fallback_p1 if exchange_event_switch_smoothing and event_overlay is not None
+                              else disp_p1)), adv_raw_last=model_adv_last,
                     source=(event_overlay.tracker.source if event_overlay is not None else _display_timeline_source(
                         resolved_active, resolved_just_deactivated,
                         settled_ran_this_frame,
@@ -8448,6 +8469,9 @@ def main() -> None:
                     help="E19: 観測死亡が確定したら勝者側の確定表示を試合境界まで保持する")
     ap.add_argument("--landing-counter-prob", action="store_true", default=False,
                     help="E19: ロジスティック回帰の応手確率で仮想着弾G_feを合成する")
+    ap.add_argument("--exchange-event-switch-smoothing", action="store_true", default=False,
+                    help="評価器切替時の表示値の飛びを緩和 (旧評価器の値もEMAを通す・戻り時に古いEMAから再開しない・"
+                         "物理イベントのない由来切替を短くブレンド。確定死亡は即時。表示のみ、既定OFF)")
     ap.add_argument("--exchange-event-model-dir", type=Path,
                     default=Path("models/exchange_event_v1"))
     ap.add_argument("--dump-exchange-events", type=Path, default=None,
@@ -9142,6 +9166,7 @@ def main() -> None:
               hidden_scenario_cap=a.hidden_scenario_cap,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
+              exchange_event_switch_smoothing=a.exchange_event_switch_smoothing,
              dump_exchange_event_path=a.dump_exchange_events,
              exchange_event_record_path=a.exchange_event_record,
              review_data_panel=a.review_data_panel,

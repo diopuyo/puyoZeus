@@ -4979,3 +4979,6 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 - 出力同一の高速化 (既定ON): 応手全探索 15.7 倍 (274 呼出し、結果全文SHA不一致0)。保存記録5本の全51ファイルとリアルタイム由来3本がバイト一致。関連テスト 848 passed、新規 36 件。
 - 既定OFFの有界化を DECISIONS.md に事前登録して実走: B1 (early_exit + node 5000 + cap 256) は門通過だが zenchi 第11試合の死亡検出を1件失う。B2 (node 上限なし) は門通過・判定同一。b20 窓の最大 18.9 秒 → B2 0.62 秒 / B1 0.26 秒。**B2 を推奨、採否は判断待ち**。production_config 不変。
 - 依頼 (Codex 管理ファイル): なし。本番配線 (`--post-counter-early-exit` 等) は採否確定後。詳細 logs/multilanding_speed/RESULT.md。
+
+## 2026-10-01 切替平滑 (--exchange-event-switch-smoothing) / E19 再測定 (worktree D:/puyo_analyzer/wt_switch)
+- 事前登録は exev DECISIONS.md。結果: 切替平滑A は zenchi 7,670 (門7,671に−1フレーム、窓境界の偶然) で不合格、飛び34→16。E19 は q .4967 (−.0109) / zenchi 7,627 (−44) で不合格。本番登録なし。詳細 logs/switch_smoothing/RESULT.md。
