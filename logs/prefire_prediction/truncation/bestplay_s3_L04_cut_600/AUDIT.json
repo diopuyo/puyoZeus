@@ -1,0 +1,18 @@
+{
+ "cut_sec": 600.0,
+ "frames": 18000,
+ "rows": 18000,
+ "cut_rows": 18000,
+ "identical": {
+  "t_sec": true,
+  "display_p1": true,
+  "display_adv": true,
+  "source": true
+ },
+ "passed": true,
+ "trace": {
+  "rows": 3666,
+  "cut_rows": 3666,
+  "passed": true
+ }
+}

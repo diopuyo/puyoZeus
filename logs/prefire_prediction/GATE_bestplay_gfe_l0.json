@@ -1,0 +1,126 @@
+{
+ "off": {
+  "q": {
+   "all": {
+    "frames": 6526,
+    "log_loss": 0.5075669993215693,
+    "auc": 0.7752487506069708
+   },
+   "prefire3s": {
+    "frames": 573,
+    "log_loss": 0.7307605608482143,
+    "auc": 0.28232144611454957
+   }
+  },
+  "anticipation": {
+   "hits": 23,
+   "denominator": 133
+  },
+  "gate2": false,
+  "gate3": false,
+  "gate4": false
+ },
+ "on": {
+  "q": {
+   "all": {
+    "frames": 6526,
+    "log_loss": 0.5490777278107231,
+    "auc": 0.7983219136876755
+   },
+   "prefire3s": {
+    "frames": 573,
+    "log_loss": 0.7412424445384233,
+    "auc": 0.6628352490421455
+   }
+  },
+  "anticipation": {
+   "hits": 60,
+   "denominator": 144
+  },
+  "gate2": false,
+  "gate3": false,
+  "gate4": true
+ },
+ "placebo": {
+  "q": {
+   "all": {
+    "frames": 6526,
+    "log_loss": 0.7357733832685751,
+    "auc": 0.7622160128570385
+   },
+   "prefire3s": {
+    "frames": 573,
+    "log_loss": 1.1708579416033398,
+    "auc": 0.3850574712643678
+   }
+  },
+  "anticipation": {
+   "hits": 44,
+   "denominator": 138
+  },
+  "gate2": false,
+  "gate3": false,
+  "gate4": true
+ },
+ "gate1": {
+  "q": {
+   "frames": 6526,
+   "matches": 4,
+   "log_loss": 0.5490777278107231,
+   "auc": 0.7983219136876755
+  },
+  "zenchi": {
+   "hits": 7556,
+   "frames": 8333,
+   "agreement": 0.9067562702508101
+  },
+  "events_identical": {
+   "q_7gc4TgFig": true,
+   "fcXG83vInDY": true,
+   "mia8KCjr52g": true,
+   "review": true,
+   "zenchi": true
+  },
+  "scene_first_sec": 2760.383333333333,
+  "flips": {
+   "off": 345,
+   "on": 1039
+  },
+  "passed": false
+ },
+ "false_lethal": {
+  "q_7gc4TgFig": {
+   "rows": 0,
+   "wrong": 0
+  },
+  "fcXG83vInDY": {
+   "rows": 0,
+   "wrong": 0
+  },
+  "mia8KCjr52g": {
+   "rows": 0,
+   "wrong": 0
+  }
+ },
+ "game14_display_rows": 0,
+ "timing_ms": {
+  "computed": 15309,
+  "p50": 478.72746800258756,
+  "p95": 1687.1885600008043,
+  "p99": 2525.165483597368,
+  "max": 74168.28333200142
+ },
+ "gates": {
+  "q": false,
+  "zenchi": false,
+  "false_certainty": true,
+  "scene": true,
+  "game14": true,
+  "flips": false,
+  "prefire3s": false,
+  "anticipation": true,
+  "placebo_fails": true
+ },
+ "leak_suspect": false,
+ "passed": false
+}

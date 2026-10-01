@@ -1,0 +1,27 @@
+{
+ "state": "completed",
+ "frames": 27000,
+ "display_frames": 27000,
+ "elapsed_seconds": 1215.3437417259993,
+ "record_bytes": 1519666,
+ "live_count": true,
+ "model_dir": "models/exchange_event_v3",
+ "options": {
+  "death_guard": true,
+  "confirmed_death_hold": true,
+  "death_formula_guard": true,
+  "color_score_safety": true,
+  "multi_landing_death": true,
+  "midchain_completion": true,
+  "death_pending_ledger": true,
+  "hidden_row_death": true,
+  "prefire_snapshot": true,
+  "hidden_row_belief": true,
+  "post_counter_death_bound": true,
+  "single_death_proof_guard": true,
+  "single_death_proof_negative_only": true,
+  "prefire_best_play": true,
+  "prefire_best_play_latency": 0.4,
+  "prefire_best_play_evaluator": "s3"
+ }
+}
