@@ -4982,3 +4982,9 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 
 ## 2026-10-01 切替平滑 (--exchange-event-switch-smoothing) / E19 再測定 (worktree D:/puyo_analyzer/wt_switch)
 - 事前登録は exev DECISIONS.md。結果: 切替平滑A は zenchi 7,670 (門7,671に−1フレーム、窓境界の偶然) で不合格、飛び34→16。E19 は q .4967 (−.0109) / zenchi 7,627 (−44) で不合格。本番登録なし。詳細 logs/switch_smoothing/RESULT.md。
+
+## 2026-10-01 Claude: 発火前の最善手 Phase 3 — 不合格・本番登録なし
+- branch claude/prefire-exchange-prediction-20260930 (wt_prefire、cd06536 push 済み)。新規 `src/prefire_best_play.py`・`src/prefire_best_play_layer.py`、replay フラグ `--prefire-best-play*` (既定OFF)。
+- `src/exchange_event_features.py::prefire_side_features` に optional `simulator` を追加 (既定 None で出力不変)。native を使うのは浮きぷよ・UNKNOWN がない盤面だけ。記録 7,500 盤面で Python 版と一致。
+- 事前登録 (DECISIONS dc29e73/c8feead) の4構成とも改善の門に未達。結果と原因は DECISIONS 同日節、詳細は wt_prefire `logs/prefire_prediction/PHASE3.md`。
+- Codex 向けの依頼はなし。表示のちらつき対策を進める場合の表示設計は Codex 担当 (PHASE3.md §7-3)。
