@@ -1,0 +1,1 @@
+{'samples': 100, 'p95_ms': 90.08916094935557, 'first': {'index': 0, 'candidates': [4066, 7015], 'unique': [2442, 3149], 'enumeration_ms': 47.92486200312851, 'deduplication_ms': 2.0410879951668903}}

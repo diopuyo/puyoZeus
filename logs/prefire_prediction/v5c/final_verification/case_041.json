@@ -1,0 +1,24 @@
+{
+  "source": "fcXG83vInDY",
+  "t_sec": 840.1333333333333,
+  "transitions": 968,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [],
+  "values": [
+    {
+      "exact": 0.5111308805477249,
+      "actual": 0.5111308805477249,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.5111308805477249,
+      "actual": 0.5111308805477249,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 44,
+  "feature_mismatches": 0
+}

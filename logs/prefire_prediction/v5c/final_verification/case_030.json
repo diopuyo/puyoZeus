@@ -1,0 +1,93 @@
+{
+  "source": "fcXG83vInDY",
+  "t_sec": 395.3333333333333,
+  "transitions": 880,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        1,
+        2
+      ],
+      "responses": [
+        7,
+        4
+      ],
+      "value_gap": 0.05633014101676065
+    },
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        2,
+        3
+      ],
+      "responses": [
+        4,
+        7
+      ],
+      "value_gap": 0.03636696493861574
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        0,
+        1
+      ],
+      "responses": [
+        2,
+        4
+      ],
+      "value_gap": 0.015055503644349488
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        1,
+        2
+      ],
+      "responses": [
+        4,
+        2
+      ],
+      "value_gap": 0.01581492334552903
+    }
+  ],
+  "values": [
+    {
+      "exact": 0.503155964685453,
+      "actual": 0.503155964685453,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.5098923209784535,
+      "actual": 0.5098923209784535,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 32,
+  "feature_mismatches": 0
+}

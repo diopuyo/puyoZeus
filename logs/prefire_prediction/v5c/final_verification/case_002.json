@@ -1,0 +1,93 @@
+{
+  "source": "q_7gc4TgFig",
+  "t_sec": 253.96666666666667,
+  "transitions": 968,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        5,
+        6
+      ],
+      "responses": [
+        17,
+        12
+      ],
+      "value_gap": 0.0016502577934121576
+    },
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        8,
+        9
+      ],
+      "responses": [
+        12,
+        17
+      ],
+      "value_gap": 0.04024540373505525
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        0,
+        1
+      ],
+      "responses": [
+        11,
+        5
+      ],
+      "value_gap": 0.00017392545638439394
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        3,
+        4
+      ],
+      "responses": [
+        5,
+        11
+      ],
+      "value_gap": 0.0003330459010929543
+    }
+  ],
+  "values": [
+    {
+      "exact": 0.43158758908755235,
+      "actual": 0.43158758908755235,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.44265041702881086,
+      "actual": 0.44265041702881086,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 103,
+  "feature_mismatches": 0
+}

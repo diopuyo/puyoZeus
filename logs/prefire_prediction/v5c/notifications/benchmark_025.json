@@ -1,0 +1,24 @@
+{
+  "source": "fcXG83vInDY",
+  "t_sec": 180.23333333333332,
+  "milliseconds": 64195.95580200257,
+  "warm_ms": 0.04410099791130051,
+  "warm_equal": true,
+  "profile": false,
+  "candidates": [
+    9682,
+    9682
+  ],
+  "best": [
+    0.7611598645534682,
+    0.7948964422123603
+  ],
+  "evaluations": 34262,
+  "evaluation_hits": 4622,
+  "landing_cache": {
+    "hits": 39185,
+    "misses": 38583,
+    "maxsize": 32768,
+    "currsize": 32768
+  }
+}

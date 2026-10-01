@@ -1,0 +1,59 @@
+{
+  "source": "fcXG83vInDY",
+  "t_sec": 265.2,
+  "transitions": 968,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        2,
+        3
+      ],
+      "responses": [
+        1,
+        7
+      ],
+      "value_gap": 0.006416935285498415
+    },
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        3,
+        5
+      ],
+      "responses": [
+        7,
+        1
+      ],
+      "value_gap": 0.07711696056543521
+    }
+  ],
+  "values": [
+    {
+      "exact": 0.8021734180712973,
+      "actual": 0.8021734180712973,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.8021734180712973,
+      "actual": 0.8021734180712973,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 63,
+  "feature_mismatches": 0
+}

@@ -1,0 +1,24 @@
+{
+  "source": "zenchi",
+  "t_sec": 2551.5833333333335,
+  "milliseconds": 107415.2591940001,
+  "warm_ms": 0.03960700269090012,
+  "warm_equal": true,
+  "profile": false,
+  "candidates": [
+    4852,
+    5818
+  ],
+  "best": [
+    0.35549610803204235,
+    0.42630631321833773
+  ],
+  "evaluations": 38005,
+  "evaluation_hits": 1531,
+  "landing_cache": {
+    "hits": 60093,
+    "misses": 18979,
+    "maxsize": 32768,
+    "currsize": 18979
+  }
+}

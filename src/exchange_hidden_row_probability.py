@@ -66,6 +66,9 @@ def weighted_landing(projection: Any, overlay: Any, snapshot: Any, latest: tuple
     """死亡判定とは独立に、候補ごとのS3と着弾の合成確率を平均する。"""
     from src.exchange_event_landing import logit_mean
     tracker = overlay.tracker
+    # 終了後に死亡記録だけが残った場合は、起点のないS3を作らず呼出元の通常経路を使う。
+    if tracker.firing is None:
+        return None
     engine = getattr(tracker, 'hidden_row_belief', None)
     record = tracker.current or projection.death_record
     if engine is None or record is None or not any(engine.active(c) for c in record.chains):

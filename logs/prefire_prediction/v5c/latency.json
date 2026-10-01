@@ -1,0 +1,29 @@
+{
+  "notifications": 5,
+  "indices": [
+    0,
+    25,
+    44,
+    71,
+    77
+  ],
+  "milliseconds": [
+    59983.81568199693,
+    64195.95580200257,
+    142994.7370170048,
+    399794.1938400036,
+    107415.2591940001
+  ],
+  "p95_ms": 348434.30247540376,
+  "latency_sec": 348.5,
+  "within_200ms": false,
+  "sampling": "5A固定100局面の各記録の先頭1件・cold cache",
+  "limitation": "5件の事前診断。全通知分布のP95を保証する標本ではない。",
+  "sha256": {
+    "logs/prefire_prediction/v5c/notifications/benchmark_000.json": "938731fd163028e897c02b54c1b25532ed00a3c53215bb8f176dd577ab9dedf4",
+    "logs/prefire_prediction/v5c/notifications/benchmark_025.json": "eeffc2b123767ab0949ffc8e648e4c8ffcb6db08e832ba74a9cfd5252679e040",
+    "logs/prefire_prediction/v5c/notifications/benchmark_044.json": "eab658d41e6acb3678e02de3d28fd938f30cd5292917a33b54c6aced1f16463d",
+    "logs/prefire_prediction/v5c/notifications/benchmark_071.json": "c25cd6a4e5ea946361b60e0c1e3a9f78da1572162572b13dff351d9cf6fbed27",
+    "logs/prefire_prediction/v5c/notifications/benchmark_077.json": "1e25c19e88db3552531562184057d68d5f82f607568401b7ba958267638378c6"
+  }
+}

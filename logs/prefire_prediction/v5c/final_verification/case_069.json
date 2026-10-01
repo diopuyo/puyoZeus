@@ -1,0 +1,24 @@
+{
+  "source": "mia8KCjr52g",
+  "t_sec": 807.8666666666667,
+  "transitions": 968,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [],
+  "values": [
+    {
+      "exact": 0.5158602677477562,
+      "actual": 0.5158602677477562,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.5158602677477562,
+      "actual": 0.5158602677477562,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 43,
+  "feature_mismatches": 0
+}

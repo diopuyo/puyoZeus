@@ -1,0 +1,30 @@
+started short available_kib 19772940 processes_before 1
+completed short
+started q_7gc4TgFig available_kib 19802940 processes_before 1
+started fcXG83vInDY available_kib 19783908 processes_before 2
+started mia8KCjr52g available_kib 19755644 processes_before 3
+started review available_kib 19604716 processes_before 4
+completed review
+started zenchi available_kib 18653484 processes_before 4
+completed mia8KCjr52g
+started c1 available_kib 17596324 processes_before 7
+completed q_7gc4TgFig
+completed fcXG83vInDY
+started c2 available_kib 17116784 processes_before 7
+started c3 available_kib 16992540 processes_before 7
+completed c1
+started c4 available_kib 16730768 processes_before 7
+completed zenchi
+started c5 available_kib 17254164 processes_before 5
+completed c4
+started c6 available_kib 17095060 processes_before 6
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/mnt/d/puyo_analyzer/wt_prefire/scripts/prefire_v5c_batch.py", line 77, in <module>
+    main()
+  File "/mnt/d/puyo_analyzer/wt_prefire/scripts/prefire_v5c_batch.py", line 73, in main
+    run([*BASELINE_DIRS, *(f'c{i}' for i in range(1, 7))], args.workers)
+  File "/mnt/d/puyo_analyzer/wt_prefire/scripts/prefire_v5c_batch.py", line 51, in run
+    raise RuntimeError(f'{source}: exit {code} (他の実行中記録は継続)')
+RuntimeError: c5: exit 1 (他の実行中記録は継続)

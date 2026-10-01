@@ -1,0 +1,33 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/mnt/d/puyo_analyzer/wt_prefire/scripts/prefire_v5c_replay.py", line 25, in <module>
+    main()
+  File "/mnt/d/puyo_analyzer/wt_prefire/scripts/prefire_v5c_replay.py", line 20, in main
+    result = replay.freeze_latency() if source == 'freeze' else replay.run(source)
+                                                                ^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/puyo_analyzer/wt_prefire/scripts/prefire_v5b_replay.py", line 55, in run
+    result = replay(record, dest, model_directory(opts), True, None, **opts)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/puyo_analyzer/wt_prefire/scripts/replay_exchange_event_20260926.py", line 140, in replay
+    overlay.update(*inputs)
+  File "/mnt/d/puyo_analyzer/wt_prefire/src/exchange_event_overlay.py", line 246, in update
+    self._landing_projection.update(self, result, snapshot, t_sec)
+  File "/mnt/d/puyo_analyzer/wt_prefire/src/exchange_event_landing.py", line 143, in update
+    self._project(overlay, snapshot, incoming, amount_key, base, record, t_sec)
+  File "/mnt/d/puyo_analyzer/wt_prefire/src/exchange_event_landing.py", line 190, in _project
+    self.last = self._evaluate(overlay, snapshot, self.latest, incoming, hands, base, t_sec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/puyo_analyzer/wt_prefire/src/exchange_event_landing.py", line 366, in _evaluate
+    value = self._evaluate_single(overlay, snapshot, latest, incoming, hands, base, t_sec, context)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/puyo_analyzer/wt_prefire/src/exchange_event_landing.py", line 389, in _evaluate_single
+    weighted = weighted_landing(self, overlay, snapshot, latest, hands, base, t_sec)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/puyo_analyzer/wt_prefire/src/exchange_hidden_row_probability.py", line 75, in weighted_landing
+    event = ExchangeEndInput(tracker.firing, np.zeros(2), np.zeros(2), tracker._score_elapsed)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 9, in __init__
+  File "/mnt/d/puyo_analyzer/wt_prefire/src/exchange_event_evaluator.py", line 97, in __post_init__
+    raise ValueError("firingはFiringInputが必要")
+ValueError: firingはFiringInputが必要

@@ -241,6 +241,15 @@ def test_landing_averages_candidate_probabilities_and_zero_incoming(monkeypatch:
     assert chain.predicted_final_score == 40. and entry['stats']['mean_send'] == .5
 
 
+def test_landing_without_firing_uses_existing_fallback() -> None:
+    from src.exchange_hidden_row_probability import weighted_landing
+    engine = NS(active=lambda chain: True)
+    tracker = NS(current=None, firing=None, hidden_row_belief=engine, _score_elapsed=2.)
+    projection = NS(death_record=NS(chains=[NS()]))
+    snapshot = NS(total_dropped_to_p1=0, total_dropped_to_p2=0)
+    assert weighted_landing(projection, NS(tracker=tracker), snapshot, (), (), dict(p1=.4), 2.) is None
+
+
 def test_death_counterexample_keeps_all_surviving_boards() -> None:
     from src.exchange_hidden_row_belief import HiddenRowPrefire
     from src.exchange_event_tracker import ExchangeChainRecord

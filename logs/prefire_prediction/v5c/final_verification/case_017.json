@@ -1,0 +1,76 @@
+{
+  "source": "q_7gc4TgFig",
+  "t_sec": 612.8333333333334,
+  "transitions": 968,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [
+    {
+      "attacker": 0,
+      "key": [
+        1,
+        1,
+        1
+      ],
+      "attacks": [
+        8,
+        13
+      ],
+      "responses": [
+        16,
+        6
+      ],
+      "value_gap": 0.019172509317017694
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        3,
+        4
+      ],
+      "responses": [
+        8,
+        17
+      ],
+      "value_gap": 0.02754932989359654
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        4,
+        5
+      ],
+      "responses": [
+        17,
+        6
+      ],
+      "value_gap": 2.3925406191283027e-05
+    }
+  ],
+  "values": [
+    {
+      "exact": 0.4685760167823778,
+      "actual": 0.4685760167823778,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.47814987163973294,
+      "actual": 0.47814987163973294,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 100,
+  "feature_mismatches": 0
+}

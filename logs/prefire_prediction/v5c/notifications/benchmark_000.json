@@ -1,0 +1,24 @@
+{
+  "source": "q_7gc4TgFig",
+  "t_sec": 172.33333333333334,
+  "milliseconds": 59983.81568199693,
+  "warm_ms": 0.04167199949733913,
+  "warm_equal": true,
+  "profile": false,
+  "candidates": [
+    4066,
+    7015
+  ],
+  "best": [
+    0.009932727455590658,
+    0.009932727455590658
+  ],
+  "evaluations": 52529,
+  "evaluation_hits": 5527,
+  "landing_cache": {
+    "hits": 60491,
+    "misses": 55621,
+    "maxsize": 32768,
+    "currsize": 32768
+  }
+}

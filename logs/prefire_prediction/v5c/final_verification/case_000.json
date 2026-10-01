@@ -1,0 +1,59 @@
+{
+  "source": "q_7gc4TgFig",
+  "t_sec": 172.33333333333334,
+  "transitions": 880,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        0,
+        1
+      ],
+      "responses": [
+        11,
+        17
+      ],
+      "value_gap": 3.305717405087394e-05
+    },
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        1,
+        2
+      ],
+      "responses": [
+        17,
+        0
+      ],
+      "value_gap": 8.84498412211266e-05
+    }
+  ],
+  "values": [
+    {
+      "exact": 0.004326784829082511,
+      "actual": 0.004326784829082511,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.004326784829082511,
+      "actual": 0.004326784829082511,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 70,
+  "feature_mismatches": 0
+}

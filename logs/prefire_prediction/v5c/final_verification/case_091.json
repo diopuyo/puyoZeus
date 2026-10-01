@@ -1,0 +1,59 @@
+{
+  "source": "zenchi",
+  "t_sec": 3181.55,
+  "transitions": 968,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        1,
+        2
+      ],
+      "responses": [
+        10,
+        17
+      ],
+      "value_gap": 0.00041818980265784234
+    },
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        2,
+        3
+      ],
+      "responses": [
+        17,
+        10
+      ],
+      "value_gap": 0.002143711761548983
+    }
+  ],
+  "values": [
+    {
+      "exact": 0.661131922386267,
+      "actual": 0.661131922386267,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.661131922386267,
+      "actual": 0.661131922386267,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 65,
+  "feature_mismatches": 0
+}

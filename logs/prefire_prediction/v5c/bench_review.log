@@ -1,0 +1,1 @@
+{'source': 'review', 't_sec': 2558.2833333333333, 'milliseconds': 399794.1938400036, 'warm_ms': 0.03858700074488297, 'warm_equal': True, 'profile': False, 'candidates': [6811, 7750], 'best': [0.5304868349886128, 0.6338901948837524], 'evaluations': 272337, 'evaluation_hits': 82, 'landing_cache': {'hits': 451059, 'misses': 93779, 'maxsize': 32768, 'currsize': 32768}}

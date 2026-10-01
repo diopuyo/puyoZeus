@@ -1,0 +1,93 @@
+{
+  "source": "zenchi",
+  "t_sec": 3033.5833333333335,
+  "transitions": 968,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        3,
+        4
+      ],
+      "responses": [
+        12,
+        10
+      ],
+      "value_gap": 0.010041687812216038
+    },
+    {
+      "attacker": 0,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        7,
+        8
+      ],
+      "responses": [
+        10,
+        21
+      ],
+      "value_gap": 0.012316570797280324
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        1,
+        2
+      ],
+      "responses": [
+        10,
+        13
+      ],
+      "value_gap": 0.011408201379024097
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        2,
+        3
+      ],
+      "responses": [
+        13,
+        6
+      ],
+      "value_gap": 0.022391107920229913
+    }
+  ],
+  "values": [
+    {
+      "exact": 0.5202683320419749,
+      "actual": 0.5202683320419749,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.5310814546751483,
+      "actual": 0.5310814546751483,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 152,
+  "feature_mismatches": 0
+}

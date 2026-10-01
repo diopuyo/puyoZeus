@@ -1,0 +1,93 @@
+{
+  "source": "mia8KCjr52g",
+  "t_sec": 201.46666666666667,
+  "transitions": 968,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [
+    {
+      "attacker": 0,
+      "key": [
+        1,
+        1,
+        1
+      ],
+      "attacks": [
+        8,
+        13
+      ],
+      "responses": [
+        4,
+        3
+      ],
+      "value_gap": 0.013638696768205949
+    },
+    {
+      "attacker": 0,
+      "key": [
+        5,
+        1,
+        2
+      ],
+      "attacks": [
+        0,
+        17
+      ],
+      "responses": [
+        7,
+        1
+      ],
+      "value_gap": 0.08564265797398807
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        0,
+        1
+      ],
+      "responses": [
+        17,
+        8
+      ],
+      "value_gap": 0.0207002170200139
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        1
+      ],
+      "attacks": [
+        3,
+        4
+      ],
+      "responses": [
+        0,
+        17
+      ],
+      "value_gap": 0.02555551922168542
+    }
+  ],
+  "values": [
+    {
+      "exact": 0.5637851047735477,
+      "actual": 0.5637851047735477,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.5780088856737736,
+      "actual": 0.5780088856737736,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 0,
+  "feature_mismatches": 0
+}

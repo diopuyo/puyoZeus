@@ -1,0 +1,2 @@
+violations []
+{"gates": {"a": true, "b": true, "c": true}, "abc_passed": true, "speed_passed": false, "passed": false, "rows": 60426, "used": 0, "early_referenced": 0, "early_used": 0, "held": 0, "missing_any": 17973, "firing_any": 3124, "agreement": {"denominator": 0, "last_hits": 0, "half_second_hits": 0, "exchanges": 181, "with_both_endpoints": 164, "last_scored": 0, "half_second_scored": 0, "both_scored": 0}}

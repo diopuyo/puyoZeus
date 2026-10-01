@@ -4,6 +4,7 @@ from __future__ import annotations
 from functools import lru_cache
 from dataclasses import replace
 import hashlib
+from typing import Callable
 
 import numpy as np
 
@@ -61,16 +62,22 @@ def unique(options: tuple[base.Position, ...]) -> tuple[base.Position, ...]:
 
 def choose(states: tuple[base.Position, base.Position], attacker: int, elapsed: float,
            value_fn: ValueFunction, depth: int | None = None,
-           k: int | None = None, unknown_rollouts: int = 0) -> tuple | None:
+           k: int | None = None, unknown_rollouts: int = 0,
+           resolver: Callable | None = None, options_fn: Callable | None = None) -> tuple | None:
     """全候補集合上のminimax。内側の境界が既存最善を超えられない枝だけ打ち切る。"""
-    options = tuple(unique(candidates(p, depth, k, side)) for side, p in enumerate(states))
+    resolve = resolver or base.resolve
+    if k is not None:
+        raise ValueError('5Bの既知探索ではK制限を使用できない')
+    options = tuple(options_fn(p, depth, side) if options_fn else unique(candidates(p, depth, k, side))
+                    for side, p in enumerate(states))
     if not all(options):
         return None
     if depth is None and unknown_rollouts:
         sampled = response_states(states, 1-attacker, unknown_rollouts)
         if len(sampled) > 1:
-            groups = tuple(unique(candidates(p, side=1-attacker)) for p in sampled)
-            return sampled_choose(options[attacker], groups, attacker, elapsed, value_fn)
+            groups = tuple(options_fn(p, None, 1-attacker) if options_fn else
+                           unique(candidates(p, side=1-attacker)) for p in sampled)
+            return sampled_choose(options[attacker], groups, attacker, elapsed, value_fn, resolve)
     sign, best, best_signed = (1 if attacker == 0 else -1), None, -float('inf')
     responses = list(options[1-attacker])
     for attack in options[attacker]:
@@ -78,7 +85,7 @@ def choose(states: tuple[base.Position, base.Position], attacker: int, elapsed: 
         time = elapsed + max(0, attack.consumed-1) * SEC_PER_HAND
         for response in responses:
             pair = (attack, response) if attacker == 0 else (response, attack)
-            score = value_fn(base.resolve(*pair, attacker, time), time)
+            score = value_fn(resolve(*pair, attacker, time), time)
             if sign * score < worst_signed:
                 worst, worst_signed = (score, attack, response), sign * score
             if worst_signed <= best_signed:
@@ -108,9 +115,10 @@ def response_states(states: tuple[base.Position, base.Position], side: int,
 
 
 def sampled_choose(attacks: tuple, response_groups: tuple, attacker: int, elapsed: float,
-                   value_fn: ValueFunction) -> tuple | None:
+                   value_fn: ValueFunction, resolver: Callable | None = None) -> tuple | None:
     """未知標本ごとの最善応手値を平均し、その期待値で攻撃を選ぶ。既知配置は全列挙。"""
     sign, best, best_signed = (1 if attacker == 0 else -1), None, -float('inf')
+    resolve = resolver or base.resolve
     for attack in attacks:
         values = []
         time = elapsed + max(0, attack.consumed-1) * SEC_PER_HAND
@@ -118,7 +126,7 @@ def sampled_choose(attacks: tuple, response_groups: tuple, attacker: int, elapse
             worst = None
             for response in responses:
                 pair = (attack, response) if attacker == 0 else (response, attack)
-                score = value_fn(base.resolve(*pair, attacker, time), time)
+                score = value_fn(resolve(*pair, attacker, time), time)
                 if worst is None or sign*score < sign*worst[0]:
                     worst = (score, attack, response)
             if worst is None:

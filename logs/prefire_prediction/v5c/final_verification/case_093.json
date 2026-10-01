@@ -1,0 +1,24 @@
+{
+  "source": "zenchi",
+  "t_sec": 3241.1833333333334,
+  "transitions": 968,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [],
+  "values": [
+    {
+      "exact": 0.5050995299473494,
+      "actual": 0.5050995299473494,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.5050995299473494,
+      "actual": 0.5050995299473494,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 44,
+  "feature_mismatches": 0
+}

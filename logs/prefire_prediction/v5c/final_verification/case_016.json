@@ -1,0 +1,24 @@
+{
+  "source": "q_7gc4TgFig",
+  "t_sec": 607.0,
+  "transitions": 968,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [],
+  "values": [
+    {
+      "exact": 0.47574264245884873,
+      "actual": 0.47574264245884873,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.47574264245884873,
+      "actual": 0.47574264245884873,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 66,
+  "feature_mismatches": 0
+}

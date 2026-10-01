@@ -1,0 +1,27 @@
+{
+  "sha256": {
+    "src/prefire_best_play_v5.py": "d9f2561b81af7d52e146753e8cf637adae291df9e9cc83fd57b735acbb604273",
+    "src/prefire_v5b_queue.py": "46524903d598e92e3f0d2a96f7d53a2810a048133ade1804df1d8308c9cd1d0d",
+    "src/prefire_v5b_search.py": "92809b190873ac78bce86b829df9d5c45c1472b1f914cb07f86f0cdfd750df91",
+    "src/prefire_v5b_value.py": "1afd1b1046016dbc94fee53b15839e5c0515e2e36854c114ac3c65aed15123da",
+    "src/prefire_v5c_search.py": "80edc5c37f1c3430dc58285f5bede8952f5351299bd8fe5a56b2f5201ff9e588",
+    "src/prefire_v5c_value.py": "ce54af71e2bedcfc98483271542407faac94964d3a05cad6773344048a9b4ff4",
+    "src/prefire_v5_search.py": "88dd14c3dc31f18c3ea8a8c85a8628c21cee24c2f2484b5fae3bf282393ee9b0",
+    "src/prefire_v5_value.py": "ffe7f7e163b1d93b669ddab2cc30dc7f1576de05affd51eddb719e531a24d28e",
+    "scripts/prefire_v5c_batch.py": "243863e297e7cd62bd894b9a610c61334fa4da9121c5c9e30f86aa849cba1f14",
+    "scripts/prefire_v5c_benchmark.py": "1a751f9b318792dfa6c6b66db848ee817884fe0472401e2e56bc46a7f724c053",
+    "scripts/prefire_v5c_enumeration.py": "05d777417189f2e615809f28c483ddfe0a6bb4ecc03baa2f02df7672ffc3f016",
+    "scripts/prefire_v5c_profile.py": "1804b587f313116445f9d12f666dbd06a1ba2b936a738897bd542e37bb02be9a",
+    "scripts/prefire_v5c_replay.py": "1472ce98619fc45ebfa941d3f718ccf35652e8fc0cae23cbce3e6af3ba32b5e1",
+    "scripts/prefire_v5c_report.py": "780c8cc25954047e2ef3df1ce8c83e67ce706f1180c52eddfc946cafc81b259e",
+    "scripts/prefire_v5c_verify.py": "28860b43430a6c635da406127db846cde1043fcab7a448ccd300f0ac9f3ca178",
+    "tests/test_prefire_v5c_report.py": "668932282f7feae5ba8c64953a4bbde402daa9ce34911a8a0ba794aaf2224491",
+    "tests/test_prefire_v5c_search.py": "6695bbdcdbf1ad3ed3b2846abe3bc1d7cc0efa743165e23cee54c0e49b0af92d",
+    "tests/test_prefire_v5c_value.py": "11c566f599f653809dd3f7e3118e0a7c60b3585defef5fb6ba0f8096cb67eee5",
+    "src/exchange_hidden_row_probability.py": "a5f8f353d840b5b954039f1772964a9115cb9ce7d9eb9609fc0f12a9862dc378",
+    "tests/test_e32_hidden_row_belief.py": "058048c94b555865f9325f742d7756ff4e0e0e8b8c73ecefc87f4f3b8b73f7b0",
+    "src/production_config.py": "99a3297c7a928cf0cbeb5bde1bdaa65c2e0a2fa7014b2b22ebc299c7ab8431a5",
+    "logs/prefire_prediction/v5_experiment/samples_ledger.json": "4d5aacfcd673eddab911aad40c5d6312634e9dc906c46415dceef0f0fa2a8135"
+  },
+  "violations": []
+}

@@ -1,0 +1,24 @@
+{
+  "source": "mia8KCjr52g",
+  "t_sec": 148.26666666666668,
+  "milliseconds": 142994.7370170048,
+  "warm_ms": 0.040738996176514775,
+  "warm_equal": true,
+  "profile": false,
+  "candidates": [
+    8968,
+    4676
+  ],
+  "best": [
+    0.14780946559819697,
+    0.14780946559819697
+  ],
+  "evaluations": 42857,
+  "evaluation_hits": 6383,
+  "landing_cache": {
+    "hits": 78977,
+    "misses": 19503,
+    "maxsize": 32768,
+    "currsize": 19503
+  }
+}

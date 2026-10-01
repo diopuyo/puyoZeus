@@ -1,0 +1,59 @@
+{
+  "source": "review",
+  "t_sec": 2603.6833333333334,
+  "transitions": 792,
+  "mismatches": 0,
+  "max_value_error": 0.0,
+  "dependencies": [
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        0,
+        1
+      ],
+      "responses": [
+        14,
+        10
+      ],
+      "value_gap": 0.001764137124734222
+    },
+    {
+      "attacker": 1,
+      "key": [
+        0,
+        1,
+        0
+      ],
+      "attacks": [
+        1,
+        2
+      ],
+      "responses": [
+        10,
+        14
+      ],
+      "value_gap": 0.003662774097194843
+    }
+  ],
+  "values": [
+    {
+      "exact": 0.21994893653235642,
+      "actual": 0.21994893653235642,
+      "missed": false,
+      "table_sequential_equal": true
+    },
+    {
+      "exact": 0.21994893653235642,
+      "actual": 0.21994893653235642,
+      "missed": false,
+      "table_sequential_equal": true
+    }
+  ],
+  "feature_boards": 100,
+  "feature_mismatches": 0
+}

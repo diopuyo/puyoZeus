@@ -1,0 +1,2301 @@
+{
+  "summary": {
+    "gates": {
+      "a": true,
+      "b": true,
+      "c": true
+    },
+    "abc_passed": true,
+    "speed_passed": false,
+    "passed": false,
+    "rows": 60426,
+    "used": 0,
+    "early_referenced": 0,
+    "early_used": 0,
+    "held": 0,
+    "missing_any": 17973,
+    "firing_any": 3124,
+    "agreement": {
+      "denominator": 0,
+      "last_hits": 0,
+      "half_second_hits": 0,
+      "exchanges": 181,
+      "with_both_endpoints": 164,
+      "last_scored": 0,
+      "half_second_scored": 0,
+      "both_scored": 0
+    }
+  },
+  "verification": {
+    "samples": 100,
+    "transitions": 94600,
+    "mismatches": 0,
+    "missed": 0,
+    "table_choice_mismatches": 0,
+    "max_value_error": 0.0,
+    "feature_boards": 7024,
+    "feature_mismatches": 0,
+    "board_dependent_response_cases": 65,
+    "scope": "5A/5Bと同じ両側1手の独立全直積。3手全直積の100局面検証ではない。"
+  },
+  "latency": {
+    "notifications": 5,
+    "indices": [
+      0,
+      25,
+      44,
+      71,
+      77
+    ],
+    "milliseconds": [
+      59983.81568199693,
+      64195.95580200257,
+      142994.7370170048,
+      399794.1938400036,
+      107415.2591940001
+    ],
+    "p95_ms": 348434.30247540376,
+    "latency_sec": 348.5,
+    "within_200ms": false,
+    "sampling": "5A固定100局面の各記録の先頭1件・cold cache",
+    "limitation": "5件の事前診断。全通知分布のP95を保証する標本ではない。",
+    "sha256": {
+      "logs/prefire_prediction/v5c/notifications/benchmark_000.json": "938731fd163028e897c02b54c1b25532ed00a3c53215bb8f176dd577ab9dedf4",
+      "logs/prefire_prediction/v5c/notifications/benchmark_025.json": "eeffc2b123767ab0949ffc8e648e4c8ffcb6db08e832ba74a9cfd5252679e040",
+      "logs/prefire_prediction/v5c/notifications/benchmark_044.json": "eab658d41e6acb3678e02de3d28fd938f30cd5292917a33b54c6aced1f16463d",
+      "logs/prefire_prediction/v5c/notifications/benchmark_071.json": "c25cd6a4e5ea946361b60e0c1e3a9f78da1572162572b13dff351d9cf6fbed27",
+      "logs/prefire_prediction/v5c/notifications/benchmark_077.json": "1e25c19e88db3552531562184057d68d5f82f607568401b7ba958267638378c6"
+    }
+  },
+  "sources": {
+    "q_7gc4TgFig": {
+      "audit": {
+        "rows": 14107,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 3635,
+        "firing_any": 417,
+        "not_predicted": 14107,
+        "statuses": {
+          "ok": [
+            503,
+            566
+          ],
+          "missing": [
+            834,
+            3400
+          ],
+          "firing": [
+            239,
+            180
+          ],
+          "invalid": [
+            3991,
+            1421
+          ],
+          "waiting": [
+            8540,
+            8540
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 385,
+          "p50": 0.002619996666908264,
+          "p95": 0.0047611936926841725,
+          "maximum": 0.009869001805782318,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 1779,
+        "cancelled": 1778,
+        "completed": 0,
+        "pending": 1
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 38,
+        "with_both_endpoints": 33,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 2447,
+        "missing_labels": 1874,
+        "all_with_fallback": {
+          "rows": 573,
+          "games": 4,
+          "p_current": 0.7307605608482143,
+          "p_current_game_mean": 0.7128928820819971,
+          "p_shown": 0.7307605608482143,
+          "p_shown_game_mean": 0.7128928820819971
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    },
+    "fcXG83vInDY": {
+      "audit": {
+        "rows": 14181,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 5404,
+        "firing_any": 731,
+        "not_predicted": 14181,
+        "statuses": {
+          "ok": [
+            564,
+            335
+          ],
+          "missing": [
+            680,
+            5214
+          ],
+          "firing": [
+            355,
+            377
+          ],
+          "invalid": [
+            5181,
+            854
+          ],
+          "waiting": [
+            7401,
+            7401
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 289,
+          "p50": 0.002843998372554779,
+          "p95": 0.0047885999083518965,
+          "maximum": 0.00950700044631958,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 1490,
+        "cancelled": 1489,
+        "completed": 0,
+        "pending": 1
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 25,
+        "with_both_endpoints": 25,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 1826,
+        "missing_labels": 1556,
+        "all_with_fallback": {
+          "rows": 270,
+          "games": 1,
+          "p_current": 0.27238362137194233,
+          "p_current_game_mean": 0.27238362137194233,
+          "p_shown": 0.27238362137194233,
+          "p_shown_game_mean": 0.27238362137194233
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    },
+    "mia8KCjr52g": {
+      "audit": {
+        "rows": 14836,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 5417,
+        "firing_any": 805,
+        "not_predicted": 14836,
+        "statuses": {
+          "ok": [
+            845,
+            1036
+          ],
+          "missing": [
+            1128,
+            4917
+          ],
+          "firing": [
+            576,
+            233
+          ],
+          "invalid": [
+            3826,
+            189
+          ],
+          "waiting": [
+            8461,
+            8461
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 493,
+          "p50": 0.002687998116016388,
+          "p95": 0.004349999129772185,
+          "maximum": 0.054023005068302155,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 1694,
+        "cancelled": 1694,
+        "completed": 0,
+        "pending": 0
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 52,
+        "with_both_endpoints": 47,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 3565,
+        "missing_labels": 3332,
+        "all_with_fallback": {
+          "rows": 233,
+          "games": 1,
+          "p_current": 0.9422034256378176,
+          "p_current_game_mean": 0.9422034256378176,
+          "p_shown": 0.9422034256378176,
+          "p_shown_game_mean": 0.9422034256378176
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    },
+    "review": {
+      "audit": {
+        "rows": 3485,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 718,
+        "firing_any": 245,
+        "not_predicted": 3485,
+        "statuses": {
+          "ok": [
+            332,
+            461
+          ],
+          "missing": [
+            561,
+            420
+          ],
+          "firing": [
+            117,
+            129
+          ],
+          "invalid": [
+            80,
+            80
+          ],
+          "waiting": [
+            2395,
+            2395
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 175,
+          "p50": 0.002673998475074768,
+          "p95": 0.004144907742738724,
+          "maximum": 0.007265001535415649,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 463,
+        "cancelled": 463,
+        "completed": 0,
+        "pending": 0
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 13,
+        "with_both_endpoints": 11,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 784,
+        "missing_labels": 784,
+        "all_with_fallback": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    },
+    "zenchi": {
+      "audit": {
+        "rows": 13817,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 2799,
+        "firing_any": 926,
+        "not_predicted": 13817,
+        "statuses": {
+          "ok": [
+            810,
+            1678
+          ],
+          "missing": [
+            2349,
+            1858
+          ],
+          "firing": [
+            711,
+            225
+          ],
+          "invalid": [
+            173,
+            282
+          ],
+          "waiting": [
+            9774,
+            9774
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 612,
+          "p50": 0.0033755041658878326,
+          "p95": 0.005969450622797011,
+          "maximum": 0.03421500325202942,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 1966,
+        "cancelled": 1966,
+        "completed": 0,
+        "pending": 0
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 53,
+        "with_both_endpoints": 48,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 3622,
+        "missing_labels": 90,
+        "all_with_fallback": {
+          "rows": 3532,
+          "games": 17,
+          "p_current": 0.7125162189122781,
+          "p_current_game_mean": 0.7336045351650357,
+          "p_shown": 0.7125162189122781,
+          "p_shown_game_mean": 0.7336045351650357
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    },
+    "c1": {
+      "audit": {
+        "rows": 5169,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 675,
+        "firing_any": 1222,
+        "not_predicted": 5169,
+        "statuses": {
+          "ok": [
+            282,
+            653
+          ],
+          "missing": [
+            540,
+            262
+          ],
+          "firing": [
+            532,
+            748
+          ],
+          "invalid": [
+            900,
+            591
+          ],
+          "waiting": [
+            2915,
+            2915
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 282,
+          "p50": 0.0034145042300224304,
+          "p95": 0.005193600803613662,
+          "maximum": 0.03213299810886383,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 568,
+        "cancelled": 568,
+        "completed": 0,
+        "pending": 0
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 38,
+        "with_both_endpoints": 35,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 2555,
+        "missing_labels": 0,
+        "all_with_fallback": {
+          "rows": 2555,
+          "games": 7,
+          "p_current": 0.6733473383860995,
+          "p_current_game_mean": 0.6852407290937766,
+          "p_shown": 0.6733473383860995,
+          "p_shown_game_mean": 0.6852407290937766
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    },
+    "c2": {
+      "audit": {
+        "rows": 5348,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 1022,
+        "firing_any": 235,
+        "not_predicted": 5348,
+        "statuses": {
+          "ok": [
+            315,
+            677
+          ],
+          "missing": [
+            806,
+            733
+          ],
+          "firing": [
+            183,
+            57
+          ],
+          "invalid": [
+            239,
+            76
+          ],
+          "waiting": [
+            3805,
+            3805
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 248,
+          "p50": 0.004085000604391098,
+          "p95": 0.00608304850757122,
+          "maximum": 0.037484996020793915,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 769,
+        "cancelled": 769,
+        "completed": 0,
+        "pending": 0
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 18,
+        "with_both_endpoints": 16,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 1324,
+        "missing_labels": 0,
+        "all_with_fallback": {
+          "rows": 1324,
+          "games": 6,
+          "p_current": 0.6401401171300453,
+          "p_current_game_mean": 0.6483119696637896,
+          "p_shown": 0.6401401171300453,
+          "p_shown_game_mean": 0.6483119696637896
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    },
+    "c3": {
+      "audit": {
+        "rows": 5356,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 1076,
+        "firing_any": 375,
+        "not_predicted": 5356,
+        "statuses": {
+          "ok": [
+            341,
+            628
+          ],
+          "missing": [
+            928,
+            718
+          ],
+          "firing": [
+            235,
+            156
+          ],
+          "invalid": [
+            151,
+            153
+          ],
+          "waiting": [
+            3701,
+            3701
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 230,
+          "p50": 0.004665996879339218,
+          "p95": 0.006839648634195328,
+          "maximum": 0.048878997564315796,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 769,
+        "cancelled": 768,
+        "completed": 0,
+        "pending": 1
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 22,
+        "with_both_endpoints": 20,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 1509,
+        "missing_labels": 0,
+        "all_with_fallback": {
+          "rows": 1509,
+          "games": 7,
+          "p_current": 0.7056534552417358,
+          "p_current_game_mean": 0.7082436465339734,
+          "p_shown": 0.7056534552417358,
+          "p_shown_game_mean": 0.7082436465339734
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    },
+    "c4": {
+      "audit": {
+        "rows": 7016,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 1406,
+        "firing_any": 959,
+        "not_predicted": 7016,
+        "statuses": {
+          "ok": [
+            563,
+            1160
+          ],
+          "missing": [
+            1170,
+            819
+          ],
+          "firing": [
+            515,
+            528
+          ],
+          "invalid": [
+            400,
+            141
+          ],
+          "waiting": [
+            4368,
+            4368
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 369,
+          "p50": 0.0036550089716911316,
+          "p95": 0.0060637965798377965,
+          "maximum": 0.07583200186491013,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 883,
+        "cancelled": 882,
+        "completed": 0,
+        "pending": 1
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 25,
+        "with_both_endpoints": 23,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 1762,
+        "missing_labels": 0,
+        "all_with_fallback": {
+          "rows": 1762,
+          "games": 7,
+          "p_current": 0.6853081623386741,
+          "p_current_game_mean": 0.683047549468823,
+          "p_shown": 0.6853081623386741,
+          "p_shown_game_mean": 0.683047549468823
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    },
+    "c5": {
+      "audit": {
+        "rows": 5724,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 1093,
+        "firing_any": 812,
+        "not_predicted": 5724,
+        "statuses": {
+          "ok": [
+            202,
+            1262
+          ],
+          "missing": [
+            959,
+            574
+          ],
+          "firing": [
+            758,
+            157
+          ],
+          "invalid": [
+            194,
+            120
+          ],
+          "waiting": [
+            3611,
+            3611
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 327,
+          "p50": 0.003916993737220764,
+          "p95": 0.006128595024347305,
+          "maximum": 0.03651999682188034,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 733,
+        "cancelled": 733,
+        "completed": 0,
+        "pending": 0
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 26,
+        "with_both_endpoints": 25,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 1875,
+        "missing_labels": 0,
+        "all_with_fallback": {
+          "rows": 1875,
+          "games": 7,
+          "p_current": 0.6571757885307556,
+          "p_current_game_mean": 0.6602309307666884,
+          "p_shown": 0.6571757885307556,
+          "p_shown_game_mean": 0.6602309307666884
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    },
+    "c6": {
+      "audit": {
+        "rows": 6393,
+        "used": 0,
+        "early_referenced": 0,
+        "early_used": 0,
+        "held": 0,
+        "missing_any": 1265,
+        "firing_any": 600,
+        "not_predicted": 6393,
+        "statuses": {
+          "ok": [
+            361,
+            941
+          ],
+          "missing": [
+            964,
+            935
+          ],
+          "firing": [
+            533,
+            74
+          ],
+          "invalid": [
+            140,
+            48
+          ],
+          "waiting": [
+            4395,
+            4395
+          ]
+        },
+        "replay_bookkeeping_or_completed_only_ms": {
+          "count": 327,
+          "p50": 0.004519999027252197,
+          "p95": 0.00673769786953926,
+          "maximum": 1.0596110001206398,
+          "over_simulated_latency": 0
+        }
+      },
+      "deferred": {
+        "submitted": 881,
+        "cancelled": 881,
+        "completed": 0,
+        "pending": 0
+      },
+      "agreement": {
+        "denominator": 0,
+        "last_hits": 0,
+        "half_second_hits": 0,
+        "exchanges": 28,
+        "with_both_endpoints": 26,
+        "last_scored": 0,
+        "half_second_scored": 0,
+        "both_scored": 0
+      },
+      "loss": {
+        "prefire_rows": 1918,
+        "missing_labels": 0,
+        "all_with_fallback": {
+          "rows": 1918,
+          "games": 7,
+          "p_current": 0.625982450070345,
+          "p_current_game_mean": 0.62182314954333,
+          "p_shown": 0.625982450070345,
+          "p_shown_game_mean": 0.62182314954333
+        },
+        "predicted_only": {
+          "rows": 0,
+          "games": 0,
+          "p_current": null,
+          "p_current_game_mean": null,
+          "p_shown": null,
+          "p_shown_game_mean": null
+        }
+      }
+    }
+  },
+  "zenchi_set1": {
+    "rows": 10943,
+    "predicted_rows": 0,
+    "missing_labels": 0,
+    "p_current": 0.6646377550385887,
+    "p_shown": 0.6646377550385887
+  },
+  "profile": {
+    "total_profiled_sec": 309.4293429440004,
+    "functions": [
+      {
+        "file": "_arraysetops_impl.py",
+        "function": "unique",
+        "calls": 14212,
+        "own_sec": 0.035557578,
+        "cumulative_sec": 0.265234105
+      },
+      {
+        "file": "prefire_v5_search.py",
+        "function": "resolve",
+        "calls": 58056,
+        "own_sec": 0.870907053,
+        "cumulative_sec": 10.309658352000001
+      },
+      {
+        "file": "exchange_event_evaluator.py",
+        "function": "evaluate_exchange_event",
+        "calls": 52635,
+        "own_sec": 0.22882903000000002,
+        "cumulative_sec": 18.74736832
+      },
+      {
+        "file": "prefire_v5_value.py",
+        "function": "evaluate",
+        "calls": 3,
+        "own_sec": 0.00015762800000000002,
+        "cumulative_sec": 0.24971872700000003
+      },
+      {
+        "file": "prefire_v5b_search.py",
+        "function": "candidates",
+        "calls": 4,
+        "own_sec": 0.01736601,
+        "cumulative_sec": 0.15422105900000002
+      },
+      {
+        "file": "visualize_advantage_overlay.py",
+        "function": "_exchange_board_features",
+        "calls": 7110,
+        "own_sec": 0.039568664,
+        "cumulative_sec": 263.929283433
+      },
+      {
+        "file": "visualize_advantage_overlay.py",
+        "function": "_side_feats_full_base",
+        "calls": 7110,
+        "own_sec": 0.39915715900000004,
+        "cumulative_sec": 263.811841091
+      },
+      {
+        "file": "prefire_v5b_search.py",
+        "function": "unique",
+        "calls": 4,
+        "own_sec": 0.010022978,
+        "cumulative_sec": 0.013163593000000001
+      }
+    ],
+    "note": "累積時間は包含関係があるため合計しない。プロファイラ負荷を含む。"
+  },
+  "enumeration": {
+    "samples": 100,
+    "p95_ms": 90.08916094935557,
+    "rows": [
+      {
+        "index": 0,
+        "candidates": [
+          4066,
+          7015
+        ],
+        "unique": [
+          2442,
+          3149
+        ],
+        "enumeration_ms": 47.92486200312851,
+        "deduplication_ms": 2.0410879951668903
+      },
+      {
+        "index": 1,
+        "candidates": [
+          5461,
+          8183
+        ],
+        "unique": [
+          4498,
+          6953
+        ],
+        "enumeration_ms": 55.419409000023734,
+        "deduplication_ms": 3.787929999816697
+      },
+      {
+        "index": 2,
+        "candidates": [
+          8884,
+          8569
+        ],
+        "unique": [
+          6932,
+          6968
+        ],
+        "enumeration_ms": 63.808740000240505,
+        "deduplication_ms": 5.639622002490796
+      },
+      {
+        "index": 3,
+        "candidates": [
+          8716,
+          8968
+        ],
+        "unique": [
+          1958,
+          1977
+        ],
+        "enumeration_ms": 62.43151799571933,
+        "deduplication_ms": 4.901076004898641
+      },
+      {
+        "index": 4,
+        "candidates": [
+          7468,
+          574
+        ],
+        "unique": [
+          1554,
+          109
+        ],
+        "enumeration_ms": 30.621866004366893,
+        "deduplication_ms": 1.9486539968056604
+      },
+      {
+        "index": 5,
+        "candidates": [
+          10648,
+          8842
+        ],
+        "unique": [
+          4505,
+          3523
+        ],
+        "enumeration_ms": 77.2229070062167,
+        "deduplication_ms": 3.7508209934458137
+      },
+      {
+        "index": 6,
+        "candidates": [
+          1108,
+          2404
+        ],
+        "unique": [
+          257,
+          907
+        ],
+        "enumeration_ms": 12.51423000212526,
+        "deduplication_ms": 1.9103889935649931
+      },
+      {
+        "index": 7,
+        "candidates": [
+          10648,
+          10648
+        ],
+        "unique": [
+          3927,
+          3976
+        ],
+        "enumeration_ms": 78.0256299985922,
+        "deduplication_ms": 3.9046570018399507
+      },
+      {
+        "index": 8,
+        "candidates": [
+          9682,
+          10648
+        ],
+        "unique": [
+          1473,
+          1622
+        ],
+        "enumeration_ms": 73.47801699506817,
+        "deduplication_ms": 4.231406004691962
+      },
+      {
+        "index": 9,
+        "candidates": [
+          4852,
+          9199
+        ],
+        "unique": [
+          1018,
+          3622
+        ],
+        "enumeration_ms": 56.154881000111345,
+        "deduplication_ms": 3.194971999619156
+      },
+      {
+        "index": 10,
+        "candidates": [
+          4306,
+          3004
+        ],
+        "unique": [
+          1581,
+          1097
+        ],
+        "enumeration_ms": 26.277162003680132,
+        "deduplication_ms": 1.8390149998595007
+      },
+      {
+        "index": 11,
+        "candidates": [
+          5648,
+          8265
+        ],
+        "unique": [
+          3204,
+          4511
+        ],
+        "enumeration_ms": 56.54400499770418,
+        "deduplication_ms": 2.9555990040535107
+      },
+      {
+        "index": 12,
+        "candidates": [
+          7960,
+          10648
+        ],
+        "unique": [
+          1784,
+          4622
+        ],
+        "enumeration_ms": 64.20095000066794,
+        "deduplication_ms": 4.9172819999512285
+      },
+      {
+        "index": 13,
+        "candidates": [
+          7246,
+          10648
+        ],
+        "unique": [
+          2946,
+          4401
+        ],
+        "enumeration_ms": 75.30436600063695,
+        "deduplication_ms": 4.373222000140231
+      },
+      {
+        "index": 14,
+        "candidates": [
+          9682,
+          10199
+        ],
+        "unique": [
+          5522,
+          4346
+        ],
+        "enumeration_ms": 70.33449899608968,
+        "deduplication_ms": 10.524473000259604
+      },
+      {
+        "index": 15,
+        "candidates": [
+          8338,
+          4348
+        ],
+        "unique": [
+          3699,
+          1944
+        ],
+        "enumeration_ms": 43.052341003203765,
+        "deduplication_ms": 4.168980995018501
+      },
+      {
+        "index": 16,
+        "candidates": [
+          6868,
+          6490
+        ],
+        "unique": [
+          5220,
+          5076
+        ],
+        "enumeration_ms": 47.677583002950996,
+        "deduplication_ms": 3.9496960016549565
+      },
+      {
+        "index": 17,
+        "candidates": [
+          7635,
+          8748
+        ],
+        "unique": [
+          2973,
+          7980
+        ],
+        "enumeration_ms": 61.86695100041106,
+        "deduplication_ms": 5.455704995256383
+      },
+      {
+        "index": 18,
+        "candidates": [
+          10648,
+          10648
+        ],
+        "unique": [
+          4318,
+          4143
+        ],
+        "enumeration_ms": 85.85058300377568,
+        "deduplication_ms": 5.893305999052245
+      },
+      {
+        "index": 19,
+        "candidates": [
+          5335,
+          7540
+        ],
+        "unique": [
+          4276,
+          6651
+        ],
+        "enumeration_ms": 44.326333998469636,
+        "deduplication_ms": 4.29162300133612
+      },
+      {
+        "index": 20,
+        "candidates": [
+          5398,
+          5954
+        ],
+        "unique": [
+          1958,
+          1186
+        ],
+        "enumeration_ms": 49.774754006648436,
+        "deduplication_ms": 3.52087699866388
+      },
+      {
+        "index": 21,
+        "candidates": [
+          4466,
+          6285
+        ],
+        "unique": [
+          1948,
+          2438
+        ],
+        "enumeration_ms": 45.2320799959125,
+        "deduplication_ms": 2.366916000028141
+      },
+      {
+        "index": 22,
+        "candidates": [
+          6314,
+          9640
+        ],
+        "unique": [
+          5630,
+          8318
+        ],
+        "enumeration_ms": 57.88937900069868,
+        "deduplication_ms": 9.33614099631086
+      },
+      {
+        "index": 23,
+        "candidates": [
+          10291,
+          10081
+        ],
+        "unique": [
+          5289,
+          5120
+        ],
+        "enumeration_ms": 70.65566800156375,
+        "deduplication_ms": 6.150859997433145
+      },
+      {
+        "index": 24,
+        "candidates": [
+          5942,
+          7015
+        ],
+        "unique": [
+          5376,
+          4484
+        ],
+        "enumeration_ms": 57.557580003049225,
+        "deduplication_ms": 5.029175001254771
+      },
+      {
+        "index": 25,
+        "candidates": [
+          9682,
+          9682
+        ],
+        "unique": [
+          2285,
+          2285
+        ],
+        "enumeration_ms": 65.16905399621464,
+        "deduplication_ms": 4.989031003788114
+      },
+      {
+        "index": 26,
+        "candidates": [
+          1304,
+          3120
+        ],
+        "unique": [
+          580,
+          371
+        ],
+        "enumeration_ms": 17.368174994771834,
+        "deduplication_ms": 1.2195369999972172
+      },
+      {
+        "index": 27,
+        "candidates": [
+          1063,
+          3513
+        ],
+        "unique": [
+          659,
+          2357
+        ],
+        "enumeration_ms": 19.433608998951968,
+        "deduplication_ms": 1.0792739994940348
+      },
+      {
+        "index": 28,
+        "candidates": [
+          8632,
+          8149
+        ],
+        "unique": [
+          3946,
+          3491
+        ],
+        "enumeration_ms": 54.624486998363864,
+        "deduplication_ms": 3.5476199991535395
+      },
+      {
+        "index": 29,
+        "candidates": [
+          9199,
+          9220
+        ],
+        "unique": [
+          4813,
+          4748
+        ],
+        "enumeration_ms": 61.95841600128915,
+        "deduplication_ms": 4.485987999942154
+      },
+      {
+        "index": 30,
+        "candidates": [
+          3348,
+          5600
+        ],
+        "unique": [
+          693,
+          1249
+        ],
+        "enumeration_ms": 31.459691999771167,
+        "deduplication_ms": 2.8082939970772713
+      },
+      {
+        "index": 31,
+        "candidates": [
+          4586,
+          6310
+        ],
+        "unique": [
+          2142,
+          2823
+        ],
+        "enumeration_ms": 39.76996699930169,
+        "deduplication_ms": 2.4847149979905225
+      },
+      {
+        "index": 32,
+        "candidates": [
+          5149,
+          2902
+        ],
+        "unique": [
+          4491,
+          2563
+        ],
+        "enumeration_ms": 32.97464799834415,
+        "deduplication_ms": 2.733027999056503
+      },
+      {
+        "index": 33,
+        "candidates": [
+          9640,
+          7876
+        ],
+        "unique": [
+          4596,
+          3745
+        ],
+        "enumeration_ms": 57.16275599843357,
+        "deduplication_ms": 4.667900000640657
+      },
+      {
+        "index": 34,
+        "candidates": [
+          2206,
+          3382
+        ],
+        "unique": [
+          226,
+          332
+        ],
+        "enumeration_ms": 26.588701002765447,
+        "deduplication_ms": 1.7534840008011088
+      },
+      {
+        "index": 35,
+        "candidates": [
+          7876,
+          8716
+        ],
+        "unique": [
+          949,
+          1996
+        ],
+        "enumeration_ms": 58.316205999290105,
+        "deduplication_ms": 2.9122630003257655
+      },
+      {
+        "index": 36,
+        "candidates": [
+          9716,
+          6952
+        ],
+        "unique": [
+          848,
+          641
+        ],
+        "enumeration_ms": 69.86020100157475,
+        "deduplication_ms": 2.9912210011389107
+      },
+      {
+        "index": 37,
+        "candidates": [
+          2395,
+          9220
+        ],
+        "unique": [
+          2180,
+          4779
+        ],
+        "enumeration_ms": 37.48688999621663,
+        "deduplication_ms": 2.6429549980093725
+      },
+      {
+        "index": 38,
+        "candidates": [
+          8548,
+          8548
+        ],
+        "unique": [
+          7662,
+          7662
+        ],
+        "enumeration_ms": 68.53525299811736,
+        "deduplication_ms": 5.181036001886241
+      },
+      {
+        "index": 39,
+        "candidates": [
+          9682,
+          8191
+        ],
+        "unique": [
+          5534,
+          2449
+        ],
+        "enumeration_ms": 60.67052199796308,
+        "deduplication_ms": 5.683345996658318
+      },
+      {
+        "index": 40,
+        "candidates": [
+          3378,
+          4610
+        ],
+        "unique": [
+          1429,
+          2506
+        ],
+        "enumeration_ms": 38.69538300205022,
+        "deduplication_ms": 2.670121000846848
+      },
+      {
+        "index": 41,
+        "candidates": [
+          7939,
+          10606
+        ],
+        "unique": [
+          6807,
+          7189
+        ],
+        "enumeration_ms": 66.67018699954497,
+        "deduplication_ms": 5.826359003549442
+      },
+      {
+        "index": 42,
+        "candidates": [
+          8947,
+          9682
+        ],
+        "unique": [
+          3448,
+          3223
+        ],
+        "enumeration_ms": 77.43114599725232,
+        "deduplication_ms": 5.417136002506595
+      },
+      {
+        "index": 43,
+        "candidates": [
+          8442,
+          5887
+        ],
+        "unique": [
+          4219,
+          3382
+        ],
+        "enumeration_ms": 47.14679800235899,
+        "deduplication_ms": 4.064802000357304
+      },
+      {
+        "index": 44,
+        "candidates": [
+          8968,
+          4676
+        ],
+        "unique": [
+          4323,
+          2069
+        ],
+        "enumeration_ms": 64.42620199959492,
+        "deduplication_ms": 4.271778998372611
+      },
+      {
+        "index": 45,
+        "candidates": [
+          1295,
+          5634
+        ],
+        "unique": [
+          619,
+          3223
+        ],
+        "enumeration_ms": 27.25305300555192,
+        "deduplication_ms": 2.220952999778092
+      },
+      {
+        "index": 46,
+        "candidates": [
+          1610,
+          3429
+        ],
+        "unique": [
+          704,
+          1015
+        ],
+        "enumeration_ms": 17.914894000568893,
+        "deduplication_ms": 1.4145280001685023
+      },
+      {
+        "index": 47,
+        "candidates": [
+          4508,
+          3429
+        ],
+        "unique": [
+          1709,
+          1015
+        ],
+        "enumeration_ms": 28.792057004466187,
+        "deduplication_ms": 1.7637659984757192
+      },
+      {
+        "index": 48,
+        "candidates": [
+          5797,
+          5560
+        ],
+        "unique": [
+          2565,
+          2326
+        ],
+        "enumeration_ms": 46.84077999991132,
+        "deduplication_ms": 2.6820019993465394
+      },
+      {
+        "index": 49,
+        "candidates": [
+          10648,
+          10648
+        ],
+        "unique": [
+          8745,
+          9640
+        ],
+        "enumeration_ms": 68.98875800106907,
+        "deduplication_ms": 11.557767997146584
+      },
+      {
+        "index": 50,
+        "candidates": [
+          8457,
+          7747
+        ],
+        "unique": [
+          5667,
+          4040
+        ],
+        "enumeration_ms": 52.800436002144124,
+        "deduplication_ms": 6.775283000024501
+      },
+      {
+        "index": 51,
+        "candidates": [
+          4781,
+          8769
+        ],
+        "unique": [
+          2500,
+          941
+        ],
+        "enumeration_ms": 58.55763200088404,
+        "deduplication_ms": 3.9897399983601645
+      },
+      {
+        "index": 52,
+        "candidates": [
+          10464,
+          4880
+        ],
+        "unique": [
+          5632,
+          1933
+        ],
+        "enumeration_ms": 56.040155002847314,
+        "deduplication_ms": 3.966161995776929
+      },
+      {
+        "index": 53,
+        "candidates": [
+          8401,
+          10648
+        ],
+        "unique": [
+          1903,
+          2404
+        ],
+        "enumeration_ms": 74.24365900078556,
+        "deduplication_ms": 4.199820003123023
+      },
+      {
+        "index": 54,
+        "candidates": [
+          6314,
+          6608
+        ],
+        "unique": [
+          850,
+          539
+        ],
+        "enumeration_ms": 50.12099900341127,
+        "deduplication_ms": 3.0342399986693636
+      },
+      {
+        "index": 55,
+        "candidates": [
+          8964,
+          6004
+        ],
+        "unique": [
+          3396,
+          2625
+        ],
+        "enumeration_ms": 65.16176599689061,
+        "deduplication_ms": 2.967262997117359
+      },
+      {
+        "index": 56,
+        "candidates": [
+          6530,
+          6004
+        ],
+        "unique": [
+          2672,
+          2625
+        ],
+        "enumeration_ms": 48.60061500221491,
+        "deduplication_ms": 3.6598489969037473
+      },
+      {
+        "index": 57,
+        "candidates": [
+          7494,
+          8009
+        ],
+        "unique": [
+          4261,
+          4562
+        ],
+        "enumeration_ms": 67.60834399756277,
+        "deduplication_ms": 4.1255480027757585
+      },
+      {
+        "index": 58,
+        "candidates": [
+          3172,
+          2960
+        ],
+        "unique": [
+          1413,
+          1147
+        ],
+        "enumeration_ms": 22.502109997731168,
+        "deduplication_ms": 2.93657500151312
+      },
+      {
+        "index": 59,
+        "candidates": [
+          8928,
+          5081
+        ],
+        "unique": [
+          4341,
+          2042
+        ],
+        "enumeration_ms": 47.70601099880878,
+        "deduplication_ms": 3.553760005161166
+      },
+      {
+        "index": 60,
+        "candidates": [
+          8933,
+          5871
+        ],
+        "unique": [
+          4529,
+          2990
+        ],
+        "enumeration_ms": 64.91848100267816,
+        "deduplication_ms": 3.7701129986089654
+      },
+      {
+        "index": 61,
+        "candidates": [
+          8124,
+          5520
+        ],
+        "unique": [
+          4017,
+          4875
+        ],
+        "enumeration_ms": 44.54754800099181,
+        "deduplication_ms": 4.3928049999522045
+      },
+      {
+        "index": 62,
+        "candidates": [
+          10648,
+          9640
+        ],
+        "unique": [
+          5024,
+          4557
+        ],
+        "enumeration_ms": 77.36622400261695,
+        "deduplication_ms": 5.368516001908574
+      },
+      {
+        "index": 63,
+        "candidates": [
+          8191,
+          7603
+        ],
+        "unique": [
+          4722,
+          4099
+        ],
+        "enumeration_ms": 54.952440004854,
+        "deduplication_ms": 4.540513997199014
+      },
+      {
+        "index": 64,
+        "candidates": [
+          7280,
+          5552
+        ],
+        "unique": [
+          1638,
+          1259
+        ],
+        "enumeration_ms": 52.12741900322726,
+        "deduplication_ms": 3.495783996186219
+      },
+      {
+        "index": 65,
+        "candidates": [
+          5964,
+          6796
+        ],
+        "unique": [
+          1404,
+          1552
+        ],
+        "enumeration_ms": 47.11701600172091,
+        "deduplication_ms": 2.5167040002997965
+      },
+      {
+        "index": 66,
+        "candidates": [
+          2814,
+          8400
+        ],
+        "unique": [
+          517,
+          3816
+        ],
+        "enumeration_ms": 51.541559005272575,
+        "deduplication_ms": 2.7464640006655827
+      },
+      {
+        "index": 67,
+        "candidates": [
+          7750,
+          7750
+        ],
+        "unique": [
+          1637,
+          1637
+        ],
+        "enumeration_ms": 55.81692299892893,
+        "deduplication_ms": 3.438658000959549
+      },
+      {
+        "index": 68,
+        "candidates": [
+          5818,
+          7742
+        ],
+        "unique": [
+          2762,
+          3644
+        ],
+        "enumeration_ms": 59.08391800039681,
+        "deduplication_ms": 3.8712869936716743
+      },
+      {
+        "index": 69,
+        "candidates": [
+          9199,
+          9199
+        ],
+        "unique": [
+          3240,
+          3240
+        ],
+        "enumeration_ms": 66.28474399622064,
+        "deduplication_ms": 4.340623003372457
+      },
+      {
+        "index": 70,
+        "candidates": [
+          7246,
+          7742
+        ],
+        "unique": [
+          6340,
+          6117
+        ],
+        "enumeration_ms": 71.4651749949553,
+        "deduplication_ms": 5.903593999391887
+      },
+      {
+        "index": 71,
+        "candidates": [
+          6811,
+          7750
+        ],
+        "unique": [
+          5546,
+          6876
+        ],
+        "enumeration_ms": 54.05890999827534,
+        "deduplication_ms": 5.909062005230226
+      },
+      {
+        "index": 72,
+        "candidates": [
+          4902,
+          3363
+        ],
+        "unique": [
+          4205,
+          2986
+        ],
+        "enumeration_ms": 35.09094899345655,
+        "deduplication_ms": 3.640737006207928
+      },
+      {
+        "index": 73,
+        "candidates": [
+          2912,
+          4626
+        ],
+        "unique": [
+          1746,
+          3266
+        ],
+        "enumeration_ms": 29.186226995079778,
+        "deduplication_ms": 2.6776360027724877
+      },
+      {
+        "index": 74,
+        "candidates": [
+          9199,
+          10648
+        ],
+        "unique": [
+          3823,
+          4225
+        ],
+        "enumeration_ms": 77.77462599915452,
+        "deduplication_ms": 4.8070909979287535
+      },
+      {
+        "index": 75,
+        "candidates": [
+          9306,
+          6438
+        ],
+        "unique": [
+          1943,
+          2547
+        ],
+        "enumeration_ms": 63.62036999780685,
+        "deduplication_ms": 3.9611079992027953
+      },
+      {
+        "index": 76,
+        "candidates": [
+          472,
+          5842
+        ],
+        "unique": [
+          256,
+          5306
+        ],
+        "enumeration_ms": 24.918092000007164,
+        "deduplication_ms": 3.083716997934971
+      },
+      {
+        "index": 77,
+        "candidates": [
+          4852,
+          5818
+        ],
+        "unique": [
+          2302,
+          1457
+        ],
+        "enumeration_ms": 41.78728599799797,
+        "deduplication_ms": 2.7335710037732497
+      },
+      {
+        "index": 78,
+        "candidates": [
+          10648,
+          10648
+        ],
+        "unique": [
+          2441,
+          2390
+        ],
+        "enumeration_ms": 70.51712999964366,
+        "deduplication_ms": 4.2907819952233694
+      },
+      {
+        "index": 79,
+        "candidates": [
+          4852,
+          4285
+        ],
+        "unique": [
+          2828,
+          3550
+        ],
+        "enumeration_ms": 39.32949100271799,
+        "deduplication_ms": 2.4932609958341345
+      },
+      {
+        "index": 80,
+        "candidates": [
+          9073,
+          9199
+        ],
+        "unique": [
+          6065,
+          6128
+        ],
+        "enumeration_ms": 63.05299200175796,
+        "deduplication_ms": 7.061431999318302
+      },
+      {
+        "index": 81,
+        "candidates": [
+          7372,
+          7372
+        ],
+        "unique": [
+          2986,
+          3082
+        ],
+        "enumeration_ms": 72.0731559995329,
+        "deduplication_ms": 5.579372998909093
+      },
+      {
+        "index": 82,
+        "candidates": [
+          6889,
+          8149
+        ],
+        "unique": [
+          5938,
+          6986
+        ],
+        "enumeration_ms": 59.620342006383,
+        "deduplication_ms": 4.808812998817302
+      },
+      {
+        "index": 83,
+        "candidates": [
+          9522,
+          6336
+        ],
+        "unique": [
+          8132,
+          1478
+        ],
+        "enumeration_ms": 73.70050300232833,
+        "deduplication_ms": 6.135605995950755
+      },
+      {
+        "index": 84,
+        "candidates": [
+          10522,
+          8296
+        ],
+        "unique": [
+          3918,
+          2664
+        ],
+        "enumeration_ms": 85.14170900161844,
+        "deduplication_ms": 4.8603609975543804
+      },
+      {
+        "index": 85,
+        "candidates": [
+          6280,
+          10648
+        ],
+        "unique": [
+          2856,
+          4796
+        ],
+        "enumeration_ms": 60.77969099715119,
+        "deduplication_ms": 4.53561800532043
+      },
+      {
+        "index": 86,
+        "candidates": [
+          8926,
+          5797
+        ],
+        "unique": [
+          5897,
+          3926
+        ],
+        "enumeration_ms": 62.82247199851554,
+        "deduplication_ms": 4.686288004450034
+      },
+      {
+        "index": 87,
+        "candidates": [
+          9682,
+          9640
+        ],
+        "unique": [
+          5642,
+          5970
+        ],
+        "enumeration_ms": 67.13536000461318,
+        "deduplication_ms": 6.236558998352848
+      },
+      {
+        "index": 88,
+        "candidates": [
+          10648,
+          10648
+        ],
+        "unique": [
+          9451,
+          9608
+        ],
+        "enumeration_ms": 84.26086400140775,
+        "deduplication_ms": 7.972560997586697
+      },
+      {
+        "index": 89,
+        "candidates": [
+          9199,
+          10648
+        ],
+        "unique": [
+          4483,
+          5174
+        ],
+        "enumeration_ms": 104.09579900442623,
+        "deduplication_ms": 19.145446000038646
+      },
+      {
+        "index": 90,
+        "candidates": [
+          9136,
+          10522
+        ],
+        "unique": [
+          1888,
+          5331
+        ],
+        "enumeration_ms": 110.0373959998251,
+        "deduplication_ms": 5.817149001813959
+      },
+      {
+        "index": 91,
+        "candidates": [
+          6763,
+          9619
+        ],
+        "unique": [
+          2828,
+          1523
+        ],
+        "enumeration_ms": 67.21946600009687,
+        "deduplication_ms": 4.536556996754371
+      },
+      {
+        "index": 92,
+        "candidates": [
+          10320,
+          8301
+        ],
+        "unique": [
+          5414,
+          3461
+        ],
+        "enumeration_ms": 80.22264399915002,
+        "deduplication_ms": 4.963910003425553
+      },
+      {
+        "index": 93,
+        "candidates": [
+          10648,
+          10648
+        ],
+        "unique": [
+          9080,
+          9077
+        ],
+        "enumeration_ms": 78.02514699869789,
+        "deduplication_ms": 13.804448004520964
+      },
+      {
+        "index": 94,
+        "candidates": [
+          2920,
+          5046
+        ],
+        "unique": [
+          658,
+          996
+        ],
+        "enumeration_ms": 29.35882000019774,
+        "deduplication_ms": 4.0827049961080775
+      },
+      {
+        "index": 95,
+        "candidates": [
+          8926,
+          10081
+        ],
+        "unique": [
+          5759,
+          6529
+        ],
+        "enumeration_ms": 68.26282600377453,
+        "deduplication_ms": 5.055018998973537
+      },
+      {
+        "index": 96,
+        "candidates": [
+          4852,
+          8884
+        ],
+        "unique": [
+          2254,
+          3768
+        ],
+        "enumeration_ms": 58.75611300143646,
+        "deduplication_ms": 4.470899999432731
+      },
+      {
+        "index": 97,
+        "candidates": [
+          9052,
+          9052
+        ],
+        "unique": [
+          6144,
+          6167
+        ],
+        "enumeration_ms": 73.5352419942501,
+        "deduplication_ms": 5.286674000672065
+      },
+      {
+        "index": 98,
+        "candidates": [
+          6465,
+          7331
+        ],
+        "unique": [
+          3054,
+          2891
+        ],
+        "enumeration_ms": 51.85644100129139,
+        "deduplication_ms": 4.95347199466778
+      },
+      {
+        "index": 99,
+        "candidates": [
+          179,
+          3802
+        ],
+        "unique": [
+          178,
+          1511
+        ],
+        "enumeration_ms": 17.381887999363244,
+        "deduplication_ms": 1.7836269980762154
+      }
+    ]
+  },
+  "resources": {
+    "min_available_kib": 14285752,
+    "max_python_processes": 10,
+    "running": [],
+    "pending": [],
+    "monitor_only": true
+  }
+}
