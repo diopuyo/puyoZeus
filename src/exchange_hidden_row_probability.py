@@ -98,6 +98,11 @@ def weighted_landing(projection: Any, overlay: Any, snapshot: Any, latest: tuple
     record = tracker.current or projection.death_record
     if engine is None or record is None or not any(engine.active(c) for c in record.chains):
         return None
+    if tracker.firing is None:
+        # 撃ち合いの記録 (death_record) だけが残り発火入力が無い時刻では S3 を組めない。
+        # 旧実装は ExchangeEndInput で ValueError になり再生が止まった (zenchi 第32〜33試合、2026-10-01)。
+        # 加重なし (呼出元の確率をそのまま使う) へ落とす。発火入力がある時刻の値は変わらない。
+        return None
     probability, gfe_mean, counter = 0., 0., {}
     dropped = (snapshot.total_dropped_to_p1, snapshot.total_dropped_to_p2)
     event = ExchangeEndInput(tracker.firing, np.zeros(2), np.zeros(2), tracker._score_elapsed)
