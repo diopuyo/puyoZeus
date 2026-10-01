@@ -243,6 +243,7 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
     bridge.isolate_evaluation = split
     sink.bridge = bridge
     bridge.async_counter = getattr(options, 'async_counter', True)
+    bridge.switch_smoothing = getattr(options, 'switch_smoothing', False)
     bridge.mc_rollouts = getattr(options, 'mc_rollouts', 30)
     publisher.start()
     if getattr(options, 'lifecycle', False):
@@ -330,6 +331,16 @@ def make_bridge(options: argparse.Namespace, sink: ResultSink) -> RecognitionBri
     return bridge
 
 
+def with_switch_smoothing(evaluator: Any, bridge: Any) -> Any:
+    """切替平滑がONの時だけ、評価器の生成へ switch_smoothing=True を足す (OFFでは元の評価器をそのまま返す)。"""
+    if not getattr(bridge, 'switch_smoothing', False):
+        return evaluator
+
+    def create(*args: Any, **kwargs: Any) -> Any:
+        return evaluator(*args, switch_smoothing=True, **kwargs)
+    return create
+
+
 def install_live_instrumentation(stack: ExitStack, overlay: Any, bridge: RecognitionBridge) -> None:
     from scripts.measure_realtime_breakdown_20260928 import FrameMeter, install_substages
     bridge.meter = FrameMeter()
@@ -346,7 +357,8 @@ def install_live_instrumentation(stack: ExitStack, overlay: Any, bridge: Recogni
         from src.phase_j.live_eval_supervisor import factory
         evaluator = (factory(bridge, bridge.evaluation_directory)
                      if getattr(bridge, 'isolate_evaluation', False) else NotificationExchangeOverlay)
-        stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay', evaluator))
+        stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay',
+                                         with_switch_smoothing(evaluator, bridge)))
         stack.enter_context(patch.object(overlay, '_exchange_display', latest_display))
     elif isinstance(bridge, ProcessRecognitionBridge):
         stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay',
@@ -439,6 +451,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--coalesce-features', action='store_true')
     parser.add_argument('--split-evaluation', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--async-counter', action=argparse.BooleanOptionalAction, default=True)
+    # 評価器切替の表示値の飛び対策。既定OFF、配布ランチャーの設定 (config/live_defaults.json) でON。
+    parser.add_argument('--switch-smoothing', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--input-config', type=Path)
     parser.add_argument('--source', choices=('dshow', 'video'))
     parser.add_argument('--config', type=Path)

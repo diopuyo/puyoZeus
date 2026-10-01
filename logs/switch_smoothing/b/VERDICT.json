@@ -1,0 +1,18 @@
+{
+  "q": true,
+  "zenchi": false,
+  "false_fire": true,
+  "false_certainty": true,
+  "scene": true,
+  "game14": true,
+  "display_q": true,
+  "jump_reduction": true,
+  "baseline_jump_count": true,
+  "death_immediate": true,
+  "legit_jumps_kept": true,
+  "fresh_equal": true,
+  "fresh_longest": true,
+  "fresh_updates": true,
+  "raw_columns": true,
+  "passed": false
+}

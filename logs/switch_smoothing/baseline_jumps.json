@@ -1,0 +1,2954 @@
+{
+ "summary": {
+  "frames": 112346,
+  "switches": 641,
+  "jumps": 342,
+  "by_kind": {
+   "none": 80,
+   "fire": 112,
+   "landing": 48,
+   "death": 45,
+   "boundary": 33,
+   "chain_end": 24
+  },
+  "non_event_jumps": 80,
+  "non_event_switch_jumps": 34,
+  "by_transition": {
+   "(同一由来内)S3_landing": {
+    "fire": 47,
+    "chain_end": 9,
+    "landing": 13,
+    "death": 2,
+    "none": 6
+   },
+   "(同一由来内)G_fe": {
+    "none": 36,
+    "boundary": 7,
+    "landing": 11,
+    "fire": 3,
+    "chain_end": 1
+   },
+   "G_fe→S3_landing": {
+    "fire": 45
+   },
+   "waiting_confirmed→G_fe": {
+    "boundary": 25,
+    "none": 19
+   },
+   "S3_landing→G_fe": {
+    "landing": 19,
+    "chain_end": 8,
+    "none": 6,
+    "fire": 3
+   },
+   "S3_landing→unavoidable_death": {
+    "death": 19
+   },
+   "G_fe→confirmed_death": {
+    "death": 14
+   },
+   "G_fe→S3_provisional": {
+    "none": 3,
+    "fire": 7
+   },
+   "S3_provisional→S3_landing": {
+    "fire": 5,
+    "chain_end": 2,
+    "none": 1
+   },
+   "S3→G_fe": {
+    "chain_end": 3,
+    "none": 2,
+    "landing": 1,
+    "fire": 1
+   },
+   "S3_landing→confirmed_death": {
+    "boundary": 1,
+    "death": 6
+   },
+   "(同一由来内)S3_provisional": {
+    "none": 4,
+    "chain_end": 1
+   },
+   "S3_landing→S3": {
+    "landing": 2,
+    "none": 1
+   },
+   "S3_provisional→S3": {
+    "landing": 2
+   },
+   "unavoidable_death→S3_landing": {
+    "death": 2
+   },
+   "S3_landing→S3_provisional": {
+    "none": 1,
+    "fire": 1
+   },
+   "S3_provisional→G_fe": {
+    "none": 1
+   },
+   "S3_provisional→confirmed_death": {
+    "death": 1
+   },
+   "G_fe→unavoidable_death": {
+    "death": 1
+   }
+  }
+ },
+ "runs": {
+  "zenchi": {
+   "frames": 25398,
+   "switches": 182,
+   "jumps": [
+    {
+     "t": 2581.85,
+     "game": 1,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03572635313522399,
+     "switched": false
+    },
+    {
+     "t": 2587.9166666666665,
+     "game": 1,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.047616978674244526,
+     "switched": true
+    },
+    {
+     "t": 2590.9166666666665,
+     "game": 1,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.04442808926152486,
+     "switched": true
+    },
+    {
+     "t": 2607.35,
+     "game": 1,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.08846394205813912,
+     "switched": true
+    },
+    {
+     "t": 2614.0833333333335,
+     "game": 1,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.12235474088886417,
+     "switched": false
+    },
+    {
+     "t": 2630.65,
+     "game": 1,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.12233644911558805,
+     "switched": true
+    },
+    {
+     "t": 2637.55,
+     "game": 2,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.30917986756930704,
+     "switched": true
+    },
+    {
+     "t": 2678.85,
+     "game": 2,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.02596378488759088,
+     "switched": true
+    },
+    {
+     "t": 2686.616666666667,
+     "game": 2,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "chain_end",
+     "size": 0.03327053580634309,
+     "switched": false
+    },
+    {
+     "t": 2688.75,
+     "game": 2,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.033677078306870056,
+     "switched": false
+    },
+    {
+     "t": 2696.6833333333334,
+     "game": 2,
+     "transition": "S3_landing→G_fe",
+     "kind": "chain_end",
+     "size": 0.02008391282167532,
+     "switched": true
+    },
+    {
+     "t": 2698.983333333333,
+     "game": 2,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.20606762737218176,
+     "switched": true
+    },
+    {
+     "t": 2701.383333333333,
+     "game": 3,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.25382903352017716,
+     "switched": true
+    },
+    {
+     "t": 2707.7833333333333,
+     "game": 3,
+     "transition": "G_fe→S3_provisional",
+     "kind": "none",
+     "size": 0.0591793976921392,
+     "switched": true
+    },
+    {
+     "t": 2711.05,
+     "game": 3,
+     "transition": "S3_provisional→S3",
+     "kind": "landing",
+     "size": 0.06120944872958345,
+     "switched": true
+    },
+    {
+     "t": 2740.883333333333,
+     "game": 3,
+     "transition": "S3→G_fe",
+     "kind": "chain_end",
+     "size": 0.05303836015750946,
+     "switched": true
+    },
+    {
+     "t": 2743.6833333333334,
+     "game": 3,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.10381171268917516,
+     "switched": false
+    },
+    {
+     "t": 2751.383333333333,
+     "game": 3,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.021378770783610168,
+     "switched": false
+    },
+    {
+     "t": 2760.116666666667,
+     "game": 3,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.17361171715841606,
+     "switched": true
+    },
+    {
+     "t": 2767.7833333333333,
+     "game": 3,
+     "transition": "unavoidable_death→S3_landing",
+     "kind": "death",
+     "size": 0.04708187886472426,
+     "switched": true
+    },
+    {
+     "t": 2770.4166666666665,
+     "game": 3,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "death",
+     "size": 0.07424970569825218,
+     "switched": false
+    },
+    {
+     "t": 2777.383333333333,
+     "game": 4,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.47344248543178236,
+     "switched": true
+    },
+    {
+     "t": 2782.983333333333,
+     "game": 4,
+     "transition": "(同一由来内)S3_provisional",
+     "kind": "none",
+     "size": 0.0538216642638738,
+     "switched": false
+    },
+    {
+     "t": 2796.616666666667,
+     "game": 4,
+     "transition": "S3_provisional→S3_landing",
+     "kind": "fire",
+     "size": 0.0771711018240846,
+     "switched": true
+    },
+    {
+     "t": 2804.2833333333333,
+     "game": 4,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.11915527516986224,
+     "switched": true
+    },
+    {
+     "t": 2812.3166666666666,
+     "game": 5,
+     "transition": "(同一由来内)G_fe",
+     "kind": "boundary",
+     "size": 0.08503862499625783,
+     "switched": false
+    },
+    {
+     "t": 2815.3166666666666,
+     "game": 5,
+     "transition": "S3_landing→S3",
+     "kind": "landing",
+     "size": 0.04322818179431809,
+     "switched": true
+    },
+    {
+     "t": 2822.983333333333,
+     "game": 5,
+     "transition": "(同一由来内)S3_provisional",
+     "kind": "chain_end",
+     "size": 0.055729052291150105,
+     "switched": false
+    },
+    {
+     "t": 2825.0833333333335,
+     "game": 5,
+     "transition": "S3→G_fe",
+     "kind": "none",
+     "size": 0.04849964808376278,
+     "switched": true
+    },
+    {
+     "t": 2827.2833333333333,
+     "game": 5,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03233760351817394,
+     "switched": false
+    },
+    {
+     "t": 2832.2166666666667,
+     "game": 5,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.01652596638113768,
+     "switched": true
+    },
+    {
+     "t": 2843.15,
+     "game": 5,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "none",
+     "size": 0.049785401515895555,
+     "switched": false
+    },
+    {
+     "t": 2848.383333333333,
+     "game": 5,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.1362718203272893,
+     "switched": false
+    },
+    {
+     "t": 2863.6833333333334,
+     "game": 5,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.15053150321567288,
+     "switched": true
+    },
+    {
+     "t": 2866.15,
+     "game": 6,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.3014054206372446,
+     "switched": true
+    },
+    {
+     "t": 2889.883333333333,
+     "game": 6,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.05378858814464582,
+     "switched": true
+    },
+    {
+     "t": 2892.2833333333333,
+     "game": 6,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.15413057497930385,
+     "switched": true
+    },
+    {
+     "t": 2896.15,
+     "game": 6,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.391100791810987,
+     "switched": true
+    },
+    {
+     "t": 2898.15,
+     "game": 7,
+     "transition": "(同一由来内)G_fe",
+     "kind": "boundary",
+     "size": 0.04510627652887372,
+     "switched": false
+    },
+    {
+     "t": 2900.7833333333333,
+     "game": 7,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03843126484415871,
+     "switched": false
+    },
+    {
+     "t": 2929.116666666667,
+     "game": 7,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.18290864071795196,
+     "switched": true
+    },
+    {
+     "t": 2931.7166666666667,
+     "game": 7,
+     "transition": "S3_landing→G_fe",
+     "kind": "chain_end",
+     "size": 0.04332153651468795,
+     "switched": true
+    },
+    {
+     "t": 2934.883333333333,
+     "game": 7,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.028869063827961006,
+     "switched": true
+    },
+    {
+     "t": 2940.7166666666667,
+     "game": 7,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.13770207349786168,
+     "switched": true
+    },
+    {
+     "t": 2948.516666666667,
+     "game": 8,
+     "transition": "(同一由来内)G_fe",
+     "kind": "boundary",
+     "size": 0.10061895527524228,
+     "switched": false
+    },
+    {
+     "t": 2951.516666666667,
+     "game": 8,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03397702600872643,
+     "switched": false
+    },
+    {
+     "t": 2973.516666666667,
+     "game": 8,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.036205606805264134,
+     "switched": false
+    },
+    {
+     "t": 2978.6833333333334,
+     "game": 8,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.20225175919140947,
+     "switched": true
+    },
+    {
+     "t": 2983.7833333333333,
+     "game": 9,
+     "transition": "(同一由来内)G_fe",
+     "kind": "boundary",
+     "size": 0.03945239454282823,
+     "switched": false
+    },
+    {
+     "t": 2986.483333333333,
+     "game": 9,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.040617600887678074,
+     "switched": false
+    },
+    {
+     "t": 3011.05,
+     "game": 9,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.03942951935576294,
+     "switched": true
+    },
+    {
+     "t": 3015.5833333333335,
+     "game": 9,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.13073938924736472,
+     "switched": true
+    },
+    {
+     "t": 3020.7166666666667,
+     "game": 10,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.45498029852127153,
+     "switched": true
+    },
+    {
+     "t": 3023.3166666666666,
+     "game": 10,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.040303648283139704,
+     "switched": false
+    },
+    {
+     "t": 3026.45,
+     "game": 10,
+     "transition": "(同一由来内)S3_provisional",
+     "kind": "none",
+     "size": 0.046032433731374556,
+     "switched": false
+    },
+    {
+     "t": 3031.8166666666666,
+     "game": 10,
+     "transition": "G_fe→S3_provisional",
+     "kind": "fire",
+     "size": 0.04047842743753982,
+     "switched": true
+    },
+    {
+     "t": 3043.15,
+     "game": 10,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.06945966120335523,
+     "switched": true
+    },
+    {
+     "t": 3047.55,
+     "game": 10,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.049562943301050266,
+     "switched": false
+    },
+    {
+     "t": 3049.75,
+     "game": 10,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.28966672164811086,
+     "switched": true
+    },
+    {
+     "t": 3051.8166666666666,
+     "game": 11,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.12547727980245466,
+     "switched": true
+    },
+    {
+     "t": 3054.4166666666665,
+     "game": 11,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03831222732675066,
+     "switched": false
+    },
+    {
+     "t": 3076.65,
+     "game": 11,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.04997530906509262,
+     "switched": false
+    },
+    {
+     "t": 3084.1833333333334,
+     "game": 11,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.02781722241226292,
+     "switched": false
+    },
+    {
+     "t": 3089.95,
+     "game": 11,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.0856362463911618,
+     "switched": false
+    },
+    {
+     "t": 3118.0833333333335,
+     "game": 12,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.48878619326473605,
+     "switched": true
+    },
+    {
+     "t": 3122.883333333333,
+     "game": 12,
+     "transition": "G_fe→S3_provisional",
+     "kind": "none",
+     "size": 0.04328046470208691,
+     "switched": true
+    },
+    {
+     "t": 3138.95,
+     "game": 12,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.028349278949976964,
+     "switched": false
+    },
+    {
+     "t": 3144.15,
+     "game": 12,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.058671023951248014,
+     "switched": false
+    },
+    {
+     "t": 3148.85,
+     "game": 12,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.08400687161348669,
+     "switched": false
+    },
+    {
+     "t": 3151.116666666667,
+     "game": 12,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.09052103098372621,
+     "switched": false
+    },
+    {
+     "t": 3164.85,
+     "game": 12,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.038959014544087414,
+     "switched": true
+    },
+    {
+     "t": 3170.95,
+     "game": 13,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.35882830082221784,
+     "switched": true
+    },
+    {
+     "t": 3173.55,
+     "game": 13,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.038032075596729054,
+     "switched": false
+    },
+    {
+     "t": 3196.3166666666666,
+     "game": 13,
+     "transition": "G_fe→S3_provisional",
+     "kind": "fire",
+     "size": 0.030808883158590983,
+     "switched": true
+    },
+    {
+     "t": 3199.3166666666666,
+     "game": 13,
+     "transition": "S3_provisional→G_fe",
+     "kind": "none",
+     "size": 0.06103749986481122,
+     "switched": true
+    },
+    {
+     "t": 3201.383333333333,
+     "game": 13,
+     "transition": "S3→G_fe",
+     "kind": "landing",
+     "size": 0.056189333693187016,
+     "switched": true
+    },
+    {
+     "t": 3228.65,
+     "game": 13,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.06532456372914586,
+     "switched": false
+    },
+    {
+     "t": 3234.35,
+     "game": 14,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.45231139888669336,
+     "switched": true
+    },
+    {
+     "t": 3236.983333333333,
+     "game": 14,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.040340679084017395,
+     "switched": false
+    },
+    {
+     "t": 3245.1833333333334,
+     "game": 14,
+     "transition": "(同一由来内)S3_provisional",
+     "kind": "none",
+     "size": 0.06282312906086818,
+     "switched": false
+    },
+    {
+     "t": 3250.6833333333334,
+     "game": 14,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.12161720087857841,
+     "switched": true
+    },
+    {
+     "t": 3253.95,
+     "game": 14,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.05847342588031468,
+     "switched": false
+    },
+    {
+     "t": 3264.25,
+     "game": 14,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.05790433450698612,
+     "switched": true
+    },
+    {
+     "t": 3271.616666666667,
+     "game": 14,
+     "transition": "S3_landing→confirmed_death",
+     "kind": "boundary",
+     "size": 0.8235397786483007,
+     "switched": true
+    },
+    {
+     "t": 3275.75,
+     "game": 15,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03950881288349006,
+     "switched": false
+    },
+    {
+     "t": 3302.65,
+     "game": 15,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.05331021542402209,
+     "switched": true
+    },
+    {
+     "t": 3321.7833333333333,
+     "game": 15,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.21064006875724073,
+     "switched": true
+    },
+    {
+     "t": 3326.05,
+     "game": 16,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.4549802824156407,
+     "switched": true
+    },
+    {
+     "t": 3341.55,
+     "game": 16,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.045958455586243285,
+     "switched": true
+    },
+    {
+     "t": 3344.3166666666666,
+     "game": 16,
+     "transition": "S3_landing→G_fe",
+     "kind": "none",
+     "size": 0.03543634871902651,
+     "switched": true
+    },
+    {
+     "t": 3348.75,
+     "game": 16,
+     "transition": "S3_provisional→S3_landing",
+     "kind": "fire",
+     "size": 0.09588747561172173,
+     "switched": true
+    },
+    {
+     "t": 3353.883333333333,
+     "game": 16,
+     "transition": "S3_provisional→confirmed_death",
+     "kind": "death",
+     "size": 0.3088213504996334,
+     "switched": true
+    },
+    {
+     "t": 3356.2166666666667,
+     "game": 17,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.10321148968943578,
+     "switched": true
+    },
+    {
+     "t": 3358.983333333333,
+     "game": 17,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03850298777224703,
+     "switched": false
+    },
+    {
+     "t": 3379.05,
+     "game": 17,
+     "transition": "G_fe→S3_provisional",
+     "kind": "fire",
+     "size": 0.022642132743467436,
+     "switched": true
+    },
+    {
+     "t": 3388.35,
+     "game": 17,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.0743625319159944,
+     "switched": false
+    },
+    {
+     "t": 3406.6833333333334,
+     "game": 17,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.16971192717192918,
+     "switched": true
+    },
+    {
+     "t": 3409.983333333333,
+     "game": 17,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.16459159749167585,
+     "switched": true
+    },
+    {
+     "t": 3412.3166666666666,
+     "game": 18,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.2888883613826736,
+     "switched": true
+    },
+    {
+     "t": 3426.5833333333335,
+     "game": 18,
+     "transition": "S3_landing→G_fe",
+     "kind": "none",
+     "size": 0.034584526746748945,
+     "switched": true
+    }
+   ],
+   "switch_pairs": {
+    "G_fe→S3_landing": 31,
+    "S3_landing→G_fe": 18,
+    "S3_landing→unavoidable_death": 20,
+    "unavoidable_death→S3_landing": 11,
+    "unavoidable_death→G_fe": 6,
+    "G_fe→confirmed_death": 11,
+    "waiting_confirmed→G_fe": 13,
+    "G_fe→S3_provisional": 22,
+    "S3_provisional→S3": 9,
+    "S3→G_fe": 13,
+    "S3_provisional→S3_landing": 5,
+    "S3_landing→S3_provisional": 2,
+    "S3_landing→S3": 4,
+    "S3_provisional→G_fe": 10,
+    "S3_landing→confirmed_death": 3,
+    "unavoidable_death→confirmed_death": 2,
+    "unavoidable_death→S3_provisional": 1,
+    "S3_provisional→confirmed_death": 1
+   }
+  },
+  "review": {
+   "frames": 5948,
+   "switches": 42,
+   "jumps": [
+    {
+     "t": 2579.516666666667,
+     "game": 1,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.08418718193541347,
+     "switched": true
+    },
+    {
+     "t": 2581.85,
+     "game": 1,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03572635313522399,
+     "switched": false
+    },
+    {
+     "t": 2587.9166666666665,
+     "game": 1,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.047616978674244526,
+     "switched": true
+    },
+    {
+     "t": 2590.9166666666665,
+     "game": 1,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.04442808926152486,
+     "switched": true
+    },
+    {
+     "t": 2607.35,
+     "game": 1,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.08346523220536517,
+     "switched": true
+    },
+    {
+     "t": 2614.0833333333335,
+     "game": 1,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.11885155121051055,
+     "switched": false
+    },
+    {
+     "t": 2630.65,
+     "game": 1,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.12233644911558805,
+     "switched": true
+    },
+    {
+     "t": 2637.55,
+     "game": 2,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.30917986756930704,
+     "switched": true
+    },
+    {
+     "t": 2678.85,
+     "game": 2,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.02596378488759088,
+     "switched": true
+    },
+    {
+     "t": 2686.616666666667,
+     "game": 2,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "chain_end",
+     "size": 0.03327053580634309,
+     "switched": false
+    },
+    {
+     "t": 2688.75,
+     "game": 2,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.033677078306870056,
+     "switched": false
+    },
+    {
+     "t": 2696.6833333333334,
+     "game": 2,
+     "transition": "S3_landing→G_fe",
+     "kind": "chain_end",
+     "size": 0.02008391282167532,
+     "switched": true
+    },
+    {
+     "t": 2698.983333333333,
+     "game": 2,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.20606762737218176,
+     "switched": true
+    },
+    {
+     "t": 2701.383333333333,
+     "game": 3,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.25382903352017716,
+     "switched": true
+    },
+    {
+     "t": 2707.7833333333333,
+     "game": 3,
+     "transition": "G_fe→S3_provisional",
+     "kind": "none",
+     "size": 0.04421023558054488,
+     "switched": true
+    },
+    {
+     "t": 2711.05,
+     "game": 3,
+     "transition": "S3_provisional→S3",
+     "kind": "landing",
+     "size": 0.06120811692836792,
+     "switched": true
+    },
+    {
+     "t": 2740.883333333333,
+     "game": 3,
+     "transition": "S3→G_fe",
+     "kind": "chain_end",
+     "size": 0.05303836015750946,
+     "switched": true
+    },
+    {
+     "t": 2743.6833333333334,
+     "game": 3,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.10381171268917516,
+     "switched": false
+    },
+    {
+     "t": 2751.383333333333,
+     "game": 3,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.021378770783610168,
+     "switched": false
+    },
+    {
+     "t": 2760.116666666667,
+     "game": 3,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.17361171715841606,
+     "switched": true
+    },
+    {
+     "t": 2767.7833333333333,
+     "game": 3,
+     "transition": "unavoidable_death→S3_landing",
+     "kind": "death",
+     "size": 0.04708187886472426,
+     "switched": true
+    },
+    {
+     "t": 2770.4166666666665,
+     "game": 3,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "death",
+     "size": 0.07424970569825218,
+     "switched": false
+    }
+   ],
+   "switch_pairs": {
+    "waiting_confirmed→G_fe": 3,
+    "G_fe→S3_landing": 8,
+    "S3_landing→G_fe": 5,
+    "S3_landing→unavoidable_death": 5,
+    "unavoidable_death→S3_landing": 3,
+    "unavoidable_death→G_fe": 2,
+    "G_fe→confirmed_death": 3,
+    "G_fe→S3_provisional": 3,
+    "S3_provisional→S3": 3,
+    "S3→G_fe": 4,
+    "S3_provisional→S3_landing": 1,
+    "S3_landing→S3_provisional": 1,
+    "S3_landing→S3": 1
+   }
+  },
+  "q": {
+   "frames": 27000,
+   "switches": 154,
+   "jumps": [
+    {
+     "t": 71.13333333333334,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.08235089438508225,
+     "switched": false
+    },
+    {
+     "t": 78.96666666666667,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.11697856455781563,
+     "switched": false
+    },
+    {
+     "t": 84.73333333333333,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.10801901586686652,
+     "switched": false
+    },
+    {
+     "t": 96.4,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03289244894664617,
+     "switched": false
+    },
+    {
+     "t": 108.76666666666667,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.16314951468641783,
+     "switched": false
+    },
+    {
+     "t": 126.93333333333334,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.0889357048960625,
+     "switched": false
+    },
+    {
+     "t": 132.96666666666667,
+     "game": 0,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.060268455724979186,
+     "switched": true
+    },
+    {
+     "t": 135.73333333333332,
+     "game": 1,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.05695625307737234,
+     "switched": true
+    },
+    {
+     "t": 137.96666666666667,
+     "game": 1,
+     "transition": "S3_landing→S3",
+     "kind": "none",
+     "size": 0.06654077214423582,
+     "switched": true
+    },
+    {
+     "t": 153.5,
+     "game": 1,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.0882793620763947,
+     "switched": true
+    },
+    {
+     "t": 160.2,
+     "game": 1,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.10171179273000536,
+     "switched": false
+    },
+    {
+     "t": 170.4,
+     "game": 1,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.22392151234051236,
+     "switched": false
+    },
+    {
+     "t": 182.8,
+     "game": 2,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.4644529049000082,
+     "switched": true
+    },
+    {
+     "t": 206.96666666666667,
+     "game": 2,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.022839900791642942,
+     "switched": false
+    },
+    {
+     "t": 210.56666666666666,
+     "game": 2,
+     "transition": "S3_provisional→S3_landing",
+     "kind": "fire",
+     "size": 0.08056759624560439,
+     "switched": true
+    },
+    {
+     "t": 218.8,
+     "game": 2,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.15599118331644557,
+     "switched": false
+    },
+    {
+     "t": 236.46666666666667,
+     "game": 2,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.17342539266931226,
+     "switched": true
+    },
+    {
+     "t": 243.2,
+     "game": 3,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.23126099008409556,
+     "switched": true
+    },
+    {
+     "t": 265.8333333333333,
+     "game": 3,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.08819785254679058,
+     "switched": false
+    },
+    {
+     "t": 270.0,
+     "game": 3,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.10987223068944768,
+     "switched": true
+    },
+    {
+     "t": 277.43333333333334,
+     "game": 3,
+     "transition": "S3_landing→confirmed_death",
+     "kind": "death",
+     "size": 0.4267447482230787,
+     "switched": true
+    },
+    {
+     "t": 308.5,
+     "game": 4,
+     "transition": "G_fe→S3_provisional",
+     "kind": "fire",
+     "size": 0.031536680724374655,
+     "switched": true
+    },
+    {
+     "t": 316.6333333333333,
+     "game": 4,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.03156185034965664,
+     "switched": false
+    },
+    {
+     "t": 322.0,
+     "game": 4,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.09131763201241594,
+     "switched": true
+    },
+    {
+     "t": 356.8,
+     "game": 5,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.4435288338014711,
+     "switched": true
+    },
+    {
+     "t": 377.73333333333335,
+     "game": 5,
+     "transition": "(同一由来内)G_fe",
+     "kind": "fire",
+     "size": 0.08089656767612663,
+     "switched": false
+    },
+    {
+     "t": 407.03333333333336,
+     "game": 6,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.45019466265837604,
+     "switched": true
+    },
+    {
+     "t": 436.1333333333333,
+     "game": 6,
+     "transition": "S3_landing→G_fe",
+     "kind": "fire",
+     "size": 0.02376851629183946,
+     "switched": true
+    },
+    {
+     "t": 441.3333333333333,
+     "game": 6,
+     "transition": "G_fe→unavoidable_death",
+     "kind": "death",
+     "size": 0.03946866596340419,
+     "switched": true
+    },
+    {
+     "t": 443.43333333333334,
+     "game": 6,
+     "transition": "S3_landing→confirmed_death",
+     "kind": "death",
+     "size": 0.18373866403661865,
+     "switched": true
+    },
+    {
+     "t": 451.3333333333333,
+     "game": 7,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.22106939456485475,
+     "switched": true
+    },
+    {
+     "t": 484.5,
+     "game": 7,
+     "transition": "S3_provisional→S3_landing",
+     "kind": "chain_end",
+     "size": 0.043591641841285556,
+     "switched": true
+    },
+    {
+     "t": 488.43333333333334,
+     "game": 7,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.043523644134919215,
+     "switched": false
+    },
+    {
+     "t": 512.5333333333333,
+     "game": 7,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.15884453018898437,
+     "switched": true
+    },
+    {
+     "t": 520.4,
+     "game": 8,
+     "transition": "(同一由来内)G_fe",
+     "kind": "boundary",
+     "size": 0.08716352499667857,
+     "switched": false
+    },
+    {
+     "t": 553.7333333333333,
+     "game": 8,
+     "transition": "S3_landing→G_fe",
+     "kind": "chain_end",
+     "size": 0.03221929579260252,
+     "switched": true
+    },
+    {
+     "t": 558.2333333333333,
+     "game": 8,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.04950741361872005,
+     "switched": true
+    },
+    {
+     "t": 565.5,
+     "game": 8,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.12065699246090561,
+     "switched": false
+    },
+    {
+     "t": 581.8666666666667,
+     "game": 8,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.19545939879499086,
+     "switched": true
+    },
+    {
+     "t": 595.3,
+     "game": 9,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.4484906113078009,
+     "switched": true
+    },
+    {
+     "t": 640.2333333333333,
+     "game": 9,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.03035650172852644,
+     "switched": false
+    },
+    {
+     "t": 642.3333333333334,
+     "game": 9,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.1210398878095873,
+     "switched": false
+    },
+    {
+     "t": 663.1666666666666,
+     "game": 9,
+     "transition": "S3_landing→confirmed_death",
+     "kind": "death",
+     "size": 0.6672081939477458,
+     "switched": true
+    },
+    {
+     "t": 667.8666666666667,
+     "game": 10,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.16375503323216078,
+     "switched": true
+    },
+    {
+     "t": 688.8333333333334,
+     "game": 10,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.06977365497185067,
+     "switched": true
+    },
+    {
+     "t": 692.8666666666667,
+     "game": 10,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.13328262233568763,
+     "switched": true
+    },
+    {
+     "t": 695.5666666666667,
+     "game": 10,
+     "transition": "S3_landing→confirmed_death",
+     "kind": "death",
+     "size": 0.6866564933084572,
+     "switched": true
+    },
+    {
+     "t": 702.3,
+     "game": 11,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.17909987042665654,
+     "switched": true
+    },
+    {
+     "t": 719.9,
+     "game": 11,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.045795342466570355,
+     "switched": true
+    },
+    {
+     "t": 723.5,
+     "game": 11,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.06287297277654669,
+     "switched": true
+    },
+    {
+     "t": 728.7,
+     "game": 11,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.03576840093450867,
+     "switched": false
+    },
+    {
+     "t": 732.5,
+     "game": 11,
+     "transition": "S3_provisional→S3_landing",
+     "kind": "fire",
+     "size": 0.07038332602761022,
+     "switched": true
+    },
+    {
+     "t": 743.7333333333333,
+     "game": 11,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.1259597349907321,
+     "switched": false
+    },
+    {
+     "t": 753.1666666666666,
+     "game": 12,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.4599790755367963,
+     "switched": true
+    },
+    {
+     "t": 782.7666666666667,
+     "game": 12,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.11933201638250435,
+     "switched": true
+    },
+    {
+     "t": 786.8,
+     "game": 12,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.14894826251693394,
+     "switched": true
+    },
+    {
+     "t": 797.9,
+     "game": 13,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.2814219775644713,
+     "switched": true
+    },
+    {
+     "t": 815.9666666666667,
+     "game": 13,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.04620418682824312,
+     "switched": true
+    },
+    {
+     "t": 819.2333333333333,
+     "game": 13,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.09071546891104298,
+     "switched": false
+    },
+    {
+     "t": 830.0666666666667,
+     "game": 13,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "none",
+     "size": 0.05392053862042784,
+     "switched": false
+    },
+    {
+     "t": 843.7666666666667,
+     "game": 13,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "chain_end",
+     "size": 0.1661224670680923,
+     "switched": false
+    },
+    {
+     "t": 858.1,
+     "game": 14,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.2860257451977327,
+     "switched": true
+    },
+    {
+     "t": 861.0333333333333,
+     "game": 14,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.032976781099516406,
+     "switched": false
+    },
+    {
+     "t": 873.5333333333333,
+     "game": 14,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.030626365951206214,
+     "switched": true
+    },
+    {
+     "t": 877.4,
+     "game": 14,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.07663754503972248,
+     "switched": true
+    },
+    {
+     "t": 885.1,
+     "game": 14,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.06333823985998818,
+     "switched": false
+    },
+    {
+     "t": 891.9,
+     "game": 14,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.034681613281719814,
+     "switched": false
+    },
+    {
+     "t": 896.1,
+     "game": 14,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.059754920722829064,
+     "switched": true
+    },
+    {
+     "t": 899.6333333333333,
+     "game": 14,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.3313948441696506,
+     "switched": true
+    }
+   ],
+   "switch_pairs": {
+    "waiting_confirmed→G_fe": 14,
+    "G_fe→S3_landing": 27,
+    "S3_landing→G_fe": 13,
+    "S3_landing→S3": 5,
+    "S3→G_fe": 12,
+    "G_fe→confirmed_death": 8,
+    "S3_landing→S3_provisional": 7,
+    "S3_provisional→S3_landing": 9,
+    "S3_landing→unavoidable_death": 17,
+    "unavoidable_death→G_fe": 6,
+    "unavoidable_death→S3_landing": 10,
+    "S3_landing→confirmed_death": 4,
+    "G_fe→S3_provisional": 10,
+    "S3_provisional→S3": 8,
+    "unavoidable_death→confirmed_death": 2,
+    "G_fe→unavoidable_death": 1,
+    "S3→S3_landing": 1
+   }
+  },
+  "fc": {
+   "frames": 27000,
+   "switches": 115,
+   "jumps": [
+    {
+     "t": 146.0,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.204177304965567,
+     "switched": false
+    },
+    {
+     "t": 159.53333333333333,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.053674291247241046,
+     "switched": false
+    },
+    {
+     "t": 162.4,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.2770609700033203,
+     "switched": false
+    },
+    {
+     "t": 166.06666666666666,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.14889229046271513,
+     "switched": false
+    },
+    {
+     "t": 170.8,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "fire",
+     "size": 0.11741530936062738,
+     "switched": false
+    },
+    {
+     "t": 173.4,
+     "game": 1,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.23468738330933292,
+     "switched": true
+    },
+    {
+     "t": 177.8,
+     "game": 1,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.05730860797051596,
+     "switched": true
+    },
+    {
+     "t": 197.5,
+     "game": 1,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.06411280476588521,
+     "switched": false
+    },
+    {
+     "t": 200.2,
+     "game": 1,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.08430533767770432,
+     "switched": false
+    },
+    {
+     "t": 205.13333333333333,
+     "game": 1,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.04811486812710586,
+     "switched": true
+    },
+    {
+     "t": 229.76666666666668,
+     "game": 1,
+     "transition": "S3_landing→G_fe",
+     "kind": "none",
+     "size": 0.15606423182126,
+     "switched": true
+    },
+    {
+     "t": 242.2,
+     "game": 2,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.40303235308322827,
+     "switched": true
+    },
+    {
+     "t": 272.8,
+     "game": 2,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.06557570811903507,
+     "switched": false
+    },
+    {
+     "t": 276.3666666666667,
+     "game": 2,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.1358307617803005,
+     "switched": false
+    },
+    {
+     "t": 285.3666666666667,
+     "game": 2,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.16288856438161303,
+     "switched": false
+    },
+    {
+     "t": 314.23333333333335,
+     "game": 3,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.3794781978981964,
+     "switched": true
+    },
+    {
+     "t": 341.3,
+     "game": 3,
+     "transition": "S3_landing→G_fe",
+     "kind": "fire",
+     "size": 0.03713375854185619,
+     "switched": true
+    },
+    {
+     "t": 346.5,
+     "game": 3,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.051586451258215815,
+     "switched": true
+    },
+    {
+     "t": 350.2,
+     "game": 3,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.06263590689254511,
+     "switched": true
+    },
+    {
+     "t": 352.4,
+     "game": 3,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.14857792918446722,
+     "switched": false
+    },
+    {
+     "t": 367.56666666666666,
+     "game": 3,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.14703514581188504,
+     "switched": true
+    },
+    {
+     "t": 382.23333333333335,
+     "game": 4,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.4607968201856102,
+     "switched": true
+    },
+    {
+     "t": 403.6666666666667,
+     "game": 4,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.041054830472159576,
+     "switched": true
+    },
+    {
+     "t": 406.26666666666665,
+     "game": 4,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.12151894926272344,
+     "switched": false
+    },
+    {
+     "t": 416.93333333333334,
+     "game": 4,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "none",
+     "size": 0.14823967993476905,
+     "switched": false
+    },
+    {
+     "t": 426.8333333333333,
+     "game": 4,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.1680011623883354,
+     "switched": false
+    },
+    {
+     "t": 429.53333333333336,
+     "game": 4,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.04453702005612048,
+     "switched": false
+    },
+    {
+     "t": 437.3,
+     "game": 4,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.2184454428599688,
+     "switched": false
+    },
+    {
+     "t": 448.3333333333333,
+     "game": 5,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.47739480477231166,
+     "switched": true
+    },
+    {
+     "t": 469.1333333333333,
+     "game": 5,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.04531730460265615,
+     "switched": false
+    },
+    {
+     "t": 476.3,
+     "game": 5,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.12524618815030086,
+     "switched": true
+    },
+    {
+     "t": 478.4,
+     "game": 5,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.058498203722437525,
+     "switched": true
+    },
+    {
+     "t": 507.56666666666666,
+     "game": 5,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.14374153959692382,
+     "switched": true
+    },
+    {
+     "t": 523.7,
+     "game": 5,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.016557413341205418,
+     "switched": true
+    },
+    {
+     "t": 525.0666666666667,
+     "game": 5,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.0834651204309853,
+     "switched": false
+    },
+    {
+     "t": 547.2333333333333,
+     "game": 6,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.4060747381478047,
+     "switched": true
+    },
+    {
+     "t": 567.9666666666667,
+     "game": 6,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.05070936523065256,
+     "switched": false
+    },
+    {
+     "t": 581.3,
+     "game": 6,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.04118891338849201,
+     "switched": true
+    },
+    {
+     "t": 584.3,
+     "game": 6,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.12155009331306327,
+     "switched": false
+    },
+    {
+     "t": 593.5666666666667,
+     "game": 6,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.17382494324515918,
+     "switched": false
+    },
+    {
+     "t": 606.1666666666666,
+     "game": 6,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.14338438118587185,
+     "switched": false
+    },
+    {
+     "t": 610.5,
+     "game": 6,
+     "transition": "S3_landing→S3_provisional",
+     "kind": "none",
+     "size": 0.06252517841415262,
+     "switched": true
+    },
+    {
+     "t": 616.1666666666666,
+     "game": 6,
+     "transition": "(同一由来内)S3_provisional",
+     "kind": "none",
+     "size": 0.06992715000581623,
+     "switched": false
+    },
+    {
+     "t": 625.1666666666666,
+     "game": 6,
+     "transition": "S3_provisional→S3_landing",
+     "kind": "none",
+     "size": 0.1518789854118721,
+     "switched": true
+    },
+    {
+     "t": 634.3,
+     "game": 7,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.4734305405399741,
+     "switched": true
+    },
+    {
+     "t": 637.1666666666666,
+     "game": 7,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.04578092833413627,
+     "switched": false
+    },
+    {
+     "t": 654.9666666666667,
+     "game": 7,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.026409166066739487,
+     "switched": false
+    },
+    {
+     "t": 668.0,
+     "game": 7,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.1005349082469432,
+     "switched": false
+    },
+    {
+     "t": 675.9333333333333,
+     "game": 7,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.13828494899160215,
+     "switched": true
+    },
+    {
+     "t": 686.5666666666667,
+     "game": 8,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.340091413694824,
+     "switched": true
+    },
+    {
+     "t": 701.4666666666667,
+     "game": 8,
+     "transition": "(同一由来内)G_fe",
+     "kind": "fire",
+     "size": 0.04255331843354049,
+     "switched": false
+    },
+    {
+     "t": 703.9333333333333,
+     "game": 8,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.10886137562253828,
+     "switched": false
+    },
+    {
+     "t": 712.0333333333333,
+     "game": 8,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.06311439998598112,
+     "switched": false
+    },
+    {
+     "t": 714.3333333333334,
+     "game": 8,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.05923189064242573,
+     "switched": false
+    },
+    {
+     "t": 720.7333333333333,
+     "game": 8,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.13049016933316257,
+     "switched": false
+    },
+    {
+     "t": 727.7,
+     "game": 8,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "none",
+     "size": 0.03289700037621779,
+     "switched": false
+    },
+    {
+     "t": 730.1666666666666,
+     "game": 8,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.25816069471052133,
+     "switched": true
+    },
+    {
+     "t": 741.0666666666667,
+     "game": 9,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.4421457683293283,
+     "switched": true
+    },
+    {
+     "t": 763.6,
+     "game": 9,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.11498858764782827,
+     "switched": true
+    },
+    {
+     "t": 767.5,
+     "game": 9,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.24810317586367336,
+     "switched": true
+    },
+    {
+     "t": 775.8,
+     "game": 10,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.18850200604095269,
+     "switched": true
+    },
+    {
+     "t": 798.4333333333333,
+     "game": 10,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.046804930759834884,
+     "switched": true
+    },
+    {
+     "t": 801.5,
+     "game": 10,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.08747379217070539,
+     "switched": false
+    },
+    {
+     "t": 807.6,
+     "game": 10,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.11129791212166829,
+     "switched": false
+    },
+    {
+     "t": 830.0,
+     "game": 11,
+     "transition": "(同一由来内)G_fe",
+     "kind": "boundary",
+     "size": 0.08779137413371851,
+     "switched": false
+    },
+    {
+     "t": 833.0666666666667,
+     "game": 11,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.04147971124029293,
+     "switched": false
+    },
+    {
+     "t": 859.3666666666667,
+     "game": 11,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.06966159145330919,
+     "switched": false
+    },
+    {
+     "t": 869.4,
+     "game": 11,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "none",
+     "size": 0.14451914120190218,
+     "switched": false
+    },
+    {
+     "t": 874.9333333333333,
+     "game": 11,
+     "transition": "S3_landing→unavoidable_death",
+     "kind": "death",
+     "size": 0.10078168516529262,
+     "switched": true
+    },
+    {
+     "t": 879.8666666666667,
+     "game": 11,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.2306232992891567,
+     "switched": true
+    },
+    {
+     "t": 889.6,
+     "game": 12,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.2060218259257881,
+     "switched": true
+    }
+   ],
+   "switch_pairs": {
+    "waiting_confirmed→G_fe": 12,
+    "G_fe→S3_landing": 20,
+    "S3_landing→G_fe": 15,
+    "S3_landing→unavoidable_death": 20,
+    "unavoidable_death→S3_landing": 17,
+    "G_fe→unavoidable_death": 1,
+    "S3_landing→confirmed_death": 3,
+    "G_fe→S3_provisional": 4,
+    "S3_provisional→S3_landing": 4,
+    "S3_provisional→S3": 2,
+    "S3→G_fe": 2,
+    "G_fe→confirmed_death": 7,
+    "S3_landing→S3_provisional": 2,
+    "unavoidable_death→G_fe": 3,
+    "S3_landing→S3": 1,
+    "S3→S3_landing": 1,
+    "unavoidable_death→confirmed_death": 1
+   }
+  },
+  "mia": {
+   "frames": 27000,
+   "switches": 148,
+   "jumps": [
+    {
+     "t": 125.1,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.033518636237670874,
+     "switched": false
+    },
+    {
+     "t": 128.26666666666668,
+     "game": 0,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.059212518764220956,
+     "switched": false
+    },
+    {
+     "t": 132.6,
+     "game": 1,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.04142283532199753,
+     "switched": true
+    },
+    {
+     "t": 134.86666666666667,
+     "game": 1,
+     "transition": "S3_landing→S3",
+     "kind": "landing",
+     "size": 0.038644503039310885,
+     "switched": true
+    },
+    {
+     "t": 157.7,
+     "game": 1,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.031174041372993733,
+     "switched": true
+    },
+    {
+     "t": 162.63333333333333,
+     "game": 1,
+     "transition": "S3_landing→G_fe",
+     "kind": "fire",
+     "size": 0.05190558013183175,
+     "switched": true
+    },
+    {
+     "t": 166.1,
+     "game": 1,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.17738623978946785,
+     "switched": false
+    },
+    {
+     "t": 170.8,
+     "game": 1,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "chain_end",
+     "size": 0.13969356844537517,
+     "switched": false
+    },
+    {
+     "t": 187.4,
+     "game": 2,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.31791941177475536,
+     "switched": true
+    },
+    {
+     "t": 216.96666666666667,
+     "game": 2,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.04277991179178131,
+     "switched": false
+    },
+    {
+     "t": 220.3,
+     "game": 2,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.05524292377566775,
+     "switched": true
+    },
+    {
+     "t": 237.26666666666668,
+     "game": 2,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.27235447470912044,
+     "switched": true
+    },
+    {
+     "t": 239.76666666666668,
+     "game": 3,
+     "transition": "(同一由来内)G_fe",
+     "kind": "boundary",
+     "size": 0.06662609164125194,
+     "switched": false
+    },
+    {
+     "t": 242.93333333333334,
+     "game": 3,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03707394687140986,
+     "switched": false
+    },
+    {
+     "t": 270.2,
+     "game": 3,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.04677071298216229,
+     "switched": true
+    },
+    {
+     "t": 278.06666666666666,
+     "game": 3,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "chain_end",
+     "size": 0.06940693385814226,
+     "switched": false
+    },
+    {
+     "t": 291.03333333333336,
+     "game": 3,
+     "transition": "G_fe→S3_provisional",
+     "kind": "fire",
+     "size": 0.031506015605244464,
+     "switched": true
+    },
+    {
+     "t": 295.1333333333333,
+     "game": 3,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.06572232644682569,
+     "switched": true
+    },
+    {
+     "t": 298.7,
+     "game": 3,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.04592356022677663,
+     "switched": true
+    },
+    {
+     "t": 305.06666666666666,
+     "game": 3,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.04820458171730041,
+     "switched": false
+    },
+    {
+     "t": 309.3,
+     "game": 3,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.11544595036372418,
+     "switched": true
+    },
+    {
+     "t": 317.1666666666667,
+     "game": 3,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.03654387985843896,
+     "switched": false
+    },
+    {
+     "t": 325.53333333333336,
+     "game": 3,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.16267763323805678,
+     "switched": true
+    },
+    {
+     "t": 333.73333333333335,
+     "game": 3,
+     "transition": "S3_landing→G_fe",
+     "kind": "chain_end",
+     "size": 0.06431552167657195,
+     "switched": true
+    },
+    {
+     "t": 335.8333333333333,
+     "game": 3,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.34906748933665144,
+     "switched": true
+    },
+    {
+     "t": 339.3,
+     "game": 4,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.07681108154757377,
+     "switched": true
+    },
+    {
+     "t": 342.43333333333334,
+     "game": 4,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.040010673865572666,
+     "switched": false
+    },
+    {
+     "t": 372.4,
+     "game": 4,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.05904009120908288,
+     "switched": true
+    },
+    {
+     "t": 376.96666666666664,
+     "game": 4,
+     "transition": "S3_landing→G_fe",
+     "kind": "none",
+     "size": 0.07588497156507656,
+     "switched": true
+    },
+    {
+     "t": 383.06666666666666,
+     "game": 4,
+     "transition": "S3_landing→S3_provisional",
+     "kind": "fire",
+     "size": 0.031239374256392227,
+     "switched": true
+    },
+    {
+     "t": 384.6,
+     "game": 4,
+     "transition": "S3_provisional→S3_landing",
+     "kind": "chain_end",
+     "size": 0.037951517292171943,
+     "switched": true
+    },
+    {
+     "t": 389.1666666666667,
+     "game": 4,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "chain_end",
+     "size": 0.05467346086723779,
+     "switched": false
+    },
+    {
+     "t": 395.6,
+     "game": 4,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.07141844967127559,
+     "switched": true
+    },
+    {
+     "t": 402.53333333333336,
+     "game": 4,
+     "transition": "S3→G_fe",
+     "kind": "chain_end",
+     "size": 0.056700394068783466,
+     "switched": true
+    },
+    {
+     "t": 410.0,
+     "game": 4,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "none",
+     "size": 0.17580084110234606,
+     "switched": false
+    },
+    {
+     "t": 412.8,
+     "game": 4,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.18495472478526165,
+     "switched": false
+    },
+    {
+     "t": 419.96666666666664,
+     "game": 4,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.16110142002508354,
+     "switched": true
+    },
+    {
+     "t": 430.3,
+     "game": 5,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.4445507622282495,
+     "switched": true
+    },
+    {
+     "t": 448.2,
+     "game": 5,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.04257677517593739,
+     "switched": false
+    },
+    {
+     "t": 451.3666666666667,
+     "game": 5,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.03975355969199268,
+     "switched": false
+    },
+    {
+     "t": 461.96666666666664,
+     "game": 5,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.04507614159524048,
+     "switched": true
+    },
+    {
+     "t": 472.73333333333335,
+     "game": 5,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.083609594613065,
+     "switched": false
+    },
+    {
+     "t": 483.1333333333333,
+     "game": 5,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.06376009114220227,
+     "switched": false
+    },
+    {
+     "t": 493.76666666666665,
+     "game": 5,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.1418381017561453,
+     "switched": false
+    },
+    {
+     "t": 503.73333333333335,
+     "game": 5,
+     "transition": "G_fe→S3_provisional",
+     "kind": "fire",
+     "size": 0.07318569921621176,
+     "switched": true
+    },
+    {
+     "t": 519.7333333333333,
+     "game": 5,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.05586971333998059,
+     "switched": false
+    },
+    {
+     "t": 524.2666666666667,
+     "game": 5,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "chain_end",
+     "size": 0.03582274485109582,
+     "switched": false
+    },
+    {
+     "t": 527.7666666666667,
+     "game": 5,
+     "transition": "S3_landing→G_fe",
+     "kind": "chain_end",
+     "size": 0.13797746308293213,
+     "switched": true
+    },
+    {
+     "t": 539.6666666666666,
+     "game": 5,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.05027342579221428,
+     "switched": true
+    },
+    {
+     "t": 546.8333333333334,
+     "game": 5,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.139281335411642,
+     "switched": true
+    },
+    {
+     "t": 558.3666666666667,
+     "game": 5,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.11616044255409774,
+     "switched": true
+    },
+    {
+     "t": 572.4666666666667,
+     "game": 5,
+     "transition": "S3_landing→confirmed_death",
+     "kind": "death",
+     "size": 0.34292757876796665,
+     "switched": true
+    },
+    {
+     "t": 611.3666666666667,
+     "game": 6,
+     "transition": "S3_landing→G_fe",
+     "kind": "landing",
+     "size": 0.055026577623566886,
+     "switched": true
+    },
+    {
+     "t": 616.8,
+     "game": 6,
+     "transition": "G_fe→confirmed_death",
+     "kind": "death",
+     "size": 0.4387236324394651,
+     "switched": true
+    },
+    {
+     "t": 643.5333333333333,
+     "game": 7,
+     "transition": "(同一由来内)G_fe",
+     "kind": "chain_end",
+     "size": 0.030224129470887484,
+     "switched": false
+    },
+    {
+     "t": 648.6,
+     "game": 7,
+     "transition": "S3→G_fe",
+     "kind": "none",
+     "size": 0.02266175214292443,
+     "switched": true
+    },
+    {
+     "t": 653.8666666666667,
+     "game": 7,
+     "transition": "S3→G_fe",
+     "kind": "fire",
+     "size": 0.053690624303816104,
+     "switched": true
+    },
+    {
+     "t": 656.9,
+     "game": 7,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.07025037795680861,
+     "switched": true
+    },
+    {
+     "t": 668.7666666666667,
+     "game": 7,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "fire",
+     "size": 0.08356308294356238,
+     "switched": false
+    },
+    {
+     "t": 673.4,
+     "game": 7,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "chain_end",
+     "size": 0.1484279468738809,
+     "switched": false
+    },
+    {
+     "t": 688.4666666666667,
+     "game": 7,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.12511160514328762,
+     "switched": false
+    },
+    {
+     "t": 699.4,
+     "game": 7,
+     "transition": "S3_landing→G_fe",
+     "kind": "none",
+     "size": 0.053363718842248054,
+     "switched": true
+    },
+    {
+     "t": 707.8666666666667,
+     "game": 8,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.32592500136235353,
+     "switched": true
+    },
+    {
+     "t": 733.6666666666666,
+     "game": 8,
+     "transition": "(同一由来内)G_fe",
+     "kind": "none",
+     "size": 0.039546855179853346,
+     "switched": false
+    },
+    {
+     "t": 736.8333333333334,
+     "game": 8,
+     "transition": "S3_landing→confirmed_death",
+     "kind": "death",
+     "size": 0.2749071828905315,
+     "switched": true
+    },
+    {
+     "t": 740.8333333333334,
+     "game": 9,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.1380124941752588,
+     "switched": true
+    },
+    {
+     "t": 764.9666666666667,
+     "game": 9,
+     "transition": "S3_provisional→S3_landing",
+     "kind": "fire",
+     "size": 0.05658428081717165,
+     "switched": true
+    },
+    {
+     "t": 772.7333333333333,
+     "game": 9,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "chain_end",
+     "size": 0.09512997462202466,
+     "switched": false
+    },
+    {
+     "t": 790.0,
+     "game": 9,
+     "transition": "(同一由来内)S3_landing",
+     "kind": "landing",
+     "size": 0.14990480392814093,
+     "switched": false
+    },
+    {
+     "t": 795.6333333333333,
+     "game": 9,
+     "transition": "S3_landing→G_fe",
+     "kind": "chain_end",
+     "size": 0.23431112275302207,
+     "switched": true
+    },
+    {
+     "t": 801.0,
+     "game": 10,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "boundary",
+     "size": 0.4738240447143527,
+     "switched": true
+    },
+    {
+     "t": 816.8666666666667,
+     "game": 10,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.061413415108397984,
+     "switched": true
+    },
+    {
+     "t": 820.8,
+     "game": 10,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.08470196016351106,
+     "switched": true
+    },
+    {
+     "t": 824.0333333333333,
+     "game": 10,
+     "transition": "S3_landing→G_fe",
+     "kind": "none",
+     "size": 0.05874827495572568,
+     "switched": true
+    },
+    {
+     "t": 838.4333333333333,
+     "game": 10,
+     "transition": "G_fe→S3_provisional",
+     "kind": "fire",
+     "size": 0.0412264971500621,
+     "switched": true
+    },
+    {
+     "t": 851.1,
+     "game": 10,
+     "transition": "G_fe→S3_landing",
+     "kind": "fire",
+     "size": 0.08241982505608286,
+     "switched": true
+    },
+    {
+     "t": 862.6333333333333,
+     "game": 10,
+     "transition": "S3_landing→G_fe",
+     "kind": "chain_end",
+     "size": 0.02796625797748009,
+     "switched": true
+    },
+    {
+     "t": 871.1333333333333,
+     "game": 11,
+     "transition": "waiting_confirmed→G_fe",
+     "kind": "none",
+     "size": 0.3743476365747419,
+     "switched": true
+    },
+    {
+     "t": 894.2333333333333,
+     "game": 11,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.038336604085933146,
+     "switched": false
+    },
+    {
+     "t": 898.3666666666667,
+     "game": 11,
+     "transition": "(同一由来内)G_fe",
+     "kind": "landing",
+     "size": 0.04141543655193991,
+     "switched": false
+    }
+   ],
+   "switch_pairs": {
+    "waiting_confirmed→G_fe": 11,
+    "G_fe→S3_landing": 39,
+    "S3_landing→S3": 2,
+    "S3→G_fe": 8,
+    "S3_landing→G_fe": 36,
+    "S3_landing→confirmed_death": 4,
+    "G_fe→S3_provisional": 13,
+    "S3_provisional→S3": 7,
+    "G_fe→confirmed_death": 6,
+    "S3_provisional→S3_landing": 12,
+    "S3_landing→S3_provisional": 7,
+    "S3_provisional→G_fe": 2,
+    "S3→S3_provisional": 1
+   }
+  }
+ }
+}

@@ -5019,3 +5019,5 @@ user 判断を待って手を付けていない。** 採否を検討してほし
   認識パイプライン A/B: 確定盤面 409,188 セル差 0 (対照 A/A も 0)。
 - telop: 画像なしなら「テロップなし」。実テロップ入り 2 窓 (video_c109 30-110s / video_c14 300-360s) で確定盤面 636,636 セル差 0。ただし両窓ともテロップが盤面セルを 0 個しか被覆しない配置 (被覆する配置の実データは無く未検証)。
 - 検証道具: scripts/ab_ui_template_removal_20260930.py、成果物 D:/puyo_analyzer/packaging/ab_ui_2026-09-30/。
+## 2026-10-01 切替平滑 (--exchange-event-switch-smoothing) / E19 再測定 (worktree D:/puyo_analyzer/wt_switch)
+- 事前登録は exev DECISIONS.md。結果: 切替平滑A は zenchi 7,670 (門7,671に−1フレーム、窓境界の偶然) で不合格、飛び34→16。E19 は q .4967 (−.0109) / zenchi 7,627 (−44) で不合格。本番登録なし。詳細 logs/switch_smoothing/RESULT.md。
