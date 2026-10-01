@@ -48,21 +48,41 @@ def compare_prefix(full: Path, cut: Path, cut_sec: float) -> dict:
         return dict(rows=n, cut_rows=int(len(right['t_sec'])), identical=same, passed=all(same.values()))
 
 
+def compare_trace(full: Path, cut: Path, cut_sec: float) -> dict:
+    """予測層の内訳 (所要時間の列を除く) も T 未満で一致するか。所要は壁時計なので比べない。"""
+    left_path, right_path = full / 'prefire_trace.npz', cut / 'prefire_trace.npz'
+    if not left_path.exists() or not right_path.exists():
+        return dict(rows=0, passed=left_path.exists() == right_path.exists())
+    with np.load(left_path) as left, np.load(right_path) as right:
+        columns = [str(c) for c in left['columns']]
+        keep = [i for i, c in enumerate(columns) if c != 'compute_ms']
+        a, b = left['values'], right['values']
+        n = int((a[:, 0] < cut_sec).sum())
+        same = bool(len(b) >= n and np.array_equal(a[:n][:, keep], b[:n][:, keep], equal_nan=True))
+        return dict(rows=n, cut_rows=int(len(b)), passed=same)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cut', type=float, required=True)
-    parser.add_argument('--variant', default='on', choices=('on', 'on_mc'))
+    parser.add_argument('--variant', default='on', choices=('on', 'on_mc', 'bestplay'))
+    parser.add_argument('--latency', type=float, default=0.0)
+    parser.add_argument('--tag', default='')
+    parser.add_argument('--evaluator', default='full', choices=('full', 'fast', 's3', 'gfe'))
     args = parser.parse_args()
+    name = args.variant + args.tag
     from scripts import d5_runtime
-    d5_runtime.OUT = REPLAY / f'runtime_audit_{args.variant}_{args.cut:g}'
+    d5_runtime.OUT = REPLAY / f'runtime_audit_{name}_{args.cut:g}'
     d5_runtime.install()
     from scripts.replay_exchange_event_20260926 import replay
-    root = AUDIT / f'{args.variant}_cut_{args.cut:g}'
+    root = AUDIT / f'{name}_cut_{args.cut:g}'
     root.mkdir(parents=True, exist_ok=True)
     record = root / f'{SOURCE}.jsonl.gz'
     frames = truncate(args.cut, record)
-    replay(record, root, Path('models/exchange_event_v3'), True, None, **options(args.variant))
-    result = dict(cut_sec=args.cut, frames=frames, **compare_prefix(REPLAY / args.variant / SOURCE, root, args.cut))
+    replay(record, root, Path('models/exchange_event_v3'), True, None, **options(args.variant, args.latency, args.evaluator))
+    result = dict(cut_sec=args.cut, frames=frames, **compare_prefix(REPLAY / name / SOURCE, root, args.cut))
+    result['trace'] = compare_trace(REPLAY / name / SOURCE, root, args.cut)
+    result['passed'] = bool(result['passed'] and result['trace']['passed'])
     (root / 'AUDIT.json').write_text(json.dumps(result, indent=1))
     record.unlink()
     print(json.dumps(result), flush=True)

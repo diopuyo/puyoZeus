@@ -1,6 +1,8 @@
 """撃ち合い評価の純粋な特徴変換。列順はT09/T11の検証資産と対応する。"""
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -70,8 +72,13 @@ def g_features(design: Array, probability_1p: Array, sign: Array,
     return np.column_stack((design, logits, fill, elapsed, logits * fill, logits * elapsed))
 
 
-def prefire_side_features(grid: NDArray, queue: NDArray, elapsed_sec: float) -> Array:
-    """確定盤面と既知NEXTから形・おじゃま・K=1..5火力を算出する。"""
+def prefire_side_features(grid: NDArray, queue: NDArray, elapsed_sec: float,
+                          simulator: Any = None) -> Array:
+    """確定盤面と既知NEXTから形・おじゃま・K=1..5火力を算出する。
+
+    simulator は近未来火力の連鎖計算だけを差し替える (既定 None = 従来の共有 ChainSimulator、出力不変)。
+    native を渡す場合は出力一致を呼び出し側で確かめること (Phase 3 発火前最善手で使用、2026-10-01)。
+    """
     validate_elapsed(elapsed_sec)
     grid, queue = np.asarray(grid), np.asarray(queue)
     if grid.shape != (BOARD_ROWS, BOARD_COLS) or queue.shape != (QUEUE_SIZE,):
@@ -90,7 +97,8 @@ def prefire_side_features(grid: NDArray, queue: NDArray, elapsed_sec: float) -> 
     if not board.is_dead():
         result = iv.near_future_fire_power(
             board, tuple(q[:2]), tuple(q[2:]), elapsed_sec,
-            active_colors=iv._near_future_active_colors(board))
+            active_colors=iv._near_future_active_colors(board), simulator=simulator,
+            use_exact_score=simulator is not None)   # native の結果は exact_score (= calculate_chain_score と同じ得点) を持つ
         fire = np.array([result.values[k].score for k in iv.NEAR_FUTURE_K_LEVELS])
     return np.r_[shape, fire]
 

@@ -67,7 +67,10 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            single_death_proof_guard: bool = False,
            single_death_proof_negative_only: bool = False,
            prefire_exchange_prediction: bool = False,
-           prefire_counter_mc: bool = False) -> dict:
+           prefire_counter_mc: bool = False,
+           prefire_best_play: bool = False,
+           prefire_best_play_latency: float = 0.0,
+           prefire_best_play_evaluator: str = 'full') -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -109,6 +112,12 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
     if prefire_exchange_prediction:
         from src.prefire_exchange_layer import FileHazardModel, PrefireExchangeLayer
         prefire_layer = PrefireExchangeLayer(FileHazardModel.load(), counter_mc=prefire_counter_mc)
+    if prefire_best_play:
+        if prefire_layer is not None:
+            raise ValueError("--prefire-best-play と --prefire-exchange-prediction は同時指定できない")
+        from src.prefire_best_play_layer import BestPlayPrefireLayer
+        prefire_layer = BestPlayPrefireLayer(latency_sec=prefire_best_play_latency,
+                                             evaluator=prefire_best_play_evaluator)
     for item in stream:
         if item["kind"] == "update":
             inputs = item["args"]
@@ -206,6 +215,12 @@ def main() -> None:
                         help="発火前の撃ち合い予測を表示へ混ぜる (既定OFF、models/prefire_hazard_v1)")
     parser.add_argument("--prefire-counter-mc", action="store_true", default=False,
                         help="発火前予測の受け側応手を未来ツモ標本で求める (構成B、既定OFF=理想ツモ future_send)")
+    parser.add_argument("--prefire-best-play", action="store_true", default=False,
+                        help="発火前の最善手の値を表示へ出す (Phase 3、既定OFF、hazard 不使用)")
+    parser.add_argument("--prefire-best-play-latency", type=float, default=0.0,
+                        help="最善手の結果が届くまでの遅れ秒 (非同期計算の模擬、既定0=同期)")
+    parser.add_argument("--prefire-best-play-evaluator", choices=("full", "fast", "s3", "gfe"), default="full",
+                        help="最善手の値の評価: full=S3と仮想着弾G_feの合成 / fast=選択はS3・選んだ1つだけ合成 / s3=S3のみ / gfe=仮想着弾G_feのみ")
     parser.add_argument("--landing-counter-prob", action="store_true", default=False)
     for name in ("count-sync", "death-guard", "evaluation-layers", "completion-check"):
         parser.add_argument("--exchange-event-" + name, action="store_true", default=False)
@@ -238,7 +253,10 @@ def main() -> None:
                     single_death_proof_guard=options.single_death_proof_guard,
                     single_death_proof_negative_only=options.single_death_proof_negative_only,
                     prefire_exchange_prediction=options.prefire_exchange_prediction,
-                    prefire_counter_mc=options.prefire_counter_mc)
+                    prefire_counter_mc=options.prefire_counter_mc,
+                    prefire_best_play=options.prefire_best_play,
+                    prefire_best_play_latency=options.prefire_best_play_latency,
+                    prefire_best_play_evaluator=options.prefire_best_play_evaluator)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))
