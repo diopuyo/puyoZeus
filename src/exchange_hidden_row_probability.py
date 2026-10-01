@@ -5,10 +5,17 @@ from contextlib import contextmanager
 from dataclasses import replace
 from itertools import product
 from math import prod
+from numbers import Integral
 from typing import Any, Iterator
 import numpy as np
 from src.exchange_event_evaluator import ExchangeEndInput, evaluate_exchange_event
 from src.scoring import score_to_ojama
+
+
+def validate_scenario_cap(cap: int | None) -> None:
+    """無制限または正の整数だけを許し、空候補による偽の勝率を防ぐ。"""
+    if cap is not None and (isinstance(cap, bool) or not isinstance(cap, Integral) or cap <= 0):
+        raise ValueError("hidden_scenario_capはNoneまたは正の整数が必要")
 
 
 def capped(rows: list[tuple], cap: int | None) -> list[tuple]:
@@ -16,6 +23,7 @@ def capped(rows: list[tuple], cap: int | None) -> list[tuple]:
 
     既定 (cap=None) は従来どおり全候補。決定的で、壁時計に依存しない。
     """
+    validate_scenario_cap(cap)
     if cap is None or len(rows) <= cap:
         return rows
     keep = sorted(sorted(range(len(rows)), key=lambda i: (-rows[i][1], i))[:cap])

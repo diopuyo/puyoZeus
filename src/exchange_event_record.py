@@ -108,6 +108,7 @@ class ExchangeEventRecorder:
                         per_side_settled=per_side_settled, model_dir=str(model_dir)))
         self.static_keys: set[str] = set()
         self.frames = 0
+        self.pending_update: dict | None = None
 
     def write(self, row: dict) -> None:
         """浮動小数点はJSONの往復精度で維持する。NaNは欠測として保存する。"""
@@ -115,7 +116,7 @@ class ExchangeEventRecorder:
 
     def update(self, result: Any, snapshot: Any, finalization: Any, t_sec: float,
                game_idx: int, formula_totals: tuple, displayed_scores: tuple,
-               formula_visible: tuple) -> None:
+               formula_visible: tuple, defer_fallback: bool = False) -> None:
         """overlay呼出直前に入力を複製し、後続の認識器更新と切り離す。"""
         sides = []
         for side in (result.p1, result.p2):
@@ -135,10 +136,23 @@ class ExchangeEventRecorder:
         if getattr(result, "terminal_evidence_available", False):
             saved_result.confirmed_dead_sides = result.confirmed_dead_sides
             saved_result.terminal_evidence_available = True
-        self.write(dict(kind="update", args=(saved_result,
+        row = dict(kind="update", args=(saved_result,
             fields(snapshot, SNAPSHOT_FIELDS), fields(finalization, FINALIZATION_FIELDS),
-            t_sec, game_idx, formula_totals, displayed_scores, formula_visible)))
+            t_sec, game_idx, formula_totals, displayed_scores, formula_visible))
+        if self.pending_update is not None:
+            raise ValueError("前フレームのfallbackが未記録")
+        if defer_fallback:
+            self.pending_update = encode(row)
+        else:
+            self.write(row)
         self.frames += 1
+
+    def fallback(self, adv: float | None, p1: float | None) -> None:
+        """描画直前の旧評価値を、複製済みの更新行へ後方互換フィールドとして加える。"""
+        if self.pending_update is None:
+            raise ValueError("fallbackに対応する更新がない")
+        self.write(dict(self.pending_update, fallback_adv=adv, fallback_p1=p1))
+        self.pending_update = None
 
     def wrap_static(self, builder: Any) -> Any:
         """実際に計算したD・静止入力を保存し、戻り値をそのまま返す。"""
@@ -155,5 +169,7 @@ class ExchangeEventRecorder:
 
     def close(self) -> None:
         """完了マーカーとgzip末尾を確定する。"""
+        if self.pending_update is not None:
+            raise ValueError("最終フレームのfallbackが未記録")
         self.write(dict(kind="complete", frames=self.frames))
         self.stream.close()

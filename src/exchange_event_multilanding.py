@@ -200,13 +200,13 @@ def cached_proof(projection: Any, board: Board, queue: tuple, incoming: int,
                  hands: int, elapsed: float, credit: int) -> dict:
     """時間は得点換算レートだけに依存するため、同一の証明入力を再利用する。"""
     grid = board._grid
+    limit = getattr(projection, 'multilanding_node_limit', None) or MAX_SEARCH_NODES
     key = (grid.tobytes(), grid.shape, grid.dtype.str, queue, incoming, hands,
-           compute_effective_rate(elapsed), credit)
+           compute_effective_rate(elapsed), credit, limit)
     cache = projection.multi_landing_cache
     if key not in cache:
         if len(cache) >= PROOF_CACHE_SIZE:
             cache.pop(next(iter(cache)))
-        limit = getattr(projection, 'multilanding_node_limit', None) or MAX_SEARCH_NODES
         cache[key] = prove_multilanding(board, queue, incoming, hands, elapsed,
                                        projection._optimistic_response, credit, limit)
     return cache[key]

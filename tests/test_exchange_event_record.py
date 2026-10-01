@@ -107,7 +107,8 @@ def test_nan_and_namespace_roundtrip() -> None:
     assert restored.state is BoardState.OJAMA_FALL
 
 
-def test_update_snapshot_is_independent_of_later_mutation(tmp_path: Path) -> None:
+@pytest.mark.parametrize("deferred", (False, True))
+def test_update_snapshot_is_independent_of_later_mutation(tmp_path: Path, deferred: bool) -> None:
     path = tmp_path / "input.gz"
     writer = ExchangeEventRecorder(path, "test", True, Path("models"))
     observed = result(1)
@@ -115,9 +116,12 @@ def test_update_snapshot_is_independent_of_later_mutation(tmp_path: Path) -> Non
                                total_dropped_to_p1=0., total_dropped_to_p2=30.)
     finalization = SimpleNamespace(finalized_count_p1=1, finalized_count_p2=0,
                                    chain_total_score_p1=700, chain_total_score_p2=0)
-    writer.update(observed, snapshot, finalization, 1., 2, (700., None), (None, 0), (True, False))
+    writer.update(observed, snapshot, finalization, 1., 2, (700., None), (None, 0),
+                  (True, False), defer_fallback=deferred)
     observed.p1.confirmed_board._grid[:] = 9
     observed.p1.chain_event.chain_count = 99
+    if deferred:
+        writer.fallback(None, None)
     writer.close()
     saved = list(read_records(path))[1]["args"]
     assert saved[0].p1.chain_event.chain_count == 1
@@ -190,3 +194,61 @@ def test_invalid_evaluation_freshness_rejected(mode: str, values: list) -> None:
     display = dict(adv_raw_last=np.array(values), display_p1=np.array(values))
     with pytest.raises(ValueError):
         evaluation_freshness(display, mode, FPS)
+
+
+@pytest.mark.parametrize("warmup", (False, True))
+def test_sparse_smoothing_replay_matches_all_update_frames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, warmup: bool,
+) -> None:
+    """0→40→40の未確定盤面で、間引き・暖機中もEMAが17.5まで進む。"""
+    from scripts.replay_exchange_event_20260926 import display_row
+    from src.exchange_display_smoothing import SwitchAwareDisplayEMA
+    from src.exchange_event_overlay import ExchangeEventOverlay
+    from tests.test_exchange_event_overlay import Signals
+    from tests.test_exchange_event_tracker import Models
+    import src.exchange_event_m0 as m0
+    stub(monkeypatch)
+    monkeypatch.setattr(m0, "FileM0Predictor", lambda path: lambda b, q: .5)
+    overlay = ExchangeEventOverlay(Models(), build_static, Signals, lambda b, q: .5)
+    writer = ExchangeEventRecorder(tmp_path / "input.gz", "synthetic", False, Path("models"))
+    snapshot = SimpleNamespace(net_balance_capped=0., forecast_p1=0.,
+                              total_dropped_to_p1=0., total_dropped_to_p2=0.)
+    finalization = SimpleNamespace(finalized_count_p1=0, finalized_count_p2=0,
+                                  chain_total_score_p1=0., chain_total_score_p2=0.)
+    ema, rows = SwitchAwareDisplayEMA(), []
+    for frame, adv in enumerate((0., 40., 40.)):
+        observed = result(0.)
+        observed.p1.confirmed_board = observed.p2.confirmed_board = None
+        stamp = frame / FPS
+        inputs = (observed, snapshot, finalization, stamp, 1,
+                  (None, None), (None, None), (False, False))
+        writer.update(*inputs, defer_fallback=True)
+        overlay.update(*inputs)
+        writer.fallback(adv, .5)
+        vao._exchange_display(overlay, adv, .5, ema, stamp)
+        if frame == 2 or (frame == 0 and not warmup):
+            context = dict(kind="display", t_sec=stamp, game_idx=1, fallback_adv=adv,
+                           fallback_p1=.5, adv_raw_last=adv, resolved_active=False, settled_ran=False)
+            writer.write(context)
+            rows.append(display_row(overlay, inputs, context, ema))
+    writer.close()
+    assert rows[-1].display_adv == pytest.approx(17.5)
+    vao.save_display_timeline(tmp_path / "draw/display.npz", "synthetic", rows)
+    overlay.tracker.save(tmp_path / "draw/events.jsonl")
+    replay(tmp_path / "input.gz", tmp_path / "replay", switch_smoothing=True)
+    compare(tmp_path / "draw", tmp_path / "replay")
+    if not warmup:
+        _check_legacy_sparse_replay(tmp_path)
+
+
+def _check_legacy_sparse_replay(root: Path) -> None:
+    """追加フィールドを除くと旧記録の10.0を再現し、検証台の感度も確かめる。"""
+    with gzip.open(root / "legacy.gz", "wt", encoding="utf-8") as stream:
+        for row in read_records(root / "input.gz"):
+            if row["kind"] == "update":
+                row.pop("fallback_adv")
+                row.pop("fallback_p1")
+            stream.write(json.dumps(encode(row)) + "\n")
+    replay(root / "legacy.gz", root / "legacy", switch_smoothing=True)
+    with np.load(root / "legacy/display.npz") as saved:
+        assert saved["display_adv"][-1] == pytest.approx(10.)
