@@ -71,6 +71,7 @@ VC_RUNTIME_DLLS = ('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'ms
 ONNXRUNTIME_REQUIREMENT = 'onnxruntime==1.30.0'  # 2026-09-30 の合否評価 (docs/PHASE_J_ONNX_PREREGISTRATION) と同版
 ONNXRUNTIME_DEPENDENCIES = ('flatbuffers', 'protobuf', 'packaging')
 ONNX_WHEELHOUSE = Path('downloads/wheelhouse_onnx')
+EXPORT_MODELS = ('cnn_phase_b_large_v2.pt', 'cnn_global_best.pt', 'cnn_best.pt')  # export_onnx.py の DEFAULT_MODELS と同じ
 ONNX_WHEEL_PREFIXES = ('onnxruntime-', 'flatbuffers-', 'protobuf-', 'packaging-')
 ONNX_SITE_GLOBS = ('onnxruntime', 'onnxruntime-*.dist-info', 'flatbuffers', 'flatbuffers-*.dist-info', 'google',
                    'protobuf-*.dist-info', 'packaging', 'packaging-*.dist-info')
@@ -310,8 +311,34 @@ def export_onnx_files(bundle: Path, work: Path) -> list[Path]:
     return sorted((bundle / 'app' / 'models' / 'onnx').glob('*'))
 
 
+def reuse_onnx_files(bundle: Path, cache: Path) -> list[Path]:
+    """書き出し済みの ONNX を再利用する (onnx パッケージの DLL が読めない環境向け)。
+
+    ONNX は重みの内容ハッシュで名前が付くため、同梱する .pt から計算したハッシュの
+    ファイルが cache にあり、台帳 (index.json) の由来名とも一致する場合だけ複製する。
+    1 件でも合わなければ名前つきで落とす (古い ONNX を黙って同梱しない)。"""
+    code = ('import json, sys, torch; sys.path.insert(0, %r); from src import cnn_onnx; '
+            'print(json.dumps({n: cnn_onnx.state_digest(torch.load(%r + "/" + n, map_location="cpu", '
+            'weights_only=True)) for n in %r}))'
+            % (str(bundle / 'app'), str(bundle / 'app' / 'models'), list(EXPORT_MODELS)))
+    result = subprocess.run([str(bundle / 'python' / 'python.exe'), '-c', code], check=True,
+                            cwd=bundle / 'app', capture_output=True, text=True)
+    digests = json.loads(result.stdout.strip().splitlines()[-1])
+    index = json.loads((cache / 'index.json').read_text(encoding='utf-8'))
+    out = bundle / 'app' / 'models' / 'onnx'
+    out.mkdir(parents=True, exist_ok=True)
+    for name, digest in digests.items():
+        source = cache / f'{digest}.onnx'
+        if not source.is_file() or index.get(digest, {}).get('source') != name:
+            raise SystemExit(f'[ONNX 再利用エラー] {name} (digest {digest}) が {cache} に無い/台帳不一致')
+        shutil.copy2(source, out / source.name)
+    shutil.copy2(cache / 'index.json', out / 'index.json')
+    return sorted(out.glob('*'))
+
+
 def build(work: Path, asset_root: Path, make_archive: bool, reuse_python: bool = False,
-          vc_runtime_dir: Path = DEFAULT_VC_RUNTIME_DIR, with_onnx: bool = False) -> dict:
+          vc_runtime_dir: Path = DEFAULT_VC_RUNTIME_DIR, with_onnx: bool = False,
+          onnx_cache: Path | None = None) -> dict:
     started = time.perf_counter()
     bundle = work / 'build' / BUNDLE_NAME
     prepare_bundle_dir(bundle, work, reuse_python)
@@ -322,7 +349,7 @@ def build(work: Path, asset_root: Path, make_archive: bool, reuse_python: bool =
         remove_onnx_runtime(bundle / 'python')
     files = copy_app(bundle, asset_root)
     if with_onnx:
-        files += export_onnx_files(bundle, work)
+        files += reuse_onnx_files(bundle, onnx_cache) if onnx_cache else export_onnx_files(bundle, work)
     precompile(bundle / 'python', bundle / 'app')
     files += sorted((bundle / 'app').rglob('*.pyc'))  # unchecked-hash のため MANIFEST で完全性を担保する
     for name in SHIPPED_TEXT:
@@ -351,12 +378,14 @@ def main() -> None:
     parser.add_argument('--zip', action='store_true', help='組み立て後に zip 化')
     parser.add_argument('--reuse-python', action='store_true', help='python/ を作り直さず app 側だけ再構成')
     parser.add_argument('--with-onnx', action='store_true', help='ONNX Runtime と CNN の ONNX を同梱 (既定 OFF の切替用)')
+    parser.add_argument('--onnx-cache', type=Path, default=None,
+                        help='--with-onnx 時、書き出し済み ONNX (models/onnx) を内容ハッシュ照合のうえ再利用')
     options = parser.parse_args()
     if options.download:
         download_inputs(options.work)
         return
     print(json.dumps(build(options.work, options.asset_root, options.zip, options.reuse_python,
-                           with_onnx=options.with_onnx),
+                           with_onnx=options.with_onnx, onnx_cache=options.onnx_cache),
                      ensure_ascii=False, indent=1))
 
 
