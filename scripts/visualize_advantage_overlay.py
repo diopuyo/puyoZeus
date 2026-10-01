@@ -6469,7 +6469,6 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              landing_counter_response: bool = False,
              confirmed_death_hold: bool = False,
              landing_counter_prob: bool = False,
-             exchange_event_switch_smoothing: bool = False,
              landing_hands_spec: bool = False,
              death_candidate_guard: bool = False,
              death_formula_guard: bool = False,
@@ -6494,6 +6493,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              single_death_proof_negative_only: bool = False,
              post_counter_early_exit: bool = False,
              hidden_scenario_cap: int | None = None,
+             exchange_event_switch_smoothing: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7688,7 +7688,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                             displayed_scores_from_pipeline(pipe, recog_frame),
                             formula_visible_from_pipeline(pipe))
             if event_recorder is not None:
-                event_recorder.update(*event_inputs)
+                event_recorder.update(*event_inputs, defer_fallback=True)
             event_overlay.update(*event_inputs)
         ps1, ps2 = r.p1.state, r.p2.state
         episode_drive: _EpisodeDriveResult | None = None
@@ -8165,6 +8165,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     episode_hard_reason or "episode_unresolved_display_capped")
             disp_p1 = _ensure_display_probability_direction(disp_adv, disp_p1)
         if event_overlay is not None:
+            if event_recorder is not None:
+                event_recorder.fallback(disp_adv, disp_p1)
             if event_recorder is not None and fi >= write_frame and fi % step == 0:
                 event_recorder.write(dict(kind="display", t_sec=t, game_idx=game_idx,
                     fallback_adv=disp_adv, fallback_p1=disp_p1, adv_raw_last=model_adv_last,
