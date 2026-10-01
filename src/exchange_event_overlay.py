@@ -59,6 +59,10 @@ SignalFactory = Callable[[int, Any, Any, float], EndSignals]
 class ExchangeEventOverlay:
     """現在層は確定盤面だけを使い、途中盤面は明示ONの予測層へ限定する。"""
 
+    # __init__ を通らない既存の試験用生成でも既定OFFとして振る舞うための既定値。
+    _queue_alignment: Any = None
+    _aligned_queue: tuple = (None, None)
+
     def __init__(self, models: ExchangeModels, build_static: StaticBuilder,
                  signal_factory: SignalFactory, m0_predictor: M0Predictor | None = None,
                  per_side_settled: bool = False, live_count: bool = False,
@@ -82,12 +86,13 @@ class ExchangeEventOverlay:
                  single_death_proof_negative_only: bool = False,
                  post_counter_early_exit: bool = False,
                  multilanding_node_limit: int | None = None,
-                 hidden_scenario_cap: int | None = None) -> None:
+                 hidden_scenario_cap: int | None = None, queue_alignment: bool = False) -> None:
         self._initialize_layers(models, live_count, e16, count_sync, death_guard,
                                 evaluation_layers, completion_check, confirmed_death_hold)
         self._build_static, self._signal_factory = build_static, signal_factory
         self._m0, self._per_side_settled = m0_predictor, per_side_settled
         self._initialize_state()
+        self._initialize_queue_alignment(queue_alignment)
         from src.exchange_event_landing import ExchangeLandingProjection
         if landing_counter_prob and counter_probability_model is None:
             from src.landing_counter_probability import LogisticResponseProbability
@@ -108,6 +113,12 @@ class ExchangeEventOverlay:
                                  prefire_stage_timeout, prefire_stage_timeout_only)
         self._initialize_origin_guard(prefire_origin_guard, prefire_snapshot, prefire_match_gate)
         self._initialize_latency_bounds(multilanding_node_limit, hidden_scenario_cap)
+
+    def _initialize_queue_alignment(self, enabled: bool) -> None:
+        """既定OFF: 履歴の queue を学習の補正 queue と同じ (P_k, P_{k+1}) の意味へ揃える (2026-10-01)。"""
+        from src.next_queue_serving import QueueAlignment
+        self._queue_alignment = QueueAlignment() if enabled else None
+        self._aligned_queue = (None, None)
 
     def _initialize_latency_bounds(self, node_limit: int | None, scenario_cap: int | None) -> None:
         """遅延対策の決定的な予算 (既定 None = 従来どおり無制限)。壁時計ではなく件数で打ち切る。"""
@@ -231,7 +242,7 @@ class ExchangeEventOverlay:
             self._landing_projection.post_counter_bound.observe(result, game_idx)
         if self._origin_guard is not None:
             self._origin_guard.observe(sides, t_sec)
-        self._observe_prefire(sides, t_sec, game_idx)
+        self._observe_frame_inputs(sides, t_sec, game_idx)
         self._observe_guards(result, t_sec, game_idx, displayed_scores, formula_visible)
         if self._e16 is not None and self._e16.before(self, result, t_sec):
             self._e16.apply(self, result, snapshot, t_sec)
@@ -267,6 +278,12 @@ class ExchangeEventOverlay:
         self._previous = tuple(s.state for s in sides)
         if self._e16 is not None:
             self._e16.apply(self, result, snapshot, t_sec)
+
+    def _observe_frame_inputs(self, sides: tuple, stamp: float, game: int) -> None:
+        """毎フレームの入力観測。NEXT 整列 (既定OFF) は早期 return する層の前に必ず通す。"""
+        if self._queue_alignment is not None:
+            self._aligned_queue = self._queue_alignment.observe(sides, game, BoardState.STABLE)
+        self._observe_prefire(sides, stamp, game)
 
     def _observe_prefire(self, sides: tuple, stamp: float, game: int) -> None:
         """予測入力を復元してから、明示ONの因果履歴を更新する。"""
@@ -657,6 +674,8 @@ class ExchangeEventOverlay:
             if side.state != BoardState.STABLE or side.confirmed_board is None:
                 continue
             queue = np.array([*(side.next_pair or (0, 0)), *(side.dnext_pair or (0, 0))])
+            if self._queue_alignment is not None and self._aligned_queue[idx] is not None:
+                queue = np.array(self._aligned_queue[idx])
             self._history[idx].append(ConfirmedSide(t_sec, side.confirmed_board.copy(), queue))
             saved = True
         if saved:

@@ -1,0 +1,65 @@
+{
+  "protocol": {
+    "version": "E15_live_count",
+    "row_unit": "いずれかの側のSTABLE盤面/NEXT更新",
+    "admission": "評価時刻t_secで中盤判定。未来の終点による採否なし",
+    "scores": "観測済み連鎖だけの側別終点得点差を発火時完走予測の代理とする",
+    "weight": "撃ち合い単位で総和1",
+    "folds": "既存3seed×5動画fold",
+    "a": {
+      "baseline": "logs/f1b_counter_features/METRICS.json",
+      "oracle_max": 0.722
+    },
+    "b": {
+      "q_log_loss_max": 0.5708,
+      "zenchi_agreement_min": 0.7955,
+      "false_death_max": 1,
+      "death_denominator": 28
+    },
+    "c": {
+      "nf_2613_9_min": 700,
+      "jump_2614_08_max": 0.66,
+      "p_2694_3_min": 0.566,
+      "prefire_probability": "発火前から段階的に上昇"
+    },
+    "d": {
+      "report": "同一入力のE14/v3 OFF/ON count同値率、更新追従率"
+    }
+  },
+  "a": {
+    "input_videos": 148,
+    "videos": 144,
+    "rows": 84445,
+    "exchanges": 21466,
+    "predictions": 253335,
+    "folds": 15,
+    "metrics": {
+      "S3_prime": {
+        "auc": 0.700504794507451,
+        "weighted_auc": 0.7072622359627332,
+        "log_loss": 0.6252165836057527,
+        "v2_auc": 0.7171875839969486,
+        "pass_a": false
+      },
+      "S3_prime_light": {
+        "auc": 0.7022913854834025,
+        "weighted_auc": 0.7084514516386975,
+        "log_loss": 0.6238304280248171,
+        "v2_auc": 0.7172028860600939,
+        "pass_a": false
+      }
+    },
+    "leak_suspected": false,
+    "passed": false
+  },
+  "b": {
+    "status": "未実行"
+  },
+  "c": {
+    "status": "未実行"
+  },
+  "d": {
+    "status": "未実行"
+  },
+  "status": "CV_COMPLETE"
+}

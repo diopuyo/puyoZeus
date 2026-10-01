@@ -1,0 +1,134 @@
+{
+  "q": {
+    "frames": 6526,
+    "matches": 4,
+    "log_loss": 0.5149874470877042,
+    "auc": 0.7740945391963491
+  },
+  "zenchi": {
+    "hits": 7747,
+    "frames": 8333,
+    "agreement": 0.9296771870874835
+  },
+  "deaths": {
+    "false": 0,
+    "total": 36,
+    "unlabelled": 0
+  },
+  "audit": {
+    "records": 5,
+    "cases": 36,
+    "false": 0,
+    "unresolved": 0,
+    "baseline_false": 0,
+    "bound_false": 0,
+    "bound_cases": 12,
+    "lead_sec": {
+      "n": 36,
+      "p50": 3.9666666666666544,
+      "p95": 21.841666666666676
+    }
+  },
+  "scene_first_sec": 2760.383333333333,
+  "gates": {
+    "q": false,
+    "zenchi": true,
+    "false_fire": true,
+    "false_certainty": true,
+    "scene": true
+  },
+  "passed": false,
+  "risky": {
+    "cases": 36,
+    "single": 14,
+    "other_risky": 7,
+    "long_lead": 7,
+    "risky_rows": [
+      {
+        "source": "q_7gc4TgFig",
+        "game": 4,
+        "side": "2P",
+        "first": 322.0,
+        "lead": 22.26666666666665,
+        "false": false,
+        "route": "other",
+        "long_lead": true,
+        "later_chains": 2,
+        "verified_counter": true
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 7,
+        "side": "1P",
+        "first": 498.73333333333335,
+        "lead": 16.26666666666665,
+        "false": false,
+        "route": "single",
+        "long_lead": true,
+        "later_chains": 1,
+        "verified_counter": true
+      },
+      {
+        "source": "review",
+        "game": 3,
+        "side": "2P",
+        "first": 2760.116666666667,
+        "lead": 13.666666666666515,
+        "false": false,
+        "route": "other",
+        "long_lead": true,
+        "later_chains": 0,
+        "verified_counter": false
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 1,
+        "side": "1P",
+        "first": 218.23333333333332,
+        "lead": 21.700000000000017,
+        "false": false,
+        "route": "single",
+        "long_lead": true,
+        "later_chains": 1,
+        "verified_counter": true
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 5,
+        "side": "2P",
+        "first": 474.2,
+        "lead": 63.666666666666686,
+        "false": false,
+        "route": "single",
+        "long_lead": true,
+        "later_chains": 3,
+        "verified_counter": true
+      },
+      {
+        "source": "zenchi",
+        "game": 3,
+        "side": "2P",
+        "first": 2760.116666666667,
+        "lead": 13.666666666666515,
+        "false": false,
+        "route": "other",
+        "long_lead": true,
+        "later_chains": 0,
+        "verified_counter": false
+      },
+      {
+        "source": "zenchi",
+        "game": 7,
+        "side": "1P",
+        "first": 2929.116666666667,
+        "lead": 14.799999999999727,
+        "false": false,
+        "route": "other",
+        "long_lead": true,
+        "later_chains": 2,
+        "verified_counter": true
+      }
+    ]
+  },
+  "game14_false_times": []
+}

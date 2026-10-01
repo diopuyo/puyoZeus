@@ -6476,6 +6476,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              single_death_proof_negative_only: bool = False,
              post_counter_early_exit: bool = False,
              hidden_scenario_cap: int | None = None,
+             exchange_event_queue_align: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7100,7 +7101,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 ('post_counter_death_bound', post_counter_death_bound),
                 ('single_death_proof_guard', single_death_proof_guard),
                 ('single_death_proof_negative_only', single_death_proof_negative_only),
-                ('post_counter_early_exit', post_counter_early_exit)) if on},
+                ('post_counter_early_exit', post_counter_early_exit),
+                ('queue_alignment', exchange_event_queue_align)) if on},
             **({} if hidden_scenario_cap is None else {'hidden_scenario_cap': hidden_scenario_cap}))
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
@@ -8430,6 +8432,8 @@ def main() -> None:
                     help="E35: 打ち返し後の死亡上限（既定OFF、本番は--production-exchange-event）")
     ap.add_argument("--post-counter-early-exit", action="store_true", default=False,
                     help="E35: 最初に死なない候補で残りの証明を省く（判定同一、本番は--production-exchange-event）")
+    ap.add_argument("--exchange-event-queue-align", action="store_true", default=False,
+                    help="NEXT整列: 履歴のqueueを次に置く組(P_k,P_{k+1})へ揃える（既定OFF、補正queueで再学習したモデルと併用）")
     ap.add_argument("--hidden-scenario-cap", type=int, default=None,
                     help="隠し段の得点候補の上限（重み上位を残す、既定なし、本番は--production-exchange-event）")
     ap.add_argument("--single-death-proof-guard", action="store_true", default=False,
@@ -9140,6 +9144,7 @@ def main() -> None:
               single_death_proof_negative_only=a.single_death_proof_negative_only,
               post_counter_early_exit=a.post_counter_early_exit,
               hidden_scenario_cap=a.hidden_scenario_cap,
+              exchange_event_queue_align=a.exchange_event_queue_align,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

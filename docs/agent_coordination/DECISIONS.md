@@ -3023,3 +3023,24 @@ G3 の合格条件6項目の結果、残っている実害3件 (列まるごと�
 - 診断: 実際に撃つ側を hazard が当てたのは 94/181 (52%)、撃った側の枝の向きの一致は 65/125 (52%)。予測層の所要は平均 54ms / P95 291ms (構成B) で、予算 10ms を超える。
 - 詳細: `wt_prefire/logs/prefire_prediction/PHASE2.md`。フラグは既定 OFF のまま。
 - 更新 (同日 user「とりあえず公開で進めて」「もどして」): puyoZeus を PUBLIC に戻した。履歴のゲーム画面PNG消去とテンプレ置換は宿題として継続。
+
+- 更新 (同日 user「とりあえず公開で進めて」「もどして」): puyoZeus を PUBLIC に戻した。履歴のゲーム画面PNG消去とテンプレ置換は宿題として継続。
+
+## 2026-10-01 事前登録: NEXT 意味ずれの学習側補正 (補正queueで再学習 + 提供側整列 `--exchange-event-queue-align`、既定OFF) — 再学習の指標・再生の採点を見る前に固定
+- 作業場所: worktree `D:/puyo_analyzer/wt_nextfix`、branch `claude/next-shift-train-fix-20261001` (exev 70969f8 起点)。背景は exev `logs/next_shift/RESULT.md` (提供側だけの整列 R3/R1/R3L2 は旧モデルでは悪化)。
+- 補正queue (T方式、既存148動画の原票から作る。再収集なし): 行 r の (P_k, P_{k+1}) = 次の2回のきれいな設置 (盤面差分が色ぷよちょうど2個) の組を、**時刻 t 以前に NEXT/DNEXT 枠で読めた組 (今の行+直前2行) の中から**選ぶ。選べない枠は因果規則 (連鎖・おじゃま・複数手の後で直前行から1手繰り上がっていれば (直前 next, 今の next)、それ以外は元の読み)。出力の色は必ず t 以前の表示の読み。打ち切り再生 (表示の読みを r まで・盤面を r+2 までに切る) で全体計算との不一致 0/867,165。
+- 再学習 (元と同じ行・fold・seed・パラメータ。差し替えは queue 列だけ): M0 = T03 入れ子CV (3seed×5外側×6本) + 最終 (train_exchange_event_m0 と同じ) / G_fe = E1 手順 (seed0 外側OOF) / S1′・S3′ (+light) = E15 v3 手順。保存先 `models/exchange_event_v5` (S′) + `models/exchange_event_v5_common` (G_fe・M0、manifest の shared_directory で参照。キーの無い既存 manifest は従来どおり)。
+- 構成 N (採点対象はこれ1つ): 現本番 (run_e36b.options = e36b_on と同じ) + `queue_alignment=True` (提供側 R3、exev 診断 Frozen(2) と乱数列 108,040 step で出力一致) + モデル v5。
+- 台の確認: R0 (v3・整列なし・同じ再生器) が e36b_on と display/events バイト一致すること。一致しなければ採点しない。
+- 門 (全部満たせば合格): q log loss ≤ .507567 + 5e-7 (6,526行) / zenchi hits ≥ 7,671 (8,333中) / 誤った負け確定 0/37 / 3:00場面 ≤ 2766.0 秒 / q 第14試合の誤確定 0 / **かつ** 改善: q log loss ≤ .505567 (−.002) または q AUC ≥ .78525 (+.01)。
+- リーク監視: S′ の148動画CVで AUC がオラクル上限 .722 を超えたら (v3 の既存規則) 採用前に停止して監査する。
+- 副次 (合否に含めない・報告する): 148動画の動画単位CV (元と同じ行・fold) で新旧の S1′/S3′(+light)・G_fe・M0(A) の AUC/LL、構成 N_noalign (v5・整列なし) の再生、状況別 (通常/連鎖後/おじゃま後) の queue 一致率。
+- 合格時: user の事前承認 (9/30) に従い production_config へ登録 (`--exchange-event-model-dir models/exchange_event_v5` + `--exchange-event-queue-align`、採用日+根拠)。不合格なら登録せず理由を報告する。
+
+## 2026-10-01 結果: NEXT 意味ずれの学習側補正 (構成 N) は事前登録の門に不合格 — 本番登録しない
+- 構成 N (v5 + `--exchange-event-queue-align`): q .515447 (基準 .507567、不合格) / AUC .76797 / zenchi 7,843 (+172) / 誤った負け確定 0/36 / 3:00場面 2760.35 / 第14試合 0。
+- 台の確認は合格: R0 (同じ再生器・v3・整列なし) が5記録とも display/events で e36b_on とバイト一致、採点も完全一致。整列フラグ単体 (旧モデル) は診断 R3 と同値 (.508360 / 7,668)。
+- 分解 (診断): 新S′+旧G_fe/M0 q .514112 / 旧S′+新G_fe/M0 q .509878 / 整列なし q .514839。悪化の主因は S′ の再学習。
+- 測定器の分解能: 元の特徴のまま S′ の random_state を 0→1 に変えるだけで q +.0047・zenchi −42 (S_orig_rs1)。q (4試合) の再学習ゆらぎ ≈.005 が門の改善幅 .002 を上回る。同 seed 比較で T は q 悪化 (seed0 +.0079 / seed1 +.0027)、zenchi 改善 (+172 / +118)。
+- 148動画CV (同じ行・fold): S1′ LL −.0032 (CI [−.0050, −.0009]) / S1′_light −.0011 / S3′_light ±0 / M0(seed0) LL −.0014 / G_fe(seed0) 全体 LL −.0010・中盤 −.0019。
+- 提案 (user/座長判断): 再学習を伴う変更は q 単独でなく、複数 random_state 平均または zenchi・148動画CV を主にした門で事前登録し直す。資産は wt_nextfix に全て保存 (再計算不要)。詳細 `wt_nextfix/logs/next_shift_train/RESULT.md`。production_config 不変、フラグは既定OFF。

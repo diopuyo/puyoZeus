@@ -68,7 +68,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            single_death_proof_negative_only: bool = False,
            post_counter_early_exit: bool = False,
            multilanding_node_limit: int | None = None,
-           hidden_scenario_cap: int | None = None) -> dict:
+           hidden_scenario_cap: int | None = None,
+           queue_alignment: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -105,7 +106,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         single_death_proof_guard=single_death_proof_guard,
         single_death_proof_negative_only=single_death_proof_negative_only,
         post_counter_early_exit=post_counter_early_exit,
-        multilanding_node_limit=multilanding_node_limit, hidden_scenario_cap=hidden_scenario_cap)
+        multilanding_node_limit=multilanding_node_limit, hidden_scenario_cap=hidden_scenario_cap,
+        queue_alignment=queue_alignment)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     for item in stream:
@@ -188,6 +190,8 @@ def main() -> None:
     parser.add_argument("--post-counter-death-bound", action="store_true", default=False)
     parser.add_argument("--post-counter-early-exit", action="store_true", default=False)
     parser.add_argument("--hidden-scenario-cap", type=int, default=None)
+    parser.add_argument("--exchange-event-queue-align", action="store_true", default=False,
+                        help="NEXT整列 (P_k,P_{k+1})。補正queueで再学習したモデルと併用（既定OFF）")
     parser.add_argument("--single-death-proof-guard", action="store_true", default=False)
     parser.add_argument("--single-death-proof-negative-only", action="store_true", default=False)
     parser.add_argument("--prefire-origin-guard", action="store_true", default=False)
@@ -228,7 +232,8 @@ def main() -> None:
                     single_death_proof_guard=options.single_death_proof_guard,
                     single_death_proof_negative_only=options.single_death_proof_negative_only,
                     post_counter_early_exit=options.post_counter_early_exit,
-                    hidden_scenario_cap=options.hidden_scenario_cap)
+                    hidden_scenario_cap=options.hidden_scenario_cap,
+                    queue_alignment=options.exchange_event_queue_align)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

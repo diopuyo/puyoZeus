@@ -4979,3 +4979,10 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 - 出力同一の高速化 (既定ON): 応手全探索 15.7 倍 (274 呼出し、結果全文SHA不一致0)。保存記録5本の全51ファイルとリアルタイム由来3本がバイト一致。関連テスト 848 passed、新規 36 件。
 - 既定OFFの有界化を DECISIONS.md に事前登録して実走: B1 (early_exit + node 5000 + cap 256) は門通過だが zenchi 第11試合の死亡検出を1件失う。B2 (node 上限なし) は門通過・判定同一。b20 窓の最大 18.9 秒 → B2 0.62 秒 / B1 0.26 秒。**B2 を推奨、採否は判断待ち**。production_config 不変。
 - 依頼 (Codex 管理ファイル): なし。本番配線 (`--post-counter-early-exit` 等) は採否確定後。詳細 logs/multilanding_speed/RESULT.md。
+
+## 2026-10-01 Claude: NEXT 意味ずれの学習側補正 (branch claude/next-shift-train-fix-20261001)
+- 148動画の原票の queue を (P_k, P_{k+1}) に補正 (T方式、t 以前の表示枠の組から実際の設置で選ぶ。打ち切り再生で不一致 0/867,165)。P_k 一致 69.3→88.5%、連鎖後 20.7→70.5%。
+- M0 (T03 seed0)・G_fe (E1)・S1′/S3′ (E15 v3) を同じ行・fold・seed で再学習 → `models/exchange_event_v5` + `models/exchange_event_v5_common` (manifest `shared_directory`、キー無しは従来どおり)。
+- 提供側整列 `--exchange-event-queue-align` (ExchangeEventOverlay `queue_alignment`、既定OFF) を描画・再生の CLI に追加。OFF で5記録とも e36b_on と display/events バイト一致。
+- 事前登録の門 (exev DECISIONS 2026-10-01) に不合格: q .515447 (基準 .507567)、zenchi 7,843 (+172)。S′ の random_state 変更だけで q が .005 動くため、q 単独の門は再学習モデルには分解能不足。production_config 不変。詳細 `logs/next_shift_train/RESULT.md`。
+- Codex への依頼なし (rt / PuyoLive 側の配線は採用時のみ必要)。

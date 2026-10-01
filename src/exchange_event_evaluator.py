@@ -16,6 +16,7 @@ from src.exchange_event_features import (
 )
 
 MODEL_VERSION = "exchange_event_v1"
+SHARED_DIRECTORY_KEY = "shared_directory"
 MODEL_COLUMNS = {"G_fe": G_COLUMNS, "S1": S1_COLUMNS, "S3": S3_COLUMNS}
 
 
@@ -163,10 +164,16 @@ def count_sides(event: FiringInput | ExchangeEndInput) -> Array:
 
 
 def shared_model_directory(directory: str | Path) -> Path:
-    """F1bはv1の共通G_fe・M0をそのまま使用する。"""
+    """F1bはv1の共通G_fe・M0をそのまま使用する。
+
+    manifest に shared_directory (兄弟ディレクトリ名) があればそれを共通側とする
+    (2026-10-01、補正queueで再学習した G_fe・M0 用。キーの無い既存 manifest は従来どおり)。
+    """
     root = Path(directory)
     meta = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    return root.parent / MODEL_VERSION if "S1_prime_light" in meta["models"] else root
+    if "S1_prime_light" not in meta["models"]:
+        return root
+    return root.parent / meta.get(SHARED_DIRECTORY_KEY, MODEL_VERSION)
 
 
 def file_sha256(path: Path) -> str:
