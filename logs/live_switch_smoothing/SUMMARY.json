@@ -1,0 +1,193 @@
+{
+ "off": {
+  "frames": 114146,
+  "switches": 656,
+  "jumps": 349,
+  "by_kind": {
+   "none": 82,
+   "fire": 112,
+   "landing": 48,
+   "death": 47,
+   "chain_end": 26,
+   "boundary": 34
+  },
+  "non_event_jumps": 82,
+  "non_event_switch_jumps": 34,
+  "by_transition": {
+   "(同一由来内)S3_landing": {
+    "landing": 13,
+    "fire": 47,
+    "none": 6,
+    "chain_end": 9,
+    "death": 2
+   },
+   "(同一由来内)G_fe": {
+    "none": 38,
+    "landing": 11,
+    "fire": 3,
+    "boundary": 7,
+    "chain_end": 1
+   },
+   "G_fe→S3_landing": {
+    "fire": 45
+   },
+   "waiting_confirmed→G_fe": {
+    "none": 19,
+    "boundary": 26
+   },
+   "S3_landing→G_fe": {
+    "fire": 3,
+    "landing": 19,
+    "chain_end": 8,
+    "none": 6
+   },
+   "S3_landing→unavoidable_death": {
+    "death": 19
+   },
+   "G_fe→confirmed_death": {
+    "death": 16
+   },
+   "G_fe→S3_provisional": {
+    "fire": 7,
+    "none": 3
+   },
+   "S3→G_fe": {
+    "chain_end": 5,
+    "none": 2,
+    "fire": 1,
+    "landing": 1
+   },
+   "S3_provisional→S3_landing": {
+    "fire": 5,
+    "chain_end": 2,
+    "none": 1
+   },
+   "S3_landing→confirmed_death": {
+    "death": 6,
+    "boundary": 1
+   },
+   "(同一由来内)S3_provisional": {
+    "none": 4,
+    "chain_end": 1
+   },
+   "S3_landing→S3": {
+    "none": 1,
+    "landing": 2
+   },
+   "S3_provisional→S3": {
+    "landing": 2
+   },
+   "unavoidable_death→S3_landing": {
+    "death": 2
+   },
+   "S3_landing→S3_provisional": {
+    "none": 1,
+    "fire": 1
+   },
+   "G_fe→unavoidable_death": {
+    "death": 1
+   },
+   "S3_provisional→G_fe": {
+    "none": 1
+   },
+   "S3_provisional→confirmed_death": {
+    "death": 1
+   }
+  }
+ },
+ "on": {
+  "frames": 114146,
+  "switches": 656,
+  "jumps": 305,
+  "by_kind": {
+   "none": 66,
+   "fire": 112,
+   "landing": 49,
+   "death": 48,
+   "chain_end": 23,
+   "boundary": 7
+  },
+  "non_event_jumps": 66,
+  "non_event_switch_jumps": 18,
+  "by_transition": {
+   "(同一由来内)S3_landing": {
+    "landing": 13,
+    "fire": 46,
+    "none": 6,
+    "chain_end": 9,
+    "death": 2
+   },
+   "(同一由来内)G_fe": {
+    "none": 38,
+    "landing": 10,
+    "fire": 3,
+    "chain_end": 1,
+    "boundary": 1
+   },
+   "G_fe→S3_landing": {
+    "fire": 46
+   },
+   "S3_landing→G_fe": {
+    "fire": 3,
+    "landing": 19,
+    "chain_end": 8,
+    "none": 7
+   },
+   "S3_landing→unavoidable_death": {
+    "death": 19
+   },
+   "G_fe→confirmed_death": {
+    "death": 16
+   },
+   "S3→G_fe": {
+    "none": 5,
+    "chain_end": 3,
+    "fire": 1,
+    "death": 1,
+    "landing": 2
+   },
+   "G_fe→S3_provisional": {
+    "fire": 7,
+    "none": 3
+   },
+   "S3_provisional→S3_landing": {
+    "fire": 5,
+    "chain_end": 1,
+    "none": 2
+   },
+   "S3_landing→confirmed_death": {
+    "death": 6,
+    "boundary": 1
+   },
+   "waiting_confirmed→G_fe": {
+    "boundary": 5
+   },
+   "(同一由来内)S3_provisional": {
+    "none": 4,
+    "chain_end": 1
+   },
+   "S3_provisional→S3": {
+    "landing": 2
+   },
+   "unavoidable_death→S3_landing": {
+    "death": 2
+   },
+   "S3_landing→S3_provisional": {
+    "landing": 1,
+    "fire": 1
+   },
+   "S3_landing→S3": {
+    "landing": 2
+   },
+   "G_fe→unavoidable_death": {
+    "death": 1
+   },
+   "S3_provisional→G_fe": {
+    "none": 1
+   },
+   "S3_provisional→confirmed_death": {
+    "death": 1
+   }
+  }
+ }
+}

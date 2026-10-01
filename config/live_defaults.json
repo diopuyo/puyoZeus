@@ -1,5 +1,6 @@
 {
   "cpu_threads": 1,
   "evaluation_nice": 10,
-  "cnn_device": "cpu"
+  "cnn_device": "cpu",
+  "switch_smoothing": true
 }

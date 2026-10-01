@@ -68,7 +68,7 @@ def static_reply(connection: Any, request_id: int, pending: deque) -> dict:
 def state(overlay: Any) -> dict:
     tracker = overlay.tracker
     result = dict(kind='ok', probability=tracker.probability, source=tracker.source, display=overlay.display,
-        smoothing=(overlay.smoothing.adv, overlay.smoothing.probability, overlay.smoothing.last_sec),
+        smoothing=overlay.smoothing_state(),
         static_probability=tracker._static_probability,
         prediction_discard_reason=getattr(tracker, 'prediction_discard_reason', None),
         sealed=tracker.sealed, diagnostics=tracker.sealed_diagnostics,
@@ -89,16 +89,14 @@ def execute(overlay: Any, request: dict) -> dict:
             overlay.failure_sec = args[3]
             if overlay.tracker._game_idx != args[4]:
                 checkpoint = dict(index=index, next_id=overlay.tracker._next_exchange_id,
-                    smoothing=(overlay.smoothing.adv, overlay.smoothing.probability,
-                               overlay.smoothing.last_sec))
+                    smoothing=overlay.smoothing_state())
         overlay.failure_stage = operation
         getattr(overlay, operation)(*args)
     overlay.failure_stage = 'calculate'
     if request.get('fault'):
         raise RuntimeError('B16故障注入: '+request['fault'])
     if request['op'] == 'advance':
-        reply = dict(kind='ok', smoothing=(overlay.smoothing.adv,
-            overlay.smoothing.probability, overlay.smoothing.last_sec), checkpoint=checkpoint,
+        reply = dict(kind='ok', smoothing=overlay.smoothing_state(), checkpoint=checkpoint,
             sealed=overlay.tracker.sealed, diagnostics=overlay.tracker.sealed_diagnostics)
         overlay.tracker.sealed, overlay.tracker.sealed_diagnostics = [], []
         return reply

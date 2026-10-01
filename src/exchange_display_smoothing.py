@@ -26,6 +26,9 @@ IMMEDIATE_SOURCES = ("confirmed_death",)
 # 切替の前後どちらかがこれらなら、ブレンドしない (死亡は物理イベント)。
 DEATH_SOURCES = ("confirmed_death", "unavoidable_death")
 
+# export_state の先頭に置く識別子 (旧形式の (adv, 確率, last_sec) と取り違えない)。
+STATE_MARKER = "switch_aware_v1"
+
 Pair = tuple[float, float]
 
 
@@ -81,6 +84,18 @@ class SwitchAwareDisplayEMA:
         self.previous_source, self.previous_game = source, game
         self.previous_stamp, self.last_sec = stamp, t_sec
         return self.shown
+
+    def export_state(self) -> tuple:
+        """プロセス間・journal再実行で受け渡す全状態 (純粋な値のタプル)。長さで旧3要素形式と区別できる。"""
+        return (STATE_MARKER, self.state, self.shown, self.last_sec, self.previous_source, self.previous_game,
+                self.previous_stamp, self.last_event_sec, self.blend_start, self.anchor)
+
+    def restore_state(self, values: tuple) -> None:
+        """export_state の値を戻す。旧初期値 (adv, 確率, None) は「状態なし」として何もしない。"""
+        if not values or values[0] != STATE_MARKER:
+            return
+        (_, self.state, self.shown, self.last_sec, self.previous_source, self.previous_game,
+         self.previous_stamp, self.last_event_sec, self.blend_start, self.anchor) = values
 
     def _snap(self, target: Pair) -> None:
         """試合境界・確定死亡・初回は、遅延させず値へ合わせる (EMA 状態も同値、ブレンド中断)。"""
