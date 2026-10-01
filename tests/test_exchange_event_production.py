@@ -25,6 +25,9 @@ E36B_ADDED = ["--post-counter-death-bound", "--single-death-proof-guard",
               "--single-death-proof-negative-only"]
 # 2026-09-30 追加 (評価遅延対策B2、座長判定): E35早期打切り + 隠し段候補上限256。
 B2_ADDED = ["--post-counter-early-exit", "--hidden-scenario-cap", "256"]
+# 2026-10-01 追加 (切替の値飛び対策、事後例外でuser承認): 表示のみのフラグ。
+SWITCH_ADDED = ["--exchange-event-switch-smoothing"]
+SWITCH_EVIDENCE = ("34→16", "7,670", "事後例外", "DECISIONS.md", "2026-10-01")
 B2_EVIDENCE = ("6f370c8", "51/51", "7,671/8,333", "0/37", "2760.38", "18.9秒→0.62秒", "2026-09-30")
 E36B_EVIDENCE = (".507565", "7,676/8,333", "1/39", "2760.38", "2026-09-30")
 
@@ -55,13 +58,18 @@ def test_fixed_execution_conditions() -> None:
         assert done["options"] == run_e32.OPTIONS
         assert done["model_dir"] == "models/exchange_event_v3"
         assert done["live_count"] is True
-    assert shlex.split(config.exchange_event_flags()) == fixed_flags() + E36B_ADDED + B2_ADDED
+    assert shlex.split(config.exchange_event_flags()) == fixed_flags() + E36B_ADDED + B2_ADDED + SWITCH_ADDED
     assert len(set(fixed_flags())) == len(fixed_flags())
 
 
 @pytest.mark.parametrize("entry", config.EXCHANGE_EVENT_ADOPTED)
 def test_provenance(entry: config.AdoptedFlag) -> None:
     """全採用項目に日付と検収根拠が残る。"""
+    if entry.flag in SWITCH_ADDED:
+        assert entry.adopted == "2026-10-01"
+        for evidence in SWITCH_EVIDENCE:
+            assert evidence in entry.reason
+        return
     if entry.flag.split()[0] in B2_ADDED:
         assert entry.adopted == "2026-09-30"
         for evidence in B2_EVIDENCE:
@@ -107,7 +115,7 @@ def test_cli_effective_arguments(module: str, monkeypatch: pytest.MonkeyPatch) -
     """両CLIで一括指定と固定検収の全実効引数が一致し、未採用はOFF。"""
     required = ["input.jsonl.gz", "--out", "unused"] if module == REPLAY else []
     r1b = shlex.split(config.placement_reconcile_flags()) if module == RENDER else []
-    explicit = cli_options(module, required + fixed_flags() + E36B_ADDED + B2_ADDED + r1b, monkeypatch)
+    explicit = cli_options(module, required + fixed_flags() + E36B_ADDED + B2_ADDED + SWITCH_ADDED + r1b, monkeypatch)
     production = cli_options(module, required + ["--production-exchange-event"], monkeypatch)
     assert production.pop("production_exchange_event") is True
     assert explicit.pop("production_exchange_event") is False
@@ -154,7 +162,7 @@ def test_production_flags_equal_e36b_configuration() -> None:
     """本番の撃ち合いフラグ集合 + 認識側R1bが、e36bの合格構成とちょうど一致する。"""
     production = set(shlex.split(config.exchange_event_flags()))
     replay_side = {f for f in production if not f.startswith("--exchange-event-model")
-                   and f not in B2_ADDED
+                   and f not in B2_ADDED and f not in SWITCH_ADDED
                    and f not in ("--exchange-event-update", "--exchange-event-live-count")
                    and not f.startswith("models/")}
     # e36bにはlive_count/update/model_dirがrun側で暗黙に入る。残りの実験フラグは完全一致。
@@ -186,3 +194,12 @@ def test_render_production_enables_r1b_and_replay_does_not_receive_it(
     assert plain["post_counter_early_exit"] is False and plain["hidden_scenario_cap"] is None
     assert plain["next_recolor_pair_guard"] is False
     assert plain["verification_pending_chain_expiry"] is False
+
+
+@pytest.mark.parametrize("module", [RENDER, REPLAY])
+def test_switch_smoothing_wired_to_production(module: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """切替平滑は本番指定で描画・再生の両CLIがONになり、指定なしでは既定OFF。"""
+    required = ["input.jsonl.gz", "--out", "unused"] if module == REPLAY else []
+    assert cli_options(module, required + ["--production-exchange-event"],
+                       monkeypatch)["exchange_event_switch_smoothing"] is True
+    assert cli_options(module, required, monkeypatch)["exchange_event_switch_smoothing"] is False
