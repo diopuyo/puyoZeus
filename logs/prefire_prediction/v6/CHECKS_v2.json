@@ -1,0 +1,20 @@
+{
+  "baseline_rows": 3570,
+  "equal": {
+    "t_sec": true,
+    "display_p1": true,
+    "display_adv": true,
+    "source": true
+  },
+  "max_error": {
+    "t_sec": 0.0,
+    "display_p1": 0.0,
+    "display_adv": 0.0
+  },
+  "light_board_ms": {
+    "count": 200,
+    "p95": 0.03471975360298528,
+    "maximum": 0.12541999603854492
+  },
+  "passed": true
+}

@@ -1,0 +1,2446 @@
+{
+  "m_time": {
+    "baseline": 0.5647454855331353,
+    "phase6": 0.5646873635926203,
+    "difference": -5.8121940515021286e-05,
+    "ci95": [
+      -0.00017415665962250415,
+      7.512384581076503e-08
+    ],
+    "games": 58
+  },
+  "prefire": {
+    "baseline": 0.6714221709726529,
+    "phase6": 0.6714221709726529,
+    "difference": 0.0,
+    "ci95": [
+      0.0,
+      0.0
+    ],
+    "games": 58
+  },
+  "placebo": {
+    "baseline": 0.6714221709726529,
+    "phase6": 0.671274524400289,
+    "difference": -0.0001476465723638798,
+    "ci95": [
+      -0.00044293971709152835,
+      0.0
+    ],
+    "games": 58
+  },
+  "agree": {
+    "baseline": 0.8532246927219997,
+    "phase6": 0.8532246927219997,
+    "difference": 0.0,
+    "ci95": [
+      0.0,
+      0.0
+    ],
+    "games": 58
+  },
+  "flips": {
+    "baseline": 327,
+    "phase6": 327
+  },
+  "false_deaths": {
+    "baseline": 6,
+    "phase6": 6
+  },
+  "rows": {
+    "baseline": [
+      {
+        "m_time": 0.15355114033396045,
+        "prefire": 0.6490431246442011,
+        "prefire_frames": 396,
+        "agree": [
+          2119,
+          2138
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.7208777927688985,
+        "prefire": 0.8804339192433479,
+        "prefire_frames": 349,
+        "agree": [
+          248,
+          470
+        ],
+        "flips": 13
+      },
+      {
+        "m_time": 0.4242823929934589,
+        "prefire": 0.569733593429284,
+        "prefire_frames": 366,
+        "agree": [
+          658,
+          716
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.6280579700157213,
+        "prefire": 0.5647959377142291,
+        "prefire_frames": 126,
+        "agree": [
+          548,
+          571
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.6271228196931727,
+        "prefire": 0.5449656469066012,
+        "prefire_frames": 296,
+        "agree": [
+          814,
+          921
+        ],
+        "flips": 10
+      },
+      {
+        "m_time": 0.8095768435477979,
+        "prefire": 0.6416785171007748,
+        "prefire_frames": 223,
+        "agree": [
+          478,
+          993
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.5725401596195023,
+        "prefire": 0.8369992093595294,
+        "prefire_frames": 90,
+        "agree": [
+          331,
+          424
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5335080928302578,
+        "prefire": 0.6628573237699734,
+        "prefire_frames": 90,
+        "agree": [
+          488,
+          488
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.568734657673488,
+        "prefire": 0.8080931692641059,
+        "prefire_frames": 180,
+        "agree": [
+          564,
+          578
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.41790439517936195,
+        "prefire": 0.6001647811231481,
+        "prefire_frames": 308,
+        "agree": [
+          761,
+          761
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.419129748061496,
+        "prefire": 1.0033970702891208,
+        "prefire_frames": 117,
+        "agree": [
+          746,
+          746
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.5045671476345522,
+        "prefire": 0.7740832213555953,
+        "prefire_frames": 421,
+        "agree": [
+          863,
+          863
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.858552732249814,
+        "prefire": 0.7207016969273037,
+        "prefire_frames": 90,
+        "agree": [
+          405,
+          733
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.5089971318756839,
+        "prefire": 0.7041522118872214,
+        "prefire_frames": 545,
+        "agree": [
+          975,
+          975
+        ],
+        "flips": 11
+      },
+      {
+        "m_time": 0.8203646053086787,
+        "prefire": 0.6766722279176186,
+        "prefire_frames": 211,
+        "agree": [
+          328,
+          732
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.5903606084551463,
+        "prefire": 0.7823146669473644,
+        "prefire_frames": 213,
+        "agree": [
+          348,
+          366
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.336546230896196,
+        "prefire": 0.4087222461234277,
+        "prefire_frames": 305,
+        "agree": [
+          620,
+          697
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.455095826815542,
+        "prefire": 0.6267025443675666,
+        "prefire_frames": 180,
+        "agree": [
+          325,
+          325
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.5887062229436775,
+        "prefire": 0.669007117413944,
+        "prefire_frames": 182,
+        "agree": [
+          537,
+          557
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.5913072840972761,
+        "prefire": 0.6637539899932713,
+        "prefire_frames": 308,
+        "agree": [
+          361,
+          479
+        ],
+        "flips": 8
+      },
+      {
+        "m_time": 0.4223803213660346,
+        "prefire": 0.5158166953255685,
+        "prefire_frames": 90,
+        "agree": [
+          575,
+          578
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.5876195555513751,
+        "prefire": 0.7289082551190382,
+        "prefire_frames": 272,
+        "agree": [
+          321,
+          523
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5067573512363864,
+        "prefire": 0.8202992550415359,
+        "prefire_frames": 281,
+        "agree": [
+          504,
+          505
+        ],
+        "flips": 3
+      },
+      {
+        "m_time": 0.6417662084720648,
+        "prefire": 0.7245434078447012,
+        "prefire_frames": 235,
+        "agree": [
+          349,
+          349
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.7219462194894484,
+        "prefire": 0.6486756266345166,
+        "prefire_frames": 95,
+        "agree": [
+          394,
+          657
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.46065230426341297,
+        "prefire": 0.5697922675190502,
+        "prefire_frames": 301,
+        "agree": [
+          620,
+          621
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.4812742322341829,
+        "prefire": 0.7387248044997657,
+        "prefire_frames": 255,
+        "agree": [
+          659,
+          660
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.4297828583217319,
+        "prefire": 0.6176658943422789,
+        "prefire_frames": 110,
+        "agree": [
+          275,
+          276
+        ],
+        "flips": 0
+      },
+      {
+        "m_time": 0.3854900339060092,
+        "prefire": 0.5392160333866088,
+        "prefire_frames": 425,
+        "agree": [
+          828,
+          830
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.6194194953990882,
+        "prefire": 0.7409873826963778,
+        "prefire_frames": 180,
+        "agree": [
+          443,
+          589
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.4339224104586074,
+        "prefire": 0.6522569303879208,
+        "prefire_frames": 180,
+        "agree": [
+          570,
+          570
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.31808258484194213,
+        "prefire": 0.44052714073536237,
+        "prefire_frames": 210,
+        "agree": [
+          433,
+          434
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.7571453780025681,
+        "prefire": 0.5920796913169923,
+        "prefire_frames": 360,
+        "agree": [
+          397,
+          805
+        ],
+        "flips": 17
+      },
+      {
+        "m_time": 0.4109840053944129,
+        "prefire": 0.5805349247964624,
+        "prefire_frames": 218,
+        "agree": [
+          354,
+          354
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.585491943964581,
+        "prefire": 0.5714694019423199,
+        "prefire_frames": 450,
+        "agree": [
+          920,
+          985
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5781387087515948,
+        "prefire": 0.5904376633401733,
+        "prefire_frames": 90,
+        "agree": [
+          423,
+          439
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.535397571730877,
+        "prefire": 0.7073022034562925,
+        "prefire_frames": 180,
+        "agree": [
+          395,
+          438
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.3869122495765099,
+        "prefire": 0.6136996845847692,
+        "prefire_frames": 217,
+        "agree": [
+          659,
+          660
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.6384276489827481,
+        "prefire": 0.7774753530031397,
+        "prefire_frames": 257,
+        "agree": [
+          273,
+          422
+        ],
+        "flips": 5
+      },
+      {
+        "m_time": 0.6201839291608728,
+        "prefire": 0.6358314983941775,
+        "prefire_frames": 180,
+        "agree": [
+          459,
+          652
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.760783605094405,
+        "prefire": 0.7378108247727293,
+        "prefire_frames": 360,
+        "agree": [
+          343,
+          657
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.4953172228182086,
+        "prefire": 0.515483954917878,
+        "prefire_frames": 291,
+        "agree": [
+          634,
+          650
+        ],
+        "flips": 8
+      },
+      {
+        "m_time": 0.6721866427777569,
+        "prefire": 0.7185138238787352,
+        "prefire_frames": 180,
+        "agree": [
+          437,
+          731
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5157766872869286,
+        "prefire": 1.0808885284217615,
+        "prefire_frames": 90,
+        "agree": [
+          629,
+          768
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.8459550259559887,
+        "prefire": 0.6530746854362031,
+        "prefire_frames": 454,
+        "agree": [
+          978,
+          1177
+        ],
+        "flips": 14
+      },
+      {
+        "m_time": 0.7013817492545309,
+        "prefire": 0.8340677760981466,
+        "prefire_frames": 211,
+        "agree": [
+          281,
+          519
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.577617504436992,
+        "prefire": 0.7092310263200604,
+        "prefire_frames": 285,
+        "agree": [
+          622,
+          710
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.4936675502847024,
+        "prefire": 0.6806408491488087,
+        "prefire_frames": 107,
+        "agree": [
+          405,
+          405
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.4402556473964258,
+        "prefire": 0.4954131348200525,
+        "prefire_frames": 90,
+        "agree": [
+          689,
+          689
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.6108175616874617,
+        "prefire": 0.6877398375131151,
+        "prefire_frames": 90,
+        "agree": [
+          242,
+          323
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.7587291922496462,
+        "prefire": 0.7227749069331102,
+        "prefire_frames": 183,
+        "agree": [
+          463,
+          602
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5661411405671624,
+        "prefire": 0.6222471004629849,
+        "prefire_frames": 150,
+        "agree": [
+          311,
+          311
+        ],
+        "flips": 3
+      },
+      {
+        "m_time": 0.5651513028106884,
+        "prefire": 0.5607152891802004,
+        "prefire_frames": 248,
+        "agree": [
+          330,
+          331
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.6903785012843985,
+        "prefire": 0.8498151840230384,
+        "prefire_frames": 180,
+        "agree": [
+          281,
+          444
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.4918881300892765,
+        "prefire": 0.6252419791959205,
+        "prefire_frames": 180,
+        "agree": [
+          415,
+          415
+        ],
+        "flips": 3
+      },
+      {
+        "m_time": 0.5589444973827777,
+        "prefire": 0.6913008860832137,
+        "prefire_frames": 419,
+        "agree": [
+          470,
+          574
+        ],
+        "flips": 11
+      },
+      {
+        "m_time": 0.4604196248752754,
+        "prefire": 0.6408877660298401,
+        "prefire_frames": 180,
+        "agree": [
+          411,
+          412
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.8982677605710921,
+        "prefire": 0.5221220330333828,
+        "prefire_frames": 180,
+        "agree": [
+          582,
+          607
+        ],
+        "flips": 5
+      }
+    ],
+    "phase6": [
+      {
+        "m_time": 0.15355114033396045,
+        "prefire": 0.6490431246442011,
+        "prefire_frames": 396,
+        "agree": [
+          2119,
+          2138
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.7208777927688985,
+        "prefire": 0.8804339192433479,
+        "prefire_frames": 349,
+        "agree": [
+          248,
+          470
+        ],
+        "flips": 13
+      },
+      {
+        "m_time": 0.4242823929934589,
+        "prefire": 0.569733593429284,
+        "prefire_frames": 366,
+        "agree": [
+          658,
+          716
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.6280579700157213,
+        "prefire": 0.5647959377142291,
+        "prefire_frames": 126,
+        "agree": [
+          548,
+          571
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.6271228196931727,
+        "prefire": 0.5449656469066012,
+        "prefire_frames": 296,
+        "agree": [
+          814,
+          921
+        ],
+        "flips": 10
+      },
+      {
+        "m_time": 0.8095603549732135,
+        "prefire": 0.6416785171007748,
+        "prefire_frames": 223,
+        "agree": [
+          478,
+          993
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.5725401596195023,
+        "prefire": 0.8369992093595294,
+        "prefire_frames": 90,
+        "agree": [
+          331,
+          424
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5335080928302578,
+        "prefire": 0.6628573237699734,
+        "prefire_frames": 90,
+        "agree": [
+          488,
+          488
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.568734657673488,
+        "prefire": 0.8080931692641059,
+        "prefire_frames": 180,
+        "agree": [
+          564,
+          578
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.4179065737708921,
+        "prefire": 0.6001647811231481,
+        "prefire_frames": 308,
+        "agree": [
+          761,
+          761
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.419129748061496,
+        "prefire": 1.0033970702891208,
+        "prefire_frames": 117,
+        "agree": [
+          746,
+          746
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.5045671476345522,
+        "prefire": 0.7740832213555953,
+        "prefire_frames": 421,
+        "agree": [
+          863,
+          863
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.858552732249814,
+        "prefire": 0.7207016969273037,
+        "prefire_frames": 90,
+        "agree": [
+          405,
+          733
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.5089971318756839,
+        "prefire": 0.7041522118872214,
+        "prefire_frames": 545,
+        "agree": [
+          975,
+          975
+        ],
+        "flips": 11
+      },
+      {
+        "m_time": 0.8203646053086787,
+        "prefire": 0.6766722279176186,
+        "prefire_frames": 211,
+        "agree": [
+          328,
+          732
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.5903606084551463,
+        "prefire": 0.7823146669473644,
+        "prefire_frames": 213,
+        "agree": [
+          348,
+          366
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.336546230896196,
+        "prefire": 0.4087222461234277,
+        "prefire_frames": 305,
+        "agree": [
+          620,
+          697
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.455095826815542,
+        "prefire": 0.6267025443675666,
+        "prefire_frames": 180,
+        "agree": [
+          325,
+          325
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.5887062229436775,
+        "prefire": 0.669007117413944,
+        "prefire_frames": 182,
+        "agree": [
+          537,
+          557
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.5913072840972761,
+        "prefire": 0.6637539899932713,
+        "prefire_frames": 308,
+        "agree": [
+          361,
+          479
+        ],
+        "flips": 8
+      },
+      {
+        "m_time": 0.4223803213660346,
+        "prefire": 0.5158166953255685,
+        "prefire_frames": 90,
+        "agree": [
+          575,
+          578
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.5876195555513751,
+        "prefire": 0.7289082551190382,
+        "prefire_frames": 272,
+        "agree": [
+          321,
+          523
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5067573512363864,
+        "prefire": 0.8202992550415359,
+        "prefire_frames": 281,
+        "agree": [
+          504,
+          505
+        ],
+        "flips": 3
+      },
+      {
+        "m_time": 0.6417662084720648,
+        "prefire": 0.7245434078447012,
+        "prefire_frames": 235,
+        "agree": [
+          349,
+          349
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.7219462194894484,
+        "prefire": 0.6486756266345166,
+        "prefire_frames": 95,
+        "agree": [
+          394,
+          657
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.46065230426341297,
+        "prefire": 0.5697922675190502,
+        "prefire_frames": 301,
+        "agree": [
+          620,
+          621
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.4812742322341829,
+        "prefire": 0.7387248044997657,
+        "prefire_frames": 255,
+        "agree": [
+          659,
+          660
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.4297828583217319,
+        "prefire": 0.6176658943422789,
+        "prefire_frames": 110,
+        "agree": [
+          275,
+          276
+        ],
+        "flips": 0
+      },
+      {
+        "m_time": 0.3854900339060092,
+        "prefire": 0.5392160333866088,
+        "prefire_frames": 425,
+        "agree": [
+          828,
+          830
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.6194194953990882,
+        "prefire": 0.7409873826963778,
+        "prefire_frames": 180,
+        "agree": [
+          443,
+          589
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.4339224104586074,
+        "prefire": 0.6522569303879208,
+        "prefire_frames": 180,
+        "agree": [
+          570,
+          570
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.31808258484194213,
+        "prefire": 0.44052714073536237,
+        "prefire_frames": 210,
+        "agree": [
+          433,
+          434
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.7571453780025681,
+        "prefire": 0.5920796913169923,
+        "prefire_frames": 360,
+        "agree": [
+          397,
+          805
+        ],
+        "flips": 17
+      },
+      {
+        "m_time": 0.4109840053944129,
+        "prefire": 0.5805349247964624,
+        "prefire_frames": 218,
+        "agree": [
+          354,
+          354
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.585491943964581,
+        "prefire": 0.5714694019423199,
+        "prefire_frames": 450,
+        "agree": [
+          920,
+          985
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5781387087515948,
+        "prefire": 0.5904376633401733,
+        "prefire_frames": 90,
+        "agree": [
+          423,
+          439
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.535397571730877,
+        "prefire": 0.7073022034562925,
+        "prefire_frames": 180,
+        "agree": [
+          395,
+          438
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.3869122495765099,
+        "prefire": 0.6136996845847692,
+        "prefire_frames": 217,
+        "agree": [
+          659,
+          660
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.6384276489827481,
+        "prefire": 0.7774753530031397,
+        "prefire_frames": 257,
+        "agree": [
+          273,
+          422
+        ],
+        "flips": 5
+      },
+      {
+        "m_time": 0.6201839291608728,
+        "prefire": 0.6358314983941775,
+        "prefire_frames": 180,
+        "agree": [
+          459,
+          652
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.760783605094405,
+        "prefire": 0.7378108247727293,
+        "prefire_frames": 360,
+        "agree": [
+          343,
+          657
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.4953172228182086,
+        "prefire": 0.515483954917878,
+        "prefire_frames": 291,
+        "agree": [
+          634,
+          650
+        ],
+        "flips": 8
+      },
+      {
+        "m_time": 0.6721866427777569,
+        "prefire": 0.7185138238787352,
+        "prefire_frames": 180,
+        "agree": [
+          437,
+          731
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5157766872869286,
+        "prefire": 1.0808885284217615,
+        "prefire_frames": 90,
+        "agree": [
+          629,
+          768
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.8459550259559887,
+        "prefire": 0.6530746854362031,
+        "prefire_frames": 454,
+        "agree": [
+          978,
+          1177
+        ],
+        "flips": 14
+      },
+      {
+        "m_time": 0.7013817492545309,
+        "prefire": 0.8340677760981466,
+        "prefire_frames": 211,
+        "agree": [
+          281,
+          519
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5742607418701734,
+        "prefire": 0.7092310263200604,
+        "prefire_frames": 285,
+        "agree": [
+          622,
+          710
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.4936675502847024,
+        "prefire": 0.6806408491488087,
+        "prefire_frames": 107,
+        "agree": [
+          405,
+          405
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.4402556473964258,
+        "prefire": 0.4954131348200525,
+        "prefire_frames": 90,
+        "agree": [
+          689,
+          689
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.6108175616874617,
+        "prefire": 0.6877398375131151,
+        "prefire_frames": 90,
+        "agree": [
+          242,
+          323
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.7587291922496462,
+        "prefire": 0.7227749069331102,
+        "prefire_frames": 183,
+        "agree": [
+          463,
+          602
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5661411405671624,
+        "prefire": 0.6222471004629849,
+        "prefire_frames": 150,
+        "agree": [
+          311,
+          311
+        ],
+        "flips": 3
+      },
+      {
+        "m_time": 0.5651513028106884,
+        "prefire": 0.5607152891802004,
+        "prefire_frames": 248,
+        "agree": [
+          330,
+          331
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.6903785012843985,
+        "prefire": 0.8498151840230384,
+        "prefire_frames": 180,
+        "agree": [
+          281,
+          444
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.4918881300892765,
+        "prefire": 0.6252419791959205,
+        "prefire_frames": 180,
+        "agree": [
+          415,
+          415
+        ],
+        "flips": 3
+      },
+      {
+        "m_time": 0.5589444973827777,
+        "prefire": 0.6913008860832137,
+        "prefire_frames": 419,
+        "agree": [
+          470,
+          574
+        ],
+        "flips": 11
+      },
+      {
+        "m_time": 0.4604196248752754,
+        "prefire": 0.6408877660298401,
+        "prefire_frames": 180,
+        "agree": [
+          411,
+          412
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.8982677605710921,
+        "prefire": 0.5221220330333828,
+        "prefire_frames": 180,
+        "agree": [
+          582,
+          607
+        ],
+        "flips": 5
+      }
+    ],
+    "placebo": [
+      {
+        "m_time": 0.15355114033396045,
+        "prefire": 0.6490431246442011,
+        "prefire_frames": 396,
+        "agree": [
+          2119,
+          2138
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.7208777927688985,
+        "prefire": 0.8804339192433479,
+        "prefire_frames": 349,
+        "agree": [
+          248,
+          470
+        ],
+        "flips": 13
+      },
+      {
+        "m_time": 0.4242823929934589,
+        "prefire": 0.569733593429284,
+        "prefire_frames": 366,
+        "agree": [
+          658,
+          716
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.6280579700157213,
+        "prefire": 0.5647959377142291,
+        "prefire_frames": 126,
+        "agree": [
+          548,
+          571
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.6271228196931727,
+        "prefire": 0.5449656469066012,
+        "prefire_frames": 296,
+        "agree": [
+          814,
+          921
+        ],
+        "flips": 10
+      },
+      {
+        "m_time": 0.80956420799772,
+        "prefire": 0.6416785171007748,
+        "prefire_frames": 223,
+        "agree": [
+          478,
+          993
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.5725401596195023,
+        "prefire": 0.8369992093595294,
+        "prefire_frames": 90,
+        "agree": [
+          331,
+          424
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5335080928302578,
+        "prefire": 0.6628573237699734,
+        "prefire_frames": 90,
+        "agree": [
+          488,
+          488
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.568734657673488,
+        "prefire": 0.8080931692641059,
+        "prefire_frames": 180,
+        "agree": [
+          564,
+          578
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.4179043951798942,
+        "prefire": 0.6001647811231481,
+        "prefire_frames": 308,
+        "agree": [
+          761,
+          761
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.419129748061496,
+        "prefire": 1.0033970702891208,
+        "prefire_frames": 117,
+        "agree": [
+          746,
+          746
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.5045671476345522,
+        "prefire": 0.7740832213555953,
+        "prefire_frames": 421,
+        "agree": [
+          863,
+          863
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.858552732249814,
+        "prefire": 0.7207016969273037,
+        "prefire_frames": 90,
+        "agree": [
+          405,
+          733
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.5089971318756839,
+        "prefire": 0.7041522118872214,
+        "prefire_frames": 545,
+        "agree": [
+          975,
+          975
+        ],
+        "flips": 11
+      },
+      {
+        "m_time": 0.8203646053086787,
+        "prefire": 0.6766722279176186,
+        "prefire_frames": 211,
+        "agree": [
+          328,
+          732
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.5903606084551463,
+        "prefire": 0.7823146669473644,
+        "prefire_frames": 213,
+        "agree": [
+          348,
+          366
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.336546230896196,
+        "prefire": 0.4087222461234277,
+        "prefire_frames": 305,
+        "agree": [
+          620,
+          697
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.455095826815542,
+        "prefire": 0.6267025443675666,
+        "prefire_frames": 180,
+        "agree": [
+          325,
+          325
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.5887062229436775,
+        "prefire": 0.669007117413944,
+        "prefire_frames": 182,
+        "agree": [
+          537,
+          557
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.5913072840972761,
+        "prefire": 0.6637539899932713,
+        "prefire_frames": 308,
+        "agree": [
+          361,
+          479
+        ],
+        "flips": 8
+      },
+      {
+        "m_time": 0.4223803213660346,
+        "prefire": 0.5158166953255685,
+        "prefire_frames": 90,
+        "agree": [
+          575,
+          578
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.5876195555513751,
+        "prefire": 0.7289082551190382,
+        "prefire_frames": 272,
+        "agree": [
+          321,
+          523
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5067573512363864,
+        "prefire": 0.8202992550415359,
+        "prefire_frames": 281,
+        "agree": [
+          504,
+          505
+        ],
+        "flips": 3
+      },
+      {
+        "m_time": 0.6417662084720648,
+        "prefire": 0.7245434078447012,
+        "prefire_frames": 235,
+        "agree": [
+          349,
+          349
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.7219462194894484,
+        "prefire": 0.6486756266345166,
+        "prefire_frames": 95,
+        "agree": [
+          394,
+          657
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.46065230426341297,
+        "prefire": 0.5697922675190502,
+        "prefire_frames": 301,
+        "agree": [
+          620,
+          621
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.4812742322341829,
+        "prefire": 0.7387248044997657,
+        "prefire_frames": 255,
+        "agree": [
+          659,
+          660
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.4297828583217319,
+        "prefire": 0.6176658943422789,
+        "prefire_frames": 110,
+        "agree": [
+          275,
+          276
+        ],
+        "flips": 0
+      },
+      {
+        "m_time": 0.3854900339060092,
+        "prefire": 0.5392160333866088,
+        "prefire_frames": 425,
+        "agree": [
+          828,
+          830
+        ],
+        "flips": 7
+      },
+      {
+        "m_time": 0.6194194953990882,
+        "prefire": 0.7409873826963778,
+        "prefire_frames": 180,
+        "agree": [
+          443,
+          589
+        ],
+        "flips": 9
+      },
+      {
+        "m_time": 0.4339224104586074,
+        "prefire": 0.6522569303879208,
+        "prefire_frames": 180,
+        "agree": [
+          570,
+          570
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.31808258484194213,
+        "prefire": 0.44052714073536237,
+        "prefire_frames": 210,
+        "agree": [
+          433,
+          434
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.7571453780025681,
+        "prefire": 0.5920796913169923,
+        "prefire_frames": 360,
+        "agree": [
+          397,
+          805
+        ],
+        "flips": 17
+      },
+      {
+        "m_time": 0.4109840053944129,
+        "prefire": 0.5805349247964624,
+        "prefire_frames": 218,
+        "agree": [
+          354,
+          354
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.585491943964581,
+        "prefire": 0.5714694019423199,
+        "prefire_frames": 450,
+        "agree": [
+          920,
+          985
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5781387087515948,
+        "prefire": 0.5904376633401733,
+        "prefire_frames": 90,
+        "agree": [
+          423,
+          439
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.535397571730877,
+        "prefire": 0.7073022034562925,
+        "prefire_frames": 180,
+        "agree": [
+          395,
+          438
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.3869122495765099,
+        "prefire": 0.6136996845847692,
+        "prefire_frames": 217,
+        "agree": [
+          659,
+          660
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.6384276489827481,
+        "prefire": 0.7774753530031397,
+        "prefire_frames": 257,
+        "agree": [
+          273,
+          422
+        ],
+        "flips": 5
+      },
+      {
+        "m_time": 0.6201839291608728,
+        "prefire": 0.6358314983941775,
+        "prefire_frames": 180,
+        "agree": [
+          459,
+          652
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.760783605094405,
+        "prefire": 0.7378108247727293,
+        "prefire_frames": 360,
+        "agree": [
+          343,
+          657
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.4953172228182086,
+        "prefire": 0.515483954917878,
+        "prefire_frames": 291,
+        "agree": [
+          634,
+          650
+        ],
+        "flips": 8
+      },
+      {
+        "m_time": 0.6721866427777569,
+        "prefire": 0.7185138238787352,
+        "prefire_frames": 180,
+        "agree": [
+          437,
+          731
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5157766872869286,
+        "prefire": 1.0808885284217615,
+        "prefire_frames": 90,
+        "agree": [
+          629,
+          768
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.8459550259559887,
+        "prefire": 0.6530746854362031,
+        "prefire_frames": 454,
+        "agree": [
+          978,
+          1177
+        ],
+        "flips": 14
+      },
+      {
+        "m_time": 0.7013817492545309,
+        "prefire": 0.8340677760981466,
+        "prefire_frames": 211,
+        "agree": [
+          281,
+          519
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5754017384140755,
+        "prefire": 0.7006675251229603,
+        "prefire_frames": 285,
+        "agree": [
+          622,
+          710
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.4936675502847024,
+        "prefire": 0.6806408491488087,
+        "prefire_frames": 107,
+        "agree": [
+          405,
+          405
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.4402556473964258,
+        "prefire": 0.4954131348200525,
+        "prefire_frames": 90,
+        "agree": [
+          689,
+          689
+        ],
+        "flips": 4
+      },
+      {
+        "m_time": 0.6108175616874617,
+        "prefire": 0.6877398375131151,
+        "prefire_frames": 90,
+        "agree": [
+          242,
+          323
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.7587291922496462,
+        "prefire": 0.7227749069331102,
+        "prefire_frames": 183,
+        "agree": [
+          463,
+          602
+        ],
+        "flips": 6
+      },
+      {
+        "m_time": 0.5661411405671624,
+        "prefire": 0.6222471004629849,
+        "prefire_frames": 150,
+        "agree": [
+          311,
+          311
+        ],
+        "flips": 3
+      },
+      {
+        "m_time": 0.5651513028106884,
+        "prefire": 0.5607152891802004,
+        "prefire_frames": 248,
+        "agree": [
+          330,
+          331
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.6903785012843985,
+        "prefire": 0.8498151840230384,
+        "prefire_frames": 180,
+        "agree": [
+          281,
+          444
+        ],
+        "flips": 1
+      },
+      {
+        "m_time": 0.4918881300892765,
+        "prefire": 0.6252419791959205,
+        "prefire_frames": 180,
+        "agree": [
+          415,
+          415
+        ],
+        "flips": 3
+      },
+      {
+        "m_time": 0.5589444973827777,
+        "prefire": 0.6913008860832137,
+        "prefire_frames": 419,
+        "agree": [
+          470,
+          574
+        ],
+        "flips": 11
+      },
+      {
+        "m_time": 0.4604196248752754,
+        "prefire": 0.6408877660298401,
+        "prefire_frames": 180,
+        "agree": [
+          411,
+          412
+        ],
+        "flips": 2
+      },
+      {
+        "m_time": 0.8982677605710921,
+        "prefire": 0.5221220330333828,
+        "prefire_frames": 180,
+        "agree": [
+          582,
+          607
+        ],
+        "flips": 5
+      }
+    ]
+  },
+  "regression": {
+    "reference_deaths": {
+      "total": 37,
+      "false": 0,
+      "unresolved": 0,
+      "same_cases": true
+    },
+    "cases": 37,
+    "false_deaths": 0,
+    "rows": [
+      {
+        "source": "q_7gc4TgFig",
+        "game": 2,
+        "side": "1P",
+        "first_sec": 232.56666666666666,
+        "bound": false,
+        "observed_death_sec": 236.46666666666667,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 3.9000000000000057
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 3,
+        "side": "1P",
+        "first_sec": 270.0,
+        "bound": false,
+        "observed_death_sec": 277.43333333333334,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 7.433333333333337
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 4,
+        "side": "2P",
+        "first_sec": 322.0,
+        "bound": true,
+        "observed_death_sec": 344.26666666666665,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 22.26666666666665
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 5,
+        "side": "2P",
+        "first_sec": 394.23333333333335,
+        "bound": false,
+        "observed_death_sec": 396.06666666666666,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 1.8333333333333144
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 6,
+        "side": "1P",
+        "first_sec": 441.3333333333333,
+        "bound": false,
+        "observed_death_sec": 443.43333333333334,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 2.1000000000000227
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 7,
+        "side": "1P",
+        "first_sec": 498.73333333333335,
+        "bound": false,
+        "observed_death_sec": 515.0,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 16.26666666666665
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 8,
+        "side": "2P",
+        "first_sec": 581.8666666666667,
+        "bound": false,
+        "observed_death_sec": 583.7,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 1.8333333333333712
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 9,
+        "side": "1P",
+        "first_sec": 656.0666666666667,
+        "bound": false,
+        "observed_death_sec": 663.1666666666666,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 7.099999999999909
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 10,
+        "side": "1P",
+        "first_sec": 692.8666666666667,
+        "bound": false,
+        "observed_death_sec": 695.5666666666667,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 2.7000000000000455
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 11,
+        "side": "1P",
+        "first_sec": 741.5333333333333,
+        "bound": false,
+        "observed_death_sec": 745.2666666666667,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 3.7333333333333485
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 12,
+        "side": "2P",
+        "first_sec": 782.7666666666667,
+        "bound": true,
+        "observed_death_sec": 786.8,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 4.033333333333303
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 13,
+        "side": "1P",
+        "first_sec": 848.3666666666667,
+        "bound": true,
+        "observed_death_sec": 852.6,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 4.2333333333333485
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 1,
+        "side": "1P",
+        "first_sec": 218.23333333333332,
+        "bound": false,
+        "observed_death_sec": 239.93333333333334,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 21.700000000000017
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 2,
+        "side": "1P",
+        "first_sec": 309.0,
+        "bound": false,
+        "observed_death_sec": 311.6,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 2.6000000000000227
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 3,
+        "side": "2P",
+        "first_sec": 366.0,
+        "bound": false,
+        "observed_death_sec": 370.93333333333334,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 4.933333333333337
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 5,
+        "side": "2P",
+        "first_sec": 474.2,
+        "bound": false,
+        "observed_death_sec": 537.8666666666667,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 63.666666666666686
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 6,
+        "side": "1P",
+        "first_sec": 626.7333333333333,
+        "bound": true,
+        "observed_death_sec": 631.0,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 4.2666666666666515
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 9,
+        "side": "2P",
+        "first_sec": 763.6,
+        "bound": false,
+        "observed_death_sec": 767.5,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 3.8999999999999773
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 10,
+        "side": "1P",
+        "first_sec": 824.1,
+        "bound": false,
+        "observed_death_sec": 827.0333333333333,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 2.9333333333332803
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 11,
+        "side": "2P",
+        "first_sec": 874.9333333333333,
+        "bound": false,
+        "observed_death_sec": 879.8666666666667,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 4.933333333333394
+      },
+      {
+        "source": "review",
+        "game": 0,
+        "side": "1P",
+        "first_sec": 2573.2166666666667,
+        "bound": false,
+        "observed_death_sec": 2576.983333333333,
+        "opponent_death_sec": null,
+        "winners": [],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 3.766666666666424
+      },
+      {
+        "source": "review",
+        "game": 1,
+        "side": "2P",
+        "first_sec": 2629.3166666666666,
+        "bound": false,
+        "observed_death_sec": 2634.75,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 5.433333333333394
+      },
+      {
+        "source": "review",
+        "game": 3,
+        "side": "2P",
+        "first_sec": 2760.116666666667,
+        "bound": true,
+        "observed_death_sec": 2773.7833333333333,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 13.666666666666515
+      },
+      {
+        "source": "zenchi",
+        "game": 0,
+        "side": "1P",
+        "first_sec": 2573.2166666666667,
+        "bound": false,
+        "observed_death_sec": 2576.983333333333,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 3.766666666666424
+      },
+      {
+        "source": "zenchi",
+        "game": 1,
+        "side": "2P",
+        "first_sec": 2629.3166666666666,
+        "bound": false,
+        "observed_death_sec": 2634.75,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 5.433333333333394
+      },
+      {
+        "source": "zenchi",
+        "game": 3,
+        "side": "2P",
+        "first_sec": 2760.116666666667,
+        "bound": true,
+        "observed_death_sec": 2773.7833333333333,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 13.666666666666515
+      },
+      {
+        "source": "zenchi",
+        "game": 4,
+        "side": "1P",
+        "first_sec": 2808.1833333333334,
+        "bound": false,
+        "observed_death_sec": 2810.8166666666666,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 2.633333333333212
+      },
+      {
+        "source": "zenchi",
+        "game": 5,
+        "side": "2P",
+        "first_sec": 2860.983333333333,
+        "bound": false,
+        "observed_death_sec": 2863.6833333333334,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 2.700000000000273
+      },
+      {
+        "source": "zenchi",
+        "game": 6,
+        "side": "1P",
+        "first_sec": 2892.2833333333333,
+        "bound": false,
+        "observed_death_sec": 2896.15,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 3.866666666666788
+      },
+      {
+        "source": "zenchi",
+        "game": 7,
+        "side": "1P",
+        "first_sec": 2929.116666666667,
+        "bound": false,
+        "observed_death_sec": 2943.9166666666665,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 14.799999999999727
+      },
+      {
+        "source": "zenchi",
+        "game": 8,
+        "side": "2P",
+        "first_sec": 2978.6833333333334,
+        "bound": true,
+        "observed_death_sec": 2979.516666666667,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 0.8333333333334849
+      },
+      {
+        "source": "zenchi",
+        "game": 9,
+        "side": "2P",
+        "first_sec": 3015.5833333333335,
+        "bound": false,
+        "observed_death_sec": 3017.95,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 2.366666666666333
+      },
+      {
+        "source": "zenchi",
+        "game": 11,
+        "side": "2P",
+        "first_sec": 3109.516666666667,
+        "bound": false,
+        "observed_death_sec": 3115.7166666666667,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 6.199999999999818
+      },
+      {
+        "source": "zenchi",
+        "game": 12,
+        "side": "1P",
+        "first_sec": 3162.45,
+        "bound": false,
+        "observed_death_sec": 3169.2166666666667,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 6.766666666666879
+      },
+      {
+        "source": "zenchi",
+        "game": 15,
+        "side": "2P",
+        "first_sec": 3321.7833333333333,
+        "bound": false,
+        "observed_death_sec": 3323.616666666667,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 1.833333333333485
+      },
+      {
+        "source": "zenchi",
+        "game": 16,
+        "side": "1P",
+        "first_sec": 3351.65,
+        "bound": false,
+        "observed_death_sec": 3353.883333333333,
+        "opponent_death_sec": null,
+        "winners": [
+          "2P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 2.233333333333121
+      },
+      {
+        "source": "zenchi",
+        "game": 17,
+        "side": "2P",
+        "first_sec": 3406.6833333333334,
+        "bound": false,
+        "observed_death_sec": 3409.983333333333,
+        "opponent_death_sec": null,
+        "winners": [
+          "1P"
+        ],
+        "false": false,
+        "unresolved": false,
+        "lead_sec": 3.299999999999727
+      }
+    ],
+    "added_prediction_false_deaths": 0,
+    "scene_first_sec": 2760.383333333333,
+    "game14": [],
+    "passed": true
+  },
+  "leakage": {
+    "300": {
+      "display": {
+        "rows": 9000,
+        "cut_rows": 9000,
+        "identical": {
+          "t_sec": true,
+          "display_p1": true,
+          "display_adv": true,
+          "source": true
+        },
+        "passed": true
+      },
+      "trace": {
+        "rows": 6453,
+        "cut_rows": 6453,
+        "passed": true
+      },
+      "features_equal": true
+    },
+    "600": {
+      "display": {
+        "rows": 18000,
+        "cut_rows": 18000,
+        "identical": {
+          "t_sec": true,
+          "display_p1": true,
+          "display_adv": true,
+          "source": true
+        },
+        "passed": true
+      },
+      "trace": {
+        "rows": 10006,
+        "cut_rows": 10006,
+        "passed": true
+      },
+      "features_equal": true
+    }
+  },
+  "latency": {
+    "notifications": 5,
+    "indices": [
+      0,
+      25,
+      44,
+      71,
+      77
+    ],
+    "milliseconds": [
+      1893.4280489993398,
+      4514.392180004506,
+      1079.7483269998338,
+      2027.4458619969664,
+      5710.188509001455
+    ],
+    "p95_ms": 5471.029243202065,
+    "latency_sec": 5.5,
+    "within_200ms": false,
+    "sampling": "5A固定100局面の各記録の先頭1件・cold cache",
+    "limitation": "5件の事前診断。全通知分布のP95を保証する標本ではない。",
+    "sha256": {
+      "logs/prefire_prediction/v6/notifications/benchmark_000.json": "5042ed35d36ffbaf3cd6778534d5e0028a036c3dfd85df0de09413562f8ad9fe",
+      "logs/prefire_prediction/v6/notifications/benchmark_025.json": "c85398936747b3114761d5d7fef22d83031f8b17bec3dc55a24645569bd3cf86",
+      "logs/prefire_prediction/v6/notifications/benchmark_044.json": "12b79470d496b46fed6124959344aa606d6a2b52e77c363da10378b8b32bca5a",
+      "logs/prefire_prediction/v6/notifications/benchmark_071.json": "ab3332738fe0296a9784e5b3617609e58bece5ea15419f062b7bbd49f2c68265",
+      "logs/prefire_prediction/v6/notifications/benchmark_077.json": "e0014f96eea9a7c44405037a2bc6385ba1d185c6e5f488013eca1b8e229fb096"
+    }
+  },
+  "gates": {
+    "condition1": false,
+    "condition2": false,
+    "condition3": true,
+    "condition4": true,
+    "condition5": true,
+    "condition6": true
+  },
+  "leakage_passed": true,
+  "passed": false
+}

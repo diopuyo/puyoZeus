@@ -1,0 +1,41 @@
+{
+  "coefficients": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "rows": 46782,
+  "nonzero_delta": 0,
+  "identifiable": false,
+  "objective": 0.32820471185242883,
+  "ridge": 0.0001,
+  "optimizer": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+  "training_set": "zenchi_set1_57",
+  "features": [
+    "next_assignment_confidence",
+    "missing",
+    "truncated",
+    "disagreement"
+  ],
+  "iterations": 0,
+  "sha256": {
+    "logs/prefire_prediction/v6/train/c1/prefire_v6_features.npz": "de5a4c47908b2a8d9149380f2ba86f9ff92f167dfc286e06dc2db4054c43478a",
+    "logs/prefire_prediction/v6/train/c1/display.npz": "8d8cec2e9817012c60245494137fbdc8e8453ee389aa18459fdb825f89505c58",
+    "logs/prefire_prediction/v6/train/c2/prefire_v6_features.npz": "ee34aaad0ea9564a791a3ef644cb722d9536d648e84c4dfc4bfcd529920cc7e3",
+    "logs/prefire_prediction/v6/train/c2/display.npz": "3d6432fbdc26ba7ce1e78e14054fe1c6523ef74387d3515c17c7bf1d4ed34b37",
+    "logs/prefire_prediction/v6/train/c3/prefire_v6_features.npz": "da5beae892c12729efe59bfe47eda65928130614cabeaef17311ee2bb4cc6e8a",
+    "logs/prefire_prediction/v6/train/c3/display.npz": "099d1b72222e59f886e1e4745620be596a57a7e8f78875f39132dc751586341f",
+    "logs/prefire_prediction/v6/train/c4/prefire_v6_features.npz": "7f4fe560b4ed0b0a678907ea2ed9909a16413a3314d0f2cd03b3a890a871332a",
+    "logs/prefire_prediction/v6/train/c4/display.npz": "72217f7031a7c91bc7b7df7e946153d6f3f0a51edf99505e6cc0019f20282cee",
+    "logs/prefire_prediction/v6/train/c5/prefire_v6_features.npz": "bcc6af53e1fafa88b7073a0ba64eaa877d9f1377f5a55a0d427c0b98cf370877",
+    "logs/prefire_prediction/v6/train/c5/display.npz": "78af7d30cd5a242250dbc07f7b9428729c038622157bd7c523642d61c579ca5c",
+    "logs/prefire_prediction/v6/train/c6/prefire_v6_features.npz": "071fd4beb1afa4145ab9d81f571aedf5b7a52c602d344ea08797754041a69efc",
+    "logs/prefire_prediction/v6/train/c6/display.npz": "10fd39b3cd69a0a8af32a5ce177fdce2ba3b9d3fa0d45a7434815018e1f200d5",
+    "logs/prefire_prediction/v6/train/zenchi/prefire_v6_features.npz": "9e2a9b3ec968029ec58edc94cdb6a95474fcccaa3a5d8f7d7430486eda0cffb2",
+    "logs/prefire_prediction/v6/train/zenchi/display.npz": "95f7ae1dfb48913c18a5a60ec998ccd190aaf859d70b3ad1a9b8369fb9d74840",
+    "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/labels.json": "e521c0d3a4c25ae4ff3b05077bda862eee281d9dc8580869019c35d94d039dd7",
+    "logs/prefire_prediction/v6/latency.json": "56ff3f67f703babfbb14f98e15f34da6a54c74f978b4a1772a760e4b7555e1e8"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "index": 96,
+  "source": "zenchi",
+  "t_sec": 3284.35,
+  "depth": 1,
+  "sides": [
+    {
+      "side": 0,
+      "same_move": false,
+      "regret_logit": 0.1716299015993049,
+      "light_path": [
+        [
+          0,
+          0
+        ]
+      ],
+      "production_path": [
+        [
+          4,
+          0
+        ]
+      ],
+      "production_best": 0.501661470111185,
+      "selected_production": 0.45884730557152575
+    },
+    {
+      "side": 1,
+      "same_move": true,
+      "regret_logit": -0.0,
+      "light_path": [
+        [
+          0,
+          1
+        ]
+      ],
+      "production_path": [
+        [
+          0,
+          1
+        ]
+      ],
+      "production_best": 0.501661470111185,
+      "selected_production": 0.501661470111185
+    }
+  ]
+}

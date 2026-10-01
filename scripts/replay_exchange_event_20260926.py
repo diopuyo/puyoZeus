@@ -13,6 +13,19 @@ from src.exchange_event_evaluator import FileExchangeModels, StaticInput
 from src.exchange_event_overlay import ExchangeEventOverlay
 from src.exchange_event_record import read_records, static_key
 from src.exchange_event_cli import parse_exchange_event_args
+from src.exchange_display_smoothing import SwitchAwareDisplayEMA
+
+
+def _display(overlay: Any, adv: float | None, probability: float | None, smoothing: Any, stamp: float) -> tuple:
+    """セット2本番の表示平滑を任意指定で再現し、旧再生はそのまま保つ。"""
+    from scripts.visualize_advantage_overlay import _exchange_display, _winprob_to_adv
+    if not isinstance(smoothing, SwitchAwareDisplayEMA):
+        return _exchange_display(overlay, adv, probability, smoothing, stamp)
+    value = overlay.tracker.probability
+    target = (None if adv is None or probability is None else (adv, probability))
+    if value is not None:
+        target = (max(-100., min(100., _winprob_to_adv(value))), value)
+    return smoothing.apply(overlay.tracker, target, stamp) or (adv, probability)
 
 
 def static_builder(record: Path) -> Any:
@@ -36,10 +49,12 @@ def display_row(overlay: ExchangeEventOverlay, inputs: tuple, context: dict,
         DisplayTimelineRow, TIMELINE_DUMP_SCORE_NONE_SENTINEL, _exchange_display,
     )
     result = inputs[0]
-    adv, probability = _exchange_display(overlay, context["fallback_adv"], context["fallback_p1"],
+    adv, probability = _display(overlay, context["fallback_adv"], context["fallback_p1"],
                                          smoothing, context["t_sec"])
     if overlay.tracker.probability is not None:
         probability = overlay.tracker.probability
+    elif isinstance(smoothing, SwitchAwareDisplayEMA):
+        probability = context['fallback_p1']
     scores = [TIMELINE_DUMP_SCORE_NONE_SENTINEL if s.score is None else int(s.score)
               for s in (result.p1, result.p2)]
     return DisplayTimelineRow(t_sec=context["t_sec"], game_idx=context["game_idx"],
@@ -71,7 +86,9 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            prefire_best_play: bool = False,
            prefire_best_play_latency: float = 0.0,
            prefire_best_play_evaluator: str = 'full',
-           prefire_best_play_stable: bool = False, prefire_best_play_v5: bool = False) -> dict:
+           prefire_best_play_stable: bool = False, prefire_best_play_v5: bool = False,
+           prefire_best_play_v6: bool = False, prefire_v6_strength: Any = None,
+           switch_smoothing: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -108,8 +125,14 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         single_death_proof_guard=single_death_proof_guard,
         single_death_proof_negative_only=single_death_proof_negative_only)
     rows, frames, inputs = [], 0, None
-    smoothing = _ExchangeDisplayEMA()
+    smoothing = SwitchAwareDisplayEMA() if switch_smoothing else _ExchangeDisplayEMA()
+    fallback_unknown = (None, None) if switch_smoothing else (0., .5)
     prefire_layer = None
+    if prefire_best_play_v6:
+        if prefire_best_play_v5 or prefire_exchange_prediction or prefire_best_play or prefire_best_play_stable:
+            raise ValueError('--prefire-best-play-v6 は他の発火前予測と同時指定できない')
+        from src.prefire_best_play_v6 import BestPlayV6Layer
+        prefire_layer = BestPlayV6Layer(prefire_best_play_latency, prefire_v6_strength)
     if prefire_best_play_v5:
         if prefire_exchange_prediction or prefire_best_play or prefire_best_play_stable:
             raise ValueError('--prefire-best-play-v5 は他の発火前予測と同時指定できない')
@@ -142,7 +165,7 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
                 observer(overlay, inputs)
             if prefire_layer is not None:
                 prefire_layer.apply(overlay, inputs[3], inputs[4])
-            _exchange_display(overlay, 0.0, 0.5, smoothing, inputs[3])
+            _display(overlay, *fallback_unknown, smoothing, inputs[3])
             frames += 1
         elif item["kind"] == "display":
             if inputs is None or inputs[3:5] != (item["t_sec"], item["game_idx"]):
@@ -226,6 +249,8 @@ def main() -> None:
                         help="発火前の撃ち合い予測を表示へ混ぜる (既定OFF、models/prefire_hazard_v1)")
     parser.add_argument("--prefire-counter-mc", action="store_true", default=False,
                         help="発火前予測の受け側応手を未来ツモ標本で求める (構成B、既定OFF=理想ツモ future_send)")
+    parser.add_argument('--prefire-best-play-v6', action='store_true', default=False,
+                        help='Phase 6 軽量比較とセット1学習済み反映、既定OFF')
     parser.add_argument('--prefire-best-play-v5', action='store_true', default=False,
                         help='Phase 5 整合性修正版、保持なし、既定OFF')
     parser.add_argument("--prefire-best-play", action="store_true", default=False,
@@ -273,7 +298,8 @@ def main() -> None:
                     prefire_best_play_latency=options.prefire_best_play_latency,
                     prefire_best_play_evaluator=options.prefire_best_play_evaluator,
                     prefire_best_play_stable=options.prefire_best_play_stable,
-                    prefire_best_play_v5=options.prefire_best_play_v5)
+                    prefire_best_play_v5=options.prefire_best_play_v5,
+                    prefire_best_play_v6=options.prefire_best_play_v6)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

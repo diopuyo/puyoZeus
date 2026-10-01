@@ -1,0 +1,46 @@
+{
+  "index": 26,
+  "source": "fcXG83vInDY",
+  "t_sec": 265.2,
+  "depth": 1,
+  "sides": [
+    {
+      "side": 0,
+      "same_move": true,
+      "regret_logit": 0.0,
+      "light_path": [
+        [
+          4,
+          0
+        ]
+      ],
+      "production_path": [
+        [
+          4,
+          0
+        ]
+      ],
+      "production_best": 0.7141349017284239,
+      "selected_production": 0.7141349017284239
+    },
+    {
+      "side": 1,
+      "same_move": false,
+      "regret_logit": 0.06916795986932944,
+      "light_path": [
+        [
+          0,
+          1
+        ]
+      ],
+      "production_path": [
+        [
+          2,
+          0
+        ]
+      ],
+      "production_best": 0.7141349017284239,
+      "selected_production": 0.7280437286969299
+    }
+  ]
+}

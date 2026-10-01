@@ -1,0 +1,664 @@
+{
+  "s0": {
+    "display_p1": {
+      "count": 0,
+      "examples": []
+    },
+    "display_adv": {
+      "count": 0,
+      "examples": []
+    },
+    "source": {
+      "count": 0,
+      "examples": []
+    }
+  },
+  "s1": {
+    "display_p1": {
+      "count": 78,
+      "examples": [
+        {
+          "t": 3951.8,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3951.8333333333335,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3951.866666666667,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3951.9,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3951.9333333333334,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3951.9666666666667,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.0,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.0333333333333,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.0666666666666,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.1,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.133333333333,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.1666666666665,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.2,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.233333333333,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.266666666667,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.3,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.3333333333335,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.366666666667,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.4,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.4333333333334,
+          "before": "0.30078999328769085",
+          "after": "0.30110751481219905",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        }
+      ]
+    },
+    "display_adv": {
+      "count": 290,
+      "examples": [
+        {
+          "t": 3951.8,
+          "before": "42.951054777784265",
+          "after": "42.9585969554775",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3951.8333333333335,
+          "before": "27.997974551159086",
+          "after": "28.01117336212225",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3951.866666666667,
+          "before": "16.7831643811902",
+          "after": "16.800605667105813",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3951.9,
+          "before": "8.372056753713537",
+          "after": "8.392679895843484",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3951.9333333333334,
+          "before": "2.0637260331060387",
+          "after": "2.0867355673967367",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3951.9666666666667,
+          "before": "-2.667522007349585",
+          "after": "-2.6427226789383234",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.0,
+          "before": "-6.215958037691302",
+          "after": "-6.189816363689618",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.0333333333333,
+          "before": "-8.87728506044759",
+          "after": "-8.85013662725309",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.0666666666666,
+          "before": "-10.873280327514806",
+          "after": "-10.845376824925694",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.1,
+          "before": "-12.370276777815217",
+          "after": "-12.341806973180146",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.133333333333,
+          "before": "-13.493024115540525",
+          "after": "-13.464129584370985",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.1666666666665,
+          "before": "-14.335084618834507",
+          "after": "-14.305871542764114",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.2,
+          "before": "-14.966629996304995",
+          "after": "-14.937178011558961",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.233333333333,
+          "before": "-15.440289029407861",
+          "after": "-15.410657863155096",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.266666666667,
+          "before": "-15.795533304235008",
+          "after": "-15.765767751852199",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.3,
+          "before": "-16.06196651035537",
+          "after": "-16.032100168375024",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.3333333333335,
+          "before": "-16.26179141494564",
+          "after": "-16.231849480767146",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.366666666667,
+          "before": "-16.411660093388345",
+          "after": "-16.381661465061235",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.4,
+          "before": "-16.52406160222037",
+          "after": "-16.494020453281802",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 3952.4333333333334,
+          "before": "-16.60836273384439",
+          "after": "-16.57828969444723",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        }
+      ]
+    },
+    "source": {
+      "count": 0,
+      "examples": []
+    }
+  },
+  "s2": {
+    "display_p1": {
+      "count": 0,
+      "examples": []
+    },
+    "display_adv": {
+      "count": 0,
+      "examples": []
+    },
+    "source": {
+      "count": 0,
+      "examples": []
+    }
+  },
+  "s3": {
+    "display_p1": {
+      "count": 0,
+      "examples": []
+    },
+    "display_adv": {
+      "count": 0,
+      "examples": []
+    },
+    "source": {
+      "count": 0,
+      "examples": []
+    }
+  },
+  "s4": {
+    "display_p1": {
+      "count": 0,
+      "examples": []
+    },
+    "display_adv": {
+      "count": 0,
+      "examples": []
+    },
+    "source": {
+      "count": 0,
+      "examples": []
+    }
+  },
+  "s5": {
+    "display_p1": {
+      "count": 246,
+      "examples": [
+        {
+          "t": 6492.833333333333,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6492.866666666667,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6492.9,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6492.933333333333,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6492.966666666666,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.0,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.033333333334,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.066666666667,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.1,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.133333333333,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.166666666667,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.2,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.233333333334,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.266666666666,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.3,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.333333333333,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.366666666667,
+          "before": "0.7543215746966272",
+          "after": "0.7331730170607584",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.4,
+          "before": "0.7529738260738505",
+          "after": "0.732375545184737",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.433333333333,
+          "before": "0.7529738260738505",
+          "after": "0.732375545184737",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.466666666666,
+          "before": "0.7529738260738505",
+          "after": "0.732375545184737",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        }
+      ]
+    },
+    "display_adv": {
+      "count": 352,
+      "examples": [
+        {
+          "t": 6492.833333333333,
+          "before": "2.217185098592532",
+          "after": "1.6624278287323726",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6492.866666666667,
+          "before": "7.268703540657201",
+          "after": "6.2978783184019225",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6492.9,
+          "before": "11.057342372205703",
+          "after": "9.774466185654084",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6492.933333333333,
+          "before": "13.898821495867079",
+          "after": "12.381907086093207",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6492.966666666666,
+          "before": "16.02993083861311",
+          "after": "14.337487761422548",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.0,
+          "before": "17.628262845672637",
+          "after": "15.804173267919552",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.033333333334,
+          "before": "18.82701185096728",
+          "after": "16.904187397792306",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.066666666667,
+          "before": "19.726073604938264",
+          "after": "17.729197995196873",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.1,
+          "before": "20.4003699204165",
+          "after": "18.347955943250298",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.133333333333,
+          "before": "20.906092157025178",
+          "after": "18.812024404290366",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.166666666667,
+          "before": "21.285383834481685",
+          "after": "19.160075750070416",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.2,
+          "before": "21.569852592574065",
+          "after": "19.421114259405453",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.233333333334,
+          "before": "21.783204161143352",
+          "after": "19.61689314140673",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.266666666666,
+          "before": "21.94321783757032",
+          "after": "19.76372730290769",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.3,
+          "before": "22.063228094890544",
+          "after": "19.87385292403341",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.333333333333,
+          "before": "22.15323578788071",
+          "after": "19.9564471398777",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.366666666667,
+          "before": "22.220741557623338",
+          "after": "20.018392801760918",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.4,
+          "before": "22.23509568079573",
+          "after": "20.044500742662315",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.433333333333,
+          "before": "22.245861273175024",
+          "after": "20.064081698338363",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        },
+        {
+          "t": 6493.466666666666,
+          "before": "22.253935467459492",
+          "after": "20.0787674150954",
+          "before_source": "S3_landing",
+          "after_source": "S3_landing"
+        }
+      ]
+    },
+    "source": {
+      "count": 0,
+      "examples": []
+    }
+  },
+  "s6": {
+    "display_p1": {
+      "count": 0,
+      "examples": []
+    },
+    "display_adv": {
+      "count": 0,
+      "examples": []
+    },
+    "source": {
+      "count": 0,
+      "examples": []
+    }
+  }
+}

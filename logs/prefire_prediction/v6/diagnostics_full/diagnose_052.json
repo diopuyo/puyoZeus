@@ -1,0 +1,46 @@
+{
+  "index": 52,
+  "source": "mia8KCjr52g",
+  "t_sec": 303.6666666666667,
+  "depth": 1,
+  "sides": [
+    {
+      "side": 0,
+      "same_move": false,
+      "regret_logit": 0.020300077540078565,
+      "light_path": [
+        [
+          0,
+          0
+        ]
+      ],
+      "production_path": [
+        [
+          1,
+          3
+        ]
+      ],
+      "production_best": 0.08036248613837682,
+      "selected_production": 0.07887494492375599
+    },
+    {
+      "side": 1,
+      "same_move": true,
+      "regret_logit": -0.0,
+      "light_path": [
+        [
+          1,
+          3
+        ]
+      ],
+      "production_path": [
+        [
+          1,
+          3
+        ]
+      ],
+      "production_best": 0.086326220663065,
+      "selected_production": 0.086326220663065
+    }
+  ]
+}

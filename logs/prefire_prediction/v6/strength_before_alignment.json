@@ -1,0 +1,34 @@
+{
+  "coefficients": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "rows": 48493,
+  "nonzero_delta": 0,
+  "identifiable": false,
+  "objective": 0.33937664815353014,
+  "ridge": 0.0001,
+  "optimizer": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+  "training_set": "zenchi_set1_57",
+  "features": [
+    "next_assignment_confidence",
+    "missing",
+    "truncated",
+    "disagreement"
+  ],
+  "iterations": 0,
+  "sha256": {
+    "logs/prefire_prediction/v6/train/c1/prefire_v6_features.npz": "de5a4c47908b2a8d9149380f2ba86f9ff92f167dfc286e06dc2db4054c43478a",
+    "logs/prefire_prediction/v6/train/c2/prefire_v6_features.npz": "ee34aaad0ea9564a791a3ef644cb722d9536d648e84c4dfc4bfcd529920cc7e3",
+    "logs/prefire_prediction/v6/train/c3/prefire_v6_features.npz": "da5beae892c12729efe59bfe47eda65928130614cabeaef17311ee2bb4cc6e8a",
+    "logs/prefire_prediction/v6/train/c4/prefire_v6_features.npz": "7f4fe560b4ed0b0a678907ea2ed9909a16413a3314d0f2cd03b3a890a871332a",
+    "logs/prefire_prediction/v6/train/c5/prefire_v6_features.npz": "bcc6af53e1fafa88b7073a0ba64eaa877d9f1377f5a55a0d427c0b98cf370877",
+    "logs/prefire_prediction/v6/train/c6/prefire_v6_features.npz": "071fd4beb1afa4145ab9d81f571aedf5b7a52c602d344ea08797754041a69efc",
+    "logs/prefire_prediction/v6/train/zenchi/prefire_v6_features.npz": "9e2a9b3ec968029ec58edc94cdb6a95474fcccaa3a5d8f7d7430486eda0cffb2",
+    "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/labels.json": "e521c0d3a4c25ae4ff3b05077bda862eee281d9dc8580869019c35d94d039dd7",
+    "logs/prefire_prediction/v6/latency.json": "56ff3f67f703babfbb14f98e15f34da6a54c74f978b4a1772a760e4b7555e1e8"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "index": 25,
+  "milliseconds": 4514.392180004506,
+  "before": {
+    "time": 1790856376.3760347,
+    "pgrep": [
+      "184 /usr/bin/python3 /usr/share/unattended-upgrades/unattended-upgrade-shutdown --wait-for-signal",
+      "396 bash -c \"$0\" -B \"$@\"; CODE=$?; echo EXIT_CODE=$CODE; exit $CODE /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin/python -m scripts.prefire_v6_measure benchmark",
+      "401 /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin/python -B -m scripts.prefire_v6_measure benchmark"
+    ],
+    "other_python": [],
+    "available_kib": 19476564
+  },
+  "after": {
+    "time": 1790856381.0410576,
+    "pgrep": [
+      "184 /usr/bin/python3 /usr/share/unattended-upgrades/unattended-upgrade-shutdown --wait-for-signal",
+      "396 bash -c \"$0\" -B \"$@\"; CODE=$?; echo EXIT_CODE=$CODE; exit $CODE /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin/python -m scripts.prefire_v6_measure benchmark",
+      "401 /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin/python -B -m scripts.prefire_v6_measure benchmark"
+    ],
+    "other_python": [],
+    "available_kib": 19461248
+  },
+  "production_evaluations": 4,
+  "best": [
+    0.6641583694886026,
+    0.5695095686336513
+  ]
+}

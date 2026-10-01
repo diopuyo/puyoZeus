@@ -1,0 +1,40 @@
+{
+  "300": {
+    "display": {
+      "rows": 9000,
+      "cut_rows": 9000,
+      "identical": {
+        "t_sec": true,
+        "display_p1": true,
+        "display_adv": true,
+        "source": true
+      },
+      "passed": true
+    },
+    "trace": {
+      "rows": 6453,
+      "cut_rows": 6453,
+      "passed": true
+    },
+    "features_equal": true
+  },
+  "600": {
+    "display": {
+      "rows": 18000,
+      "cut_rows": 18000,
+      "identical": {
+        "t_sec": true,
+        "display_p1": true,
+        "display_adv": true,
+        "source": true
+      },
+      "passed": true
+    },
+    "trace": {
+      "rows": 10006,
+      "cut_rows": 10006,
+      "passed": true
+    },
+    "features_equal": true
+  }
+}

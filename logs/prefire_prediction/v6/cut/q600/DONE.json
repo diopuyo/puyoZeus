@@ -1,0 +1,34 @@
+{
+  "state": "completed",
+  "frames": 18000,
+  "display_frames": 18000,
+  "elapsed_seconds": 183.5995331660015,
+  "record_bytes": 953776,
+  "live_count": true,
+  "model_dir": "models/exchange_event_v3",
+  "input": "logs/prefire_prediction/v6/q600.jsonl.gz",
+  "deferred": {
+    "submitted": 1073,
+    "cancelled": 1072,
+    "completed": 0,
+    "pending": 1
+  },
+  "options": {
+    "death_guard": true,
+    "confirmed_death_hold": true,
+    "death_formula_guard": true,
+    "color_score_safety": true,
+    "multi_landing_death": true,
+    "midchain_completion": true,
+    "death_pending_ledger": true,
+    "hidden_row_death": true,
+    "prefire_snapshot": true,
+    "hidden_row_belief": true,
+    "post_counter_death_bound": true,
+    "single_death_proof_guard": true,
+    "single_death_proof_negative_only": true,
+    "switch_smoothing": true,
+    "prefire_best_play_v6": true,
+    "prefire_best_play_latency": 5.5
+  }
+}

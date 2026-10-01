@@ -1,0 +1,32 @@
+{
+  "state": "completed",
+  "frames": 18827,
+  "display_frames": 17927,
+  "elapsed_seconds": 1298.9658718010032,
+  "record_bytes": 1208487,
+  "live_count": true,
+  "model_dir": "models/exchange_event_v3",
+  "input": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/set2/collect/records/s5.jsonl.gz",
+  "deferred": {
+    "submitted": 0,
+    "cancelled": 0,
+    "completed": 0,
+    "pending": 0
+  },
+  "options": {
+    "death_guard": true,
+    "confirmed_death_hold": true,
+    "death_formula_guard": true,
+    "color_score_safety": true,
+    "multi_landing_death": true,
+    "midchain_completion": true,
+    "death_pending_ledger": true,
+    "hidden_row_death": true,
+    "prefire_snapshot": true,
+    "hidden_row_belief": true,
+    "post_counter_death_bound": true,
+    "single_death_proof_guard": true,
+    "single_death_proof_negative_only": true,
+    "switch_smoothing": true
+  }
+}

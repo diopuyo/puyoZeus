@@ -1,0 +1,46 @@
+{
+  "index": 75,
+  "source": "review",
+  "t_sec": 2657.883333333333,
+  "depth": 1,
+  "sides": [
+    {
+      "side": 0,
+      "same_move": false,
+      "regret_logit": 0.02770697267325639,
+      "light_path": [
+        [
+          0,
+          1
+        ]
+      ],
+      "production_path": [
+        [
+          4,
+          3
+        ]
+      ],
+      "production_best": 0.2388110666285055,
+      "selected_production": 0.23381098789460772
+    },
+    {
+      "side": 1,
+      "same_move": true,
+      "regret_logit": -0.0,
+      "light_path": [
+        [
+          2,
+          0
+        ]
+      ],
+      "production_path": [
+        [
+          2,
+          0
+        ]
+      ],
+      "production_best": 0.2388110666285055,
+      "selected_production": 0.2388110666285055
+    }
+  ]
+}

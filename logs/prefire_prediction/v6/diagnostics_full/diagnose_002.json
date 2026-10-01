@@ -1,0 +1,46 @@
+{
+  "index": 2,
+  "source": "q_7gc4TgFig",
+  "t_sec": 253.96666666666667,
+  "depth": 1,
+  "sides": [
+    {
+      "side": 0,
+      "same_move": false,
+      "regret_logit": 0.07183874137987485,
+      "light_path": [
+        [
+          3,
+          1
+        ]
+      ],
+      "production_path": [
+        [
+          2,
+          1
+        ]
+      ],
+      "production_best": 0.4935625335954721,
+      "selected_production": 0.47562183720214024
+    },
+    {
+      "side": 1,
+      "same_move": false,
+      "regret_logit": 0.011839430732661336,
+      "light_path": [
+        [
+          1,
+          2
+        ]
+      ],
+      "production_path": [
+        [
+          0,
+          3
+        ]
+      ],
+      "production_best": 0.4991827317130756,
+      "selected_production": 0.5021425755538985
+    }
+  ]
+}
