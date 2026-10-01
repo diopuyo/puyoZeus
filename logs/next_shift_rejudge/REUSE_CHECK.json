@@ -1,0 +1,14 @@
+{
+ "orig|S1_prime_light|rs0_vs_ref_maxdiff": 0.0,
+ "orig|S3_prime_light|rs0_vs_ref_maxdiff": 0.0,
+ "orig|S1_prime|rs0_vs_ref_maxdiff": 0.0,
+ "orig|S3_prime|rs0_vs_ref_maxdiff": 0.0,
+ "orig|G_fe_rs0_vs_ref_maxcoef": 0.0,
+ "orig|G_fe_rs3_vs_rs0_maxcoef": 0.0,
+ "T|S1_prime_light|rs0_vs_ref_maxdiff": 0.0,
+ "T|S3_prime_light|rs0_vs_ref_maxdiff": 0.0,
+ "T|S1_prime|rs0_vs_ref_maxdiff": 0.0,
+ "T|S3_prime|rs0_vs_ref_maxdiff": 0.0,
+ "T|G_fe_rs0_vs_ref_maxcoef": 0.042708401333640955,
+ "T|G_fe_rs3_vs_rs0_maxcoef": 0.0
+}

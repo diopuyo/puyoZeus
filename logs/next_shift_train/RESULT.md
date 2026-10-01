@@ -103,3 +103,27 @@ M0 の seed1・2 は時間の都合で途中停止 (seed1 は 3/5 fold 完了)�
 - 再生: `scripts/next_shift_replay_20261001.py`、`logs/next_shift_train/replay.sh` (実行 cwd = `D:/puyo_analyzer/nextfix_run`、exev の logs をリンク)
 - 採点: `score_<構成>.txt`、`replay/<構成>/SUMMARY.json`。CV: `sprime_T/PAIRED_CV*.json`、`m0_T/PAIRED_CV_seed0.json`、`gfe_T/G_CV_seeds_0.json`
 - テスト: `tests/test_next_queue_alignment.py` (18件)
+
+## 7. 再判定 (exev DECISIONS「2026-10-01 事前登録 (再判定)」、乱数5通りの対比較) — 不合格
+
+旧 queue (整列OFF) と補正 T (整列ON) で S′・G_fe・M0 を random_state 0〜4 で学習 (行・fold・パラメータ不変)。
+旧 rs0 は現本番の再生 R0 を再利用 (rs0 の S′ 予測差 0.0・G_fe 係数差 0.0)。補正 rs0 は G_fe が BLAS スレッド差で v5_common と
+一致しなかった (予測差最大 .014) ため再利用せず再生し直した。G_fe (LR lbfgs) は random_state に依らない (係数差 0.0) ので、
+seed で変わるのは S′ と M0。出力 `logs/next_shift_rejudge/GATE.json`、構成は `models/rejudge/`、採点 `score_J_*.txt`。
+
+| random_state | q 旧 | q 補正 | zenchi 旧 | zenchi 補正 | S1′_light CV LL 差 (補正−旧、253,335行) |
+|---:|---:|---:|---:|---:|---:|
+| 0 | .507567 | .515178 | 7,671 | 7,841 | −.001094 |
+| 1 | .517927 | .512292 | 7,613 | 7,726 | +.000072 |
+| 2 | .517013 | .515878 | 7,726 | 7,711 | +.000095 |
+| 3 | .505341 | .525264 | 7,644 | 7,628 | +.000700 |
+| 4 | .512329 | .512612 | 7,692 | 7,720 | +.000589 |
+| 平均 | .512035 | .516245 | 7,669.2 | 7,725.2 | +.000072 |
+
+- ① q 平均差 +.004209 > +.002 → 不合格
+- ② zenchi 平均は補正が上 (+56.0) だが、補正が上回ったのは5対中3対 (必要4) → 不合格
+- ③ S1′_light CV LL 差の平均 +.000072 > 0 → 不合格
+- ④ 全10構成で誤った負け確定 0、3:00場面 2760.35〜2760.42 秒、第14試合 0 → 合格
+- 判定: 不合格。本番は現状維持 (production_config 不変)。
+- 付記: 死亡確定の件数は旧側が5構成とも 37、補正側が5構成とも 36 (誤りは両側 0)。補正側で正しい死亡確定が1件、一貫して消えている。
+- 乱数のゆらぎ: q は旧側だけで .505〜.518、zenchi は 7,613〜7,726 の範囲で動く。

@@ -33,11 +33,21 @@ VARIANTS = {
 }
 
 
+def resolve(variant: str) -> tuple[str, bool]:
+    """固定の構成表か、再判定の構成 J_<orig|T>_rs<k> (models/rejudge、補正側だけ整列ON)。"""
+    if variant in VARIANTS:
+        return VARIANTS[variant]
+    _, kind, seed = variant.split("_", 2)
+    if kind not in ("orig", "T") or not seed.startswith("rs"):
+        raise ValueError(f"未知の構成: {variant}")
+    return f"models/rejudge/{kind}_{seed}", kind == "T"
+
+
 def run(variant: str, source: str) -> None:
     """run_e36.worker を出力先・モデル・整列フラグだけ差し替えて呼ぶ。"""
     from scripts import d5_runtime, run_e36, run_e36b
     from scripts import replay_exchange_event_20260926 as replay_module
-    model, align = VARIANTS[variant]
+    model, align = resolve(variant)
     out = OUT_ROOT / variant
     original_replay = replay_module.replay
 
@@ -58,7 +68,7 @@ def run(variant: str, source: str) -> None:
 def main() -> None:
     """1記録1プロセス。"""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--variant", choices=tuple(VARIANTS), required=True)
+    parser.add_argument("--variant", required=True)
     parser.add_argument("--source", required=True)
     args = parser.parse_args()
     run(args.variant, args.source)
