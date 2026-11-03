@@ -1,6 +1,6 @@
 #!/bin/bash
 # collect プロセスの動画 fd 読み込みオフセットから概算進捗を出す
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 for pid in $(pgrep -f "venv/bin/python -m scripts.collect_indicators_v2"); do
   args=$(tr '\0' ' ' < /proc/$pid/cmdline)
   video=$(echo "$args" | grep -oE '(data/frames|/home/[a-z]+/frames)/video_[0-9]+\.mp4' | head -1)

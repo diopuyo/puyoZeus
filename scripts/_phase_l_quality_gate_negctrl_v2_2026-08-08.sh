@@ -4,7 +4,7 @@
 # v1 (olRyxDGacbg 先頭10分、試合0件) の誤PASS事故の修正版。
 # 1プロセス・nice -19、既存 14並列 regen とは競合しない優先度で走らせる。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=. OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
        NUMEXPR_NUM_THREADS=1
 

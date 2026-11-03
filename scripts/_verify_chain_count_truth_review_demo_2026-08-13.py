@@ -8,6 +8,14 @@ DEMO_REVIEW_2026-08-13.md に記録された連鎖場面の周辺 (source時刻)
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import sys
 import time
 from pathlib import Path
@@ -29,8 +37,7 @@ from src.score_ocr import ScoreOcr  # noqa: E402
 
 VIDEO = _ROOT / "data/frames/review_demo_2026-08-12.mp4"
 OUT_DIR = Path(
-    r"C:\Users\ryouj\AppData\Local\Temp\claude\C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer"
-    r"\9e5c8d51-7ebe-4211-9717-e19e8d042b40\scratchpad\chain_truth_verify"
+    _public_dev_text('<work>/scratchpad/chain_truth_verify')
 )
 LOG_PATH = OUT_DIR / "verify_log.txt"
 

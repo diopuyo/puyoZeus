@@ -19,6 +19,14 @@ Usage:
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import importlib
 import sys
 from dataclasses import dataclass
@@ -39,7 +47,7 @@ _MC = importlib.import_module("scripts.measure_effect_gate_c_2026-08-04")
 
 BASELINE_NPZ_DIR: Path = Path("data/indicators_v2/boards_lean_allframes_ref_2026-07-30")
 V4_NPZ_DIR: Path = Path("data/verify/board_labels_v4_prod_2026-08-05")
-VIDEO_DIR: Path = Path("/home/ryouj/frames")
+VIDEO_DIR: Path = Path(_public_dev_text('<home>/frames'))
 
 # 突合可能の判定許容 (scripts/_measure_yardstick_v4_2026-08-05.py と同一値)。
 NEAREST_MATCH_TOLERANCE_SEC: float = 0.35

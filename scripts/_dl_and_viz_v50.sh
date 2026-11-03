@@ -2,7 +2,7 @@
 # v50 (= 3 vs いさな、 マスター・2 ブロック、 video_id enHxRrKeAAs) を 195-270s で部分 DL し、
 # 認識 → viz + diag 生成. cycle 71c (= 案 C 変種ガード入り) で評価.
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 YTDLP="venv/bin/yt-dlp"
 FFMPEG="venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"

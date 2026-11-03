@@ -5,7 +5,7 @@
 #  - v97m11: puyo→empty 副作用前科 → fail-silent チェック
 #  - v70m2: red 3 件のみ採取 → red 認識力チェック
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 MODEL="models/cnn_cycle32d.pt"
 HSV_STATE="data/per_video_hsv_ranges/_merged_default.json"

@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>puyoZeus Live — 対戦分析</title>
+<script>window.overlayDefaults=/*OVERLAY_DEFAULTS*/{};</script>
+<script src="overlay_options.js"></script>
+
+
+
+<link rel="stylesheet" href="overlay_battle.css">
+<div id="stage" style="visibility:hidden">
+<section class="panel" id="panel" data-layout="card" data-mode="waiting" data-empty="true" aria-label="対戦の勝率">
+  <div class="meta"><span class="brand" id="heading">勝率</span>
+    <span class="state" role="status"><i class="dot" aria-hidden="true"></i><span id="state">入力確認中</span></span></div>
+  <div id="score-roi-status" hidden style="font-size:16px" role="status"></div>
+  <div class="scores">
+    <div class="player plate one"><span class="name p1">1P</span><span class="number num"><span id="p1">—</span><small class="unit">%</small></span></div>
+    <div class="player plate two right"><span class="name p2">2P</span><span class="number num"><span id="p2">—</span><small class="unit">%</small></span></div>
+  </div>
+  <div class="bar gauge" id="bar" role="img" aria-label="勝率は未取得"><div class="g-hatch"></div><div class="fill one g-one" id="fill"></div><div class="fill two g-two"></div></div>
+  <div class="trend spark">
+    <div class="trend-meta"><span>1P推移 · 直近30秒</span><span class="prediction" id="prediction" hidden>予想込み</span><span id="trend-end">現在</span></div>
+    <div class="mid-graph"><span class="mid-label" aria-hidden="true">50</span><svg id="trend" viewBox="0 0 412 54" preserveAspectRatio="none" role="img" aria-label="1P勝率の推移。上ほど1P有利、中央線は50%">
+      <defs><linearGradient id="recent-colors" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="54"><stop offset="50%" stop-color="var(--p1)"/><stop offset="50%" stop-color="var(--p2)"/></linearGradient></defs>
+      <rect class="mid-top" width="412" height="27"/><rect class="mid-bottom" y="27" width="412" height="27"/>
+      <path class="guide-outline" d="M0 27H412"/><path class="guide" d="M0 27H412"/><path id="trace" d=""/><ellipse id="tip" rx="4" ry="4" cx="408" cy="27" hidden/>
+    </svg></div>
+  </div>
+  <div class="details" id="details">
+    <div class="detail-row"><span id="basis-label">変動をならす前の勝率</span><strong id="basis">—</strong></div>
+    <div class="detail-row"><span>連鎖後の予想</span><strong id="forecast">—</strong></div>
+    <div class="detail-note" id="detail-note">データ待ち</div>
+    <div class="contents-title">判定の中身 <span id="contents-model">判定方法：—</span><small id="margin-note">返しの過不足 (＋なら返せる・−なら足りない)</small></div>
+    <div id="contents-main"></div><div id="contents-extra"></div>
+  </div>
+  <div id="whole" hidden>
+    <div class="whole-meta"><span>1P勝率 · 試合全体</span><span id="whole-time">受信開始から</span></div>
+    <div class="mid-graph"><span class="mid-label" aria-hidden="true">50</span><svg viewBox="0 0 1000 74" preserveAspectRatio="none" role="img" aria-label="試合全体の1P勝率。中央線は50%">
+      <defs><linearGradient id="full-colors" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="74"><stop offset="50%" stop-color="var(--p1)"/><stop offset="50%" stop-color="var(--p2)"/></linearGradient></defs>
+      <rect class="mid-top" width="1000" height="37"/><rect class="mid-bottom" y="37" width="1000" height="37"/>
+      <path class="guide-outline" d="M0 37H1000"/><path class="guide" d="M0 37H1000"/><path id="whole-trace" d=""/>
+    </svg></div>
+  </div>
+</section>
+<section id="band" hidden aria-label="判定の中身と試合全体の推移"></section>
+</div>
+<script>
+'use strict';
+const el=id=>document.getElementById(id);
+const DESIGN_WIDTH=1920, DESIGN_HEIGHT=1080, HISTORY_MS=30000, HISTORY_LIMIT=180;
+const GRAPH_WIDTH=412, GRAPH_HEIGHT=54, GRAPH_PAD=4, ANIMATION_MS=160, STALE_MS=3500;
+const MIN_MIDLINE_SCREEN_PX=1;
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+let watchdog, animation, shown=null, history=[], matchKey=null, lastSourceMs=null, lastKind='waiting';
+function resizeStage() {
+  const scale=Math.min(innerWidth/DESIGN_WIDTH,innerHeight/DESIGN_HEIGHT);
+  // ゲージの目盛りだけはスマホでも最低1画素を確保する。
+  el('stage').style.setProperty('--midline-min-width',`${MIN_MIDLINE_SCREEN_PX/Math.max(scale,Number.EPSILON)}px`);
+  el('stage').style.transform=`scale(${scale})`;
+  el('stage').style.left=`${(innerWidth-DESIGN_WIDTH*scale)/2}px`;
+  el('stage').style.top=`${(innerHeight-DESIGN_HEIGHT*scale)/2}px`;
+}
+addEventListener('resize',resizeStage);resizeStage();
+/** @param {unknown} value @returns {boolean} */
+function isProbability(value) {return Number.isFinite(value)&&value>=0&&value<=1;}
+function clearHistory(resetFull=true) {
+  history=[];el('trace').setAttribute('d','');el('tip').setAttribute('visibility','hidden');
+  if(resetFull) clearFullHistory();
+}
+/** @param {string} message @param {string} mode */
+function unavailable(message,mode='waiting') {
+  resetThemeMotion();
+  cancelAnimationFrame(animation);shown=null;lastKind='waiting';clearHistory(false);
+  el('panel').dataset.mode=mode;el('panel').dataset.empty='true';el('state').textContent=message;
+  el('heading').textContent='勝率';el('p1').textContent=el('p2').textContent='—';
+  el('prediction').hidden=true;el('basis').textContent=el('forecast').textContent='—';
+  renderContents(null);
+  el('detail-note').textContent='データ待ち';el('bar').setAttribute('aria-label','勝率は未取得');
+}
+/** @param {number} p */
+function paintProbability(p) {
+  shown=p;const percent=Math.round(p*100);
+  el('p1').textContent=String(percent);el('p2').textContent=String(100-percent);
+  el('fill').style.transform=`scaleX(${p})`;
+  if(el('gSplit')) el('gSplit').style.transform=`translateX(${p*100}%)`;
+}
+/** @param {number} p @param {boolean} immediate */
+function animateProbability(p,immediate=false) {
+  cancelAnimationFrame(animation);
+  if(shown===null||immediate||reducedMotion.matches) return paintProbability(p);
+  const from=shown, start=performance.now();
+  const duration=overlayOptions.theme==='normal'?ANIMATION_MS:THEME_ROLL_MS;
+  const step=now=>{
+    const progress=Math.min(1,(now-start)/duration);
+    paintProbability(from+(p-from)*progress);
+    if(progress<1) animation=requestAnimationFrame(step);
+  };
+  animation=requestAnimationFrame(step);
+}
+/** @param {object} data */
+function syncMatch(data) {
+  const key=JSON.stringify([data.identity?.session_id,data.identity?.match_id]);
+  const time=data.timing?.source_available_ms;
+  if(key!==matchKey||(Number.isFinite(time)&&lastSourceMs!==null&&time<lastSourceMs)) {
+    clearHistory();cancelAnimationFrame(animation);shown=null;
+    resetThemeMotion();
+  }
+  matchKey=key;lastSourceMs=Number.isFinite(time)?time:null;
+}
+/** @param {number} p @param {number} time */
+function updateHistory(p,time) {
+  if(!Number.isFinite(time)) return;
+  updateFullHistory(p,time);
+  if(history.length&&history[history.length-1].time===time) history.pop();
+  history.push({p,time});history=history.filter(item=>time-item.time<=HISTORY_MS).slice(-HISTORY_LIMIT);
+  const x=t=>GRAPH_PAD+(1-(time-t)/HISTORY_MS)*(GRAPH_WIDTH-2*GRAPH_PAD);
+  const y=v=>GRAPH_PAD+(1-v)*(GRAPH_HEIGHT-2*GRAPH_PAD);
+  el('trace').setAttribute('d',history.map((item,i)=>`${i?'L':'M'}${x(item.time).toFixed(1)} ${y(item.p).toFixed(1)}`).join(' '));
+  el('tip').removeAttribute('hidden');el('tip').setAttribute('visibility','visible');
+  el('tip').setAttribute('cx',String(x(time)));el('tip').setAttribute('cy',String(y(p)));
+}
+/** @param {object} data @param {boolean} terminal */
+function renderDetails(data,terminal) {
+  const layers=data.evaluations.display_layers||{}, practical=data.evaluations.practical||{};
+  const b3=practical.calibration_id==='b3-stage2-display';
+  const format=value=>isProbability(value)?`1P ${Math.round(value*100)}%`:'—';
+  el('basis-label').textContent=b3?'変動をならす前の勝率':'確定した盤面の勝率';
+  el('basis').textContent=terminal?'—':format(layers.current_p1);
+  el('forecast').textContent=terminal?'—':format(layers.predicted_p1);
+  const source={static:'通常判定',exchange:'撃ち合い判定'}[practical.source];
+  el('detail-note').textContent=terminal?'決着を確認':
+    layers.prediction_discard_reason?'予想を使わず、確定した盤面で判定':
+    b3?`${source||'判定待ち'} · 勝率は変動をならして表示`:'1Pの勝率';
+}
+/** @param {object} data @returns {string|null} */
+function confirmedWinner(data) {
+  const terminal=data.terminal||{}, practical=data.evaluations?.practical||{};
+  if(terminal.state==='confirmed'&&['1P','2P'].includes(terminal.winner)) return terminal.winner;
+  // ライブB3は死亡確認を既存のsource列で公開する。物理予測だけでは決着にしない。
+  if(practical.source==='confirmed_death'&&practical.availability==='available') {
+    if(practical.p1_win_probability===1) return '1P';
+    if(practical.p1_win_probability===0) return '2P';
+  }
+  return null;
+}
+/** 入力単位の式枠較正。旧DTOでは表示欄を空に戻す。 */
+function renderScoreRoiStatus(display) {
+  const roi=display.score_roi_alignment;
+  const roiStatus=el('score-roi-status');
+  if(roiStatus) {
+    roiStatus.hidden=!roi;
+    roiStatus.textContent=roi?'式の枠: '+['1P','2P'].map(side=>
+      side+' '+(roi[side]?.ready?roi[side].offset.join(',')+'px':'合わせ中')).join(' / '):'';
+  }
+}
+/** @param {object} data */
+function renderSnapshot(data) {
+  const display=data.display||{}, practical=data.evaluations?.practical||{};
+  syncMatch(data);
+  renderScoreRoiStatus(display);
+  const phase=display.input_status;
+  if(phase&&phase!=='ready') {
+    clearFullHistory();
+    const progress=Number.isFinite(display.calibration_progress)?Math.max(0,Math.min(99,display.calibration_progress)):0;
+    return unavailable(phase==='calibrating'?`画面調整中 ${Math.round(progress)}%`:
+      phase==='overlay_feedback'?'表示の映り込み':phase==='no_puyo_screen'?'試合待ち':'入力確認中');
+  }
+  if(display.match_phase==='between_matches') {clearFullHistory();return unavailable('試合待ち');}
+  if(display.status==='integrity_fault'||data.integrity?.status==='fault') return unavailable('入力確認中');
+  const winner=confirmedWinner(data);
+  let p=practical.p1_win_probability;
+  if(winner) p=winner==='1P'?1:0;
+  else if(display.visibility==='hidden'||practical.availability!=='available'||!isProbability(p)) {
+    return unavailable(display.message==='評価エラー'?'判定エラー':
+      display.match_phase==='playing'?'判定中':display.status==='waiting'?'試合待ち':'判定中');
+  }
+  const pending=Boolean(data.evaluations.counter_search?.pending)||display.status==='hold';
+  el('panel').dataset.empty='false';el('panel').dataset.mode=pending&&!winner?'waiting':'live';
+  el('heading').textContent=winner?'試合結果':'勝率';
+  el('state').textContent=winner?`決着 · ${winner}`:pending?'判定中':'対戦中';
+  el('prediction').hidden=Boolean(winner)||!data.evaluations.display_layers?.includes_prediction;
+  updateThemeMotion(p,winner,pending);
+  animateProbability(p,Boolean(winner));updateHistory(p,data.timing?.source_available_ms);
+  renderContents(winner?null:data.evaluations.b3_contents);
+  renderDetails(data,Boolean(winner));lastKind=winner?'terminal':'live';
+  el('bar').setAttribute('aria-label',`1P ${Math.round(p*100)}%、2P ${100-Math.round(p*100)}%`);
+}
+const COMPLETION_DRIVEN = false;
+const CONNECTION_STALE_MS = 20000;
+function armWatchdog() {
+  clearTimeout(watchdog);
+  watchdog=setTimeout(()=>{if(lastKind==='live') unavailable('更新待ち');},
+    COMPLETION_DRIVEN?CONNECTION_STALE_MS:STALE_MS);
+}
+function connect() {
+  const stream=new EventSource('/events');
+  stream.addEventListener('analysis',event=>{
+    try {renderSnapshot(JSON.parse(event.data));}
+    catch {unavailable('入力確認中');}
+    // 試験用パネル(既定OFF)。判定表示の成否と独立に、受信した値をそのまま渡す。
+    try {if(window.PuyoDebug?.enabled) PuyoDebug.update(JSON.parse(event.data));} catch {}
+    armWatchdog();
+  });
+  // イベント配信では、判定の空送りをせず15秒間隔の接続確認で通信断を監視する。
+  stream.addEventListener('heartbeat',()=>{if(COMPLETION_DRIVEN) armWatchdog();});
+  stream.onopen=()=>{if(el('panel').dataset.mode==='offline') unavailable('入力確認中');};
+  stream.onerror=()=>{clearTimeout(watchdog);unavailable('接続待ち','offline');};
+}
+</script>
+<script src="overlay_contents.js"></script>
+<script src="overlay_layout.js"></script>
+<script src="overlay_debug.js"></script>
+<script>PuyoDebug.init();</script>
+<script src="overlay_themes.js"></script>
+<script src="overlay_i18n.js"></script>
+<script src="overlay_mascot.js"></script>
+<script src="overlay_expressions.js"></script>
+<script src="overlay_battle.js"></script>
+<script>
+// 入力に表示自身が混ざったことを検出する色の目印。丸い角で欠けない上辺中央に置く。
+const feedbackMarker=document.createElement('div');
+feedbackMarker.style.cssText='position:absolute;left:calc(50% - 12px);top:0;width:24px;height:18px;display:grid;grid-template-columns:repeat(4,6px);z-index:100';
+feedbackMarker.setAttribute('aria-hidden','true');
+for(const color of [0,1,2,3,3,2,1,0,3,0,1,2]) {
+ const cell=document.createElement('span');cell.style.background=['rgb(225,55,197)','rgb(41,220,179)','rgb(248,196,51)','rgb(54,79,230)'][color];feedbackMarker.append(cell);
+}
+el('panel').append(feedbackMarker);
+</script>
+<script>PuyoExpressions.update();</script>
+<script>renderContents(null);el('stage').style.visibility='visible';</script>
+<script>if(new URLSearchParams(location.search).get('preview')!=='sample') connect();</script>
+</html>

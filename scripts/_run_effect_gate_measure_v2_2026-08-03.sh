@@ -10,7 +10,7 @@
 #
 # 使い方: setsid -f bash scripts/_run_effect_gate_measure_v2_2026-08-03.sh [MAXPAR=8]
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1

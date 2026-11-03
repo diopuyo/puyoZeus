@@ -17,6 +17,14 @@ production_config.collect_flags() 経由の現行採用構成は元スクリプ�
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import importlib.util
 import subprocess
 import sys
@@ -45,7 +53,7 @@ _spec.loader.exec_module(orch)
 # (unsupported)` で確認)。nvm で node v24.19.0 (LTS) を追加インストール済み。
 # あわせて 403/500 の間欠的失敗 (同一URLで再試行すると成功する事例を確認済み)
 # に対し DL_RETRY_COUNT を 1->4 に引き上げ、再試行間に短い待機を入れる。
-_NODE24_PATH = "/home/ryouj/.nvm/versions/node/v24.19.0/bin/node"
+_NODE24_PATH = _public_dev_text('<home>/.nvm/versions/node/v24.19.0/bin/node')
 _DL_RETRY_COUNT_W12 = 4
 _DL_RETRY_SLEEP_SEC = 8.0
 

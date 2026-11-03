@@ -94,7 +94,7 @@ Phase I の合格ライン = **99.5%** (STABLE確定盤面・物差し測定、2
 ### 長時間タスクの起動
 WSL 経由で setsid -f detach し、Claude セッション終了後も継続:
 ```bash
-wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \
+wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \
   setsid -f bash -c 'PYTHONPATH=. ./venv/bin/python -m scripts.XXX > logs/XXX.log 2>&1 < /dev/null'"
 ```
 

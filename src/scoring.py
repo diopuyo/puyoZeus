@@ -527,6 +527,8 @@ def compute_effective_rate(
         return rate_base
     decay_steps = int((elapsed_sec - start) // MARGIN_TIME_DECAY_INTERVAL_SEC) + 1
     decay_steps = min(decay_steps, MARGIN_TIME_MAX_DECAYS)
-    factor = MARGIN_TIME_DECAY_FACTOR ** decay_steps
-    rate = int(rate_base * factor)
+    # 各回の切り捨て後の値を次回の基準にする（user 確定規則）。
+    rate = rate_base
+    for _ in range(decay_steps):
+        rate = max(OJAMA_RATE_MIN, int(rate * MARGIN_TIME_DECAY_FACTOR))
     return max(OJAMA_RATE_MIN, rate)

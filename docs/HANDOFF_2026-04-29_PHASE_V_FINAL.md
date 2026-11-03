@@ -95,13 +95,13 @@ ImageReader(
 cat docs/HANDOFF_2026-04-29_PHASE_V_FINAL.md
 
 # 2. 全テスト走行 (約 3.5 分)
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"
 
 # 3. CNN v7 動画別評価
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_u_eval_v7_per_source --n-sample 2000"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_u_eval_v7_per_source --n-sample 2000"
 
 # 4. 動画レンダ (CNN v7 デフォルト)
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_u_render \\
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_u_render \\
     data/verify/review_videos/clip_v01_m34.mp4 \\
     data/verify/review_videos/phase_u_v7_m34.mp4 \\
     --interval 0.2 --max-seconds 15"

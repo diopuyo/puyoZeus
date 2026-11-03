@@ -1,6 +1,6 @@
 #!/bin/bash
 # --overlay-transition-hold-frames 無し (対照実験用)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/verify/youtube_demo_2026-08-07/dio_vs_ts_m01_clip.mp4

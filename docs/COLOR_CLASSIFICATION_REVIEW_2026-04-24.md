@@ -32,7 +32,7 @@
 ### 全サンプルフレームを一気に検証
 
 ```bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 ./venv/bin/python scripts/verify_color_classification.py
 ```
 

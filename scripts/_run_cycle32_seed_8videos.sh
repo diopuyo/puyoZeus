@@ -3,7 +3,7 @@
 # - skip_ojama=True (default) で ojama 採取スキップ
 # - G1 (bg_fp) + G9 (end_skip 180) + G10 (ojama V上限、 ojama skip でも互換維持) 適用
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 # 既存の v89m3 を退避 (前 cycle の古い seed)
 if [ -d data/pseudo_labels_hsv_seed/v89m3 ]; then

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project_root="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+project_root="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 output_root="${1:?新規出力rootを指定してください}"
 script_sha="${2:?検収済みadapter SHAを指定してください}"
 test_sha="${3:?検収済みtest SHAを指定してください}"

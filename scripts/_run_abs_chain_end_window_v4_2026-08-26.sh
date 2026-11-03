@@ -1,7 +1,7 @@
 #!/bin/bash
 # Codex v4: 開始設置除外・実CHAIN限定・同一交換再武装禁止・密な実表示dump。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 MODE="${1:?off または on を指定}"
 TAG="${2:-v4}"

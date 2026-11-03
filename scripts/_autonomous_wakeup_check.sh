@@ -3,7 +3,7 @@
 # 1. baseline 評価完了確認
 # 2. seed regen 完了確認
 # 3. 両方 done なら autonomous_sweep.py + cycle51_ojama_dryrun 起動
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 
@@ -25,7 +25,7 @@ echo "[autonomous] baseline critical = $BASE_CRIT"
 
 # autonomous sweep を background で起動 (= 朝までずっと走らせる)
 init_health autonomous_sweep_main
-setsid -f bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.autonomous_sweep --sweep all > logs/autonomous_sweep_main.log 2>&1" < /dev/null
+setsid -f bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.autonomous_sweep --sweep all > logs/autonomous_sweep_main.log 2>&1" < /dev/null
 echo "[autonomous] sweep started (background)"
 
 # cycle 51 ojama dryrun も並列で

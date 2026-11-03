@@ -17,6 +17,14 @@ scripts/_gen_regen_manifest_2026-08-11.py と合わせて参照):
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import csv
 import queue
 import shutil
@@ -136,7 +144,7 @@ def download_video(t: Target) -> tuple[bool, float]:
             "--ffmpeg-location", str(FFMPEG_LOCATION),
             # 2026-08-11: JSランタイム必須化 (無いと一部動画が403) への対処。
             # WSL の nvm 管理 node を明示指定する
-            "--js-runtimes", "node:/home/ryouj/.nvm/versions/node/v20.20.1/bin/node",
+            "--js-runtimes", _public_dev_text('node:<home>/.nvm/versions/node/v20.20.1/bin/node'),
             "-f", YT_DLP_FORMAT,
             "--remux-video", "mp4", "--no-playlist", "--no-progress",
             "-o", str(out_path), url,

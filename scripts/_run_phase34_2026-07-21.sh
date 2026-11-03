@@ -2,7 +2,7 @@
 # フェーズ3(label_exchange_outcome on boards_lean_next) + フェーズ4(proto_net_threat_v2 --full)
 # を25本npz収集完了後に一括実行する。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=3 OPENBLAS_NUM_THREADS=3 MKL_NUM_THREADS=3
 

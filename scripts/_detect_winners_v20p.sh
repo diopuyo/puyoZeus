@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 LOG=data/phase_e_winners_v20p.log
 > "$LOG"

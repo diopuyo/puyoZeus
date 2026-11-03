@@ -15,6 +15,7 @@
     # 推論時には adaptive.to_fingerprint() で BackgroundFingerprint 互換オブジェクトを取得
 """
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 import cv2
 import numpy as np
@@ -105,7 +106,7 @@ class AdaptiveBackgroundFingerprint:
         """
         if frame is None or frame.ndim != 3:
             return 0
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hsv = cv2.cvtColor(full_image(frame), cv2.COLOR_BGR2HSV)
         cell_w = region_w / BOARD_COLS
         cell_h = region_h / VISIBLE_ROWS
         updated = 0

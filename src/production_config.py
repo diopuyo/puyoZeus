@@ -27,7 +27,36 @@
 """
 from __future__ import annotations
 
+# 2026-10-24: 94試合の録画調査で保留中の供給欠落14件と文字外背景の不一致1件。
+# 実機での採用検証前のため、いずれも試作・既定OFF。
+LIVE_MATCH_END_FEED_ON_HOLD_DEFAULT = False
+MATCH_END_YATTA_TEXT_TEMPLATE_DEFAULT = False
+
+# 2026-10-24: 画面の確認の失敗 (外枠の 1 辺だけの被覆不足) で盤面・台帳・試合の状態を捨てない、期限つきの保留。
+# 根拠: 24b 94 試合の保存記録で、試合中の reset (epoch+1・pipe.reset) が 91/86 回 (0.97/0.91 回/試合)、
+# 直後に必ず内部の試合開始が増える (91/91・86/86)。保存記録の再生で期限 8 秒なら 76%/74% を救える見込み。
+# **2026-10-25 06:30 user 採用** (「いや、採用してから図る」): 24c の入口の NEW の設定 (new_on/puyo_live.json) で ON にし、
+# 次の OBS 試験で効き (試合中の reset・内部の試合開始の数・表示が止まる秒数) を測る。コードの既定値は、
+# 試験の期待値を直す次の組み立てで True に切り替える (ここでは False のまま、設定で ON)。
+# 設計: <work>/codex_jobs/verify_hold_split_20261024/DESIGN.md
+LIVE_VERIFY_SOFT_HOLD_DEFAULT = False
+
+# 2026-11-02: W64 の入口で1秒刻みの枠不合格が続くため、入口だけ0.25秒で再試行。
+# PC1 の live_w64_entry_verify_20261102/PROMPT 13:3x追補。実機での採用前につき既定OFF。
+LIVE_VERIFY_ENTRY_FAST_RETRY_DEFAULT = False
+
+# 2026-11-02 PC1 chain_continuity_fix: 発火盤の裏付けと式による継続を検証する。採用前につき既定OFF。
+LIVE_CHAIN_FORECAST_RECHECK_DEFAULT = False
+LIVE_CHAIN_END_FORMULA_DEFAULT = False
+
+# 2026-11-02: 専用の設定窓。PC1の採否決定前につき既定OFF（app_window_20261102）。
+DISTRIBUTION_APP_WINDOW = True  # 2026-11-02 PC1案、user確認待ち。常駐窓の注文。
+
 from dataclasses import dataclass
+
+# 2026-10-06: 起点2手補完の列挙・段別完走を融合。候補順・重み・段別得点の一致を採用条件とする。
+# 根拠: b3_data/codex_tasks/b3_fire_search_speed/ の単独台・600秒全更新照合。
+B3_ORIGIN_NATIVE_ENABLED = True
 
 
 @dataclass(frozen=True)
@@ -37,6 +66,122 @@ class AdoptedFlag:
     flag: str          # CLI フラグ文字列 (値を取る場合は "--name value" 形式)
     adopted: str       # 採用日 (YYYY-MM-DD)
     reason: str        # 採用根拠 (計測結果 / レビュー)
+
+
+# 配布版の表示遅延対策。2026-10-10 user承認でB3使用時に既定ON (判定値不変、Claude独立検収合格)。
+DISPLAY_COMPLETION_DRIVEN_DEFAULT: bool = True
+DISPLAY_FAST_EMA_DEFAULT: bool = True
+DISPLAY_LATENCY_CANDIDATES: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('--display-completion-driven', '2026-10-10',
+        '2026-10-09 user決定・10-10 採用: B3完了で即取り込み、確定時だけ送信。保存列3,009件で判定値一致、再送155→0、旧の確定→送信待ち平均255ms解消 (Claude再計算一致)。実機遅延は未測定'),
+    AdoptedFlag('--display-fast-ema', '2026-10-10',
+        '2026-10-09 user決定・10-10 採用: 配布版の表示EMAだけ0.25から0.5へ。判定値不変、生値との平均乖離4.21→2.42pt'),
+)
+
+# 配布版の初回判定短縮候補。JSON専用スイッチで、既定OFF・本番未採用。
+LIVE_DISABLE_PLACEMENT_RECONCILE_DEFAULT: bool = False
+B3_SCORE_MATMUL_DEFAULT: bool = False
+B3_SHARE_SCORE_READ_DEFAULT: bool = False
+LIVE_ASYNC_SCREEN_VERIFY_DEFAULT: bool = False
+LIVE_STAGE_TIMING_DEFAULT: bool = False
+# 2026-10-13: user指示「デバッグ用にしばらくは L 字をデフォルトに設定し、L 字の中に状態・連鎖数・
+# フィールドの読み取りを表示」。配信表示の既定を L 字 + 試験用パネル ON にする (判定・勝率は不変)。
+# 戻すには LIVE_DEBUG_OVERLAY_DEFAULT を False にする (この1か所だけ)。puyo_live.json の overlay に
+# 明示した値は常にこの既定より優先される。
+LIVE_DEBUG_OVERLAY_DEFAULT: bool = True
+LIVE_DEBUG_OVERLAY_VALUES: tuple[tuple[str, str | bool], ...] = (('layout', 'l'), ('debug_panel', True))
+# 2026-10-13: 実装承認のみ。画素入力の品質・速度ゲート未達、本番未採用。
+LIVE_DELTA_CELLS_DEFAULT: bool = False
+LIVE_CNN_DEDUP_DEFAULT: bool = False
+TERMINAL_HOLD_INPUT_RECOVERY_DEFAULT: bool = False
+LIVE_LATEST_EVALUATION_DEFAULT: bool = False
+B3_WARNING_PARALLEL_DEFAULT: bool = False
+B3_WARNING_WORKERS: int = 4
+B3_WARNING_MAX_WORKERS: int = 4
+LIVE_SPEED_CANDIDATES: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('terminal_hold_input_recovery (puyo_live.json)', '2026-10-12',
+        'user承認・配布g候補。同一機器の画面検証失敗だけの境界では決着期限を維持。'
+        '得点境界・新試合の通常評価・機器変更・5秒期限で解除する。'),
+    AdoptedFlag('live_latest_evaluation (puyo_live.json)', '2026-10-12',
+        'user承認・配布g候補。状態通知を保持し、古い評価要求の計算だけを省略する。'
+        '同一盤面の値の一致を検証できない場合は配布でもOFFとする。'),
+    AdoptedFlag('live_stage_timing (puyo_live.json)', '2026-10-12',
+        'user承認・配布f候補。spoolへフレーム別の壁時計・thread CPU時間を記録し、'
+        '台で再現しない仮想カメラ入力の約30msを切り分ける。表示・判定値へ計装を混ぜない。'),
+    AdoptedFlag('live_async_screen_verify (puyo_live.json)', '2026-10-12',
+        'user承認・配布f候補。画面検証だけを単一workerで実行し、状態更新は入力所有者で行う。'
+        '入力断・形式変更前の結果を破棄し、初回合格までは保留。継続検証中は前回の状態を維持する。'),
+    AdoptedFlag('b3_share_score_read (puyo_live.json)', '2026-10-12',
+        'user承認・配布f候補。同じフレームの生得点だけを共有する。OCRクラス・ROI・'
+        'テンプレート・しきい値・演算方式が一致しない場合は再読し、判定digest一致を出荷条件とする。'),
+    AdoptedFlag('live_disable_placement_reconcile (puyo_live.json)', '2026-10-12',
+        'user承認。連続フレーム前提のR1bは5fps配信55分でnext合図・修正セルとも0。'
+        '配信だけ停止し、動画30fpsの既存経路は維持。再有効化は実測25fps以上を安定維持し、'
+        '連続フレーム合図の有効性と判定の改善を別途検証した場合。自動切替はしない。'),
+    AdoptedFlag('b3_score_matmul (puyo_live.json)', '2026-10-12',
+        'B3得点OCRも既存matmul経路へ。float64と旧NCCには閾値境界差の可能性があるため、'
+        '配布試験のみON。保存PNGの通知全体・B3 payloadのフレーム別digest一致を出荷条件とする。'),
+    AdoptedFlag('b3_warning_parallel / b3_warning_workers (puyo_live.json)', '2026-10-12',
+        '予告CNNの単体演算をセル単位で並列化。LRU操作を排他化しeval済みモデルを読み取る。'
+        'cpu_threads=1は各演算ライブラリの内部並列数であり、外側のworker数とは別。'
+        'OBS同居を考慮して最大4worker、既定OFF。CPU使用量と決定digestを配布前に測定。'),
+)
+
+FAST_FIRST_JUDGMENT_DEFAULT: bool = False
+# 2026-10-12: build f候補。検証専用の較正は認識色を変えないため裏で取り直す。
+# fast_firstがOFF、または実補正モードの場合には適用しない。
+FAST_FIRST_BACKGROUND_RECHECK: bool = True
+FAST_FIRST_RECHECK_CANDIDATES: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('fast_first_judgment + verification_only', '2026-10-12',
+        'build f試験限定。run_ffe/run_dsoakはverification設定でHSV補正非適用。'
+        '厳密な範囲照合失敗による23/48試合の表示中断を、背景再収集で防ぐ。'),
+)
+FAST_FIRST_JUDGMENT_CANDIDATES: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('fast_first_judgment (puyo_live.json)', '2026-10-11',
+        '実装承認のみ・本番未採用。OBS通し63試合で試合間の再較正が中央値5.05秒。'
+        '同じ入力の較正を保持し、空のSTABLE確定盤面から通知する。3手以内は通し試験で要検証。'),
+)
+# 配布版 (現行方式) の試合境界。入力世代切替の強制境界が、得点リセット用の5秒デバウンス枠を消費しない。
+# 既定OFFなら従来 (強制境界も枠を更新) とビット一致。CLIは --[no-]forced-boundary-debounce-isolation。
+FORCED_BOUNDARY_DEBOUNCE_ISOLATION_DEFAULT: bool = True
+# 2026-10-12: build fだけで有効にする候補。全体既定はOFF、既存の隔離は維持。
+RECOVERY_BOUNDARY_COALESCING_DEFAULT: bool = False
+LIVE_PUBLIC_MATCH_NUMBER_DEFAULT: bool = False
+LIVE_PUBLIC_MATCH_NUMBER_CANDIDATES: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('live_public_match_number (puyo_live.json)', '2026-10-13',
+        '内部キーと公開番号の分離。入力回復でも評価器・死亡・EMA・決着保持は従来どおり初期化。'
+        '既定OFF、m配布限定。保存評価397435行・公開53366件は番号以外バイト一致。'
+        'g/h/j/kの余計な85区切りを除去するが、kの本物1境界も公開未加算。'
+        '根拠: docs/LIVE_COALESCE2_VALIDATION.md。OBS実機通しの品質合格ではない。'),
+)
+EVALUATION_FRESHNESS_GATE_DEFAULT: bool = False
+TERMINAL_DISPLAY_HOLD_DEFAULT: bool = False
+TERMINAL_DISPLAY_HOLD_CANDIDATES: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('terminal_display_hold (puyo_live.json)', '2026-10-12',
+        'user決定2026-10-12。次の試合の始まりまで保持し、区切り取りこぼし時の誤表示は最大5秒。'
+        '別機器・試合番号変更で解除し、反復確定では期限を延長しない。'
+        '境界直後の旧死亡再保持は、新試合の通常評価まで禁止。配布試験だけON。'),
+)
+EVALUATION_FRESHNESS_CANDIDATES: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('--evaluation-freshness-gate', '2026-10-12',
+        'build f試験限定。run_ffeの29.3秒間の古いlive表示を、評価完了から2秒で理由付きholdへ。'
+        'confirmed_deathの決着保持は対象外にし、未決の100/0保持方針と分離する。'),
+)
+RECOVERY_BOUNDARY_CANDIDATES: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('--recovery-boundary-coalescing', '2026-10-12',
+        'build f試験限定。run_ffeの入力復帰直後の境界二重化を統合する。'
+        '5秒未満の得点リセットでも死亡状態を初期化し、試合番号の加算だけ抑止。'),
+)
+LIVE_BRIDGE_ADOPTED: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('--forced-boundary-debounce-isolation', '2026-10-11',
+        'user承認 2026-10-11 / soak game11 の死亡確定持ち越し。'
+        '強制境界 (入力世代切替) が得点リセット境界の5秒デバウンス枠を消費し、3.81秒後の本物の得点リセット境界 '
+        '(OBS soak 通し試験 t=699.91s) が拒否されて、前試合の2P死亡確定が次試合の約42秒に残り1P勝率100%が出続けた。'
+        '強制境界単独のフレームでは枠の時刻を境界前の値へ戻す (同一フレームの得点リセット境界は従来どおり枠を更新)。'
+        '保存済み4記録 (soak 14,592行・test 1,318/888/174行) の再生で、修正前の再生は実game_idxと0不一致、'
+        '修正後に増える境界は soak の699.91の1件のみ (他3記録は差0)。'
+        '再生台 scripts/replay_forced_boundary_20261011.py、単体 tests/phase_j/test_live_forced_boundary.py'),
+)
 
 
 # ============================
@@ -1366,6 +1511,130 @@ def known_pipeline_gap_columns() -> frozenset[str]:
     return frozenset(g.column for g in KNOWN_PIPELINE_GAPS)
 
 
+
+# E32固定検収の実効引数から抽出した撃ち合い評価の本番構成。
+DV2D_ADOPTION_REASON = "D-v2d (誤った負け確定の根治) — 表示区間の誤確定 zenchi セット1 9→0・セット2 6→0・既存5記録 0→0、3:00場面 2761.28秒、第14試合0。M_time +0.0058 [−0.0086, +0.0206]・M_agree −0.0130 [−0.0400, +0.0135] で門v2の点推定条件は不成立、正しい計算確定 55件が観測死亡まで遅れる (中央値 3.9/5.6秒)。user 判断 2026-10-02 で例外採用 (誤確定0を優先)。独立再計算一致・差分査読済み。抽出元: wt_evalset 42d82b1、logs/eval_set/falsedeath_fix/v2d/REPORT.md、DECISIONS.md 2026-10-02。"
+
+DV2H2B_ADOPTION_REASON = "D-v2h2b — 表示区間の誤確定 0 (zenchi セット1・セット2・既存5記録)、3:00場面 2762.55秒、第14試合0、M_time D-v2d 比 +0.0011 (user 例外判断 2026-10-03 を事前登録どおり継承、上限 +0.002)、正しい確定の消失 70、開始未観測 57/176。E35″ の誤確定 (mia 試合7型) を発火時の元予測と観測の段ごとの照合で止める。抽出元: wt_evalset f34d3be、logs/eval_set/falsedeath_fix/v2h2b/REPORT.md、DECISIONS.md 2026-10-03。"
+
+A2_ADOPTION_REASON = "A2 (式の段原点分離 + H1′ のMENU開始受理) — 115試合 M_time −0.002115 [−0.006464, +0.001154]、M_agree +0.004635 [−0.002218, +0.016401] で門v2合格、表示区間の誤確定 0 (18記録)、3:00場面 2762.55秒、第14試合0、開始未観測 57→22/176、表示内 H1抑止 311→0、正しい確定の消失1 (セット1第10試合、開いたままのexchangeへの偶然依存が解消された副作用)・追加14。独立再計算一致 (不一致0)・差分査読済み。抽出元: wt_a2 dca8384、docs/agent_coordination/A2_SAFETY_REVIEW_20261003.md、DECISIONS.md 2026-10-03。"
+A1B_ADOPTION_REASON = "A1b (完走予測の代表候補を段数最大・同段数なら確率最大にし、段数と得点を同じ候補から取る + 観測済みの段の式累計と現在盤面からの因果補完) — A1b+A2 の旧本番比 115試合 M_time −0.0013 [−0.0121, +0.0084]・M_agree +0.0007 [−0.0152, +0.0204]、A2単独比 M_time +0.0008・M_agree −0.0039 で門v2合格、誤確定0 (18記録)、3:00場面 2762.55秒、第14試合0、実7連鎖以上118件の得点誤差中央値 5,698→1,380点・P90 105,614→93,686点。正しい確定の消失 A2比1件 (set1第18試合2P、4.3秒遅れ、予測得点が当たり画面得点の進みを待つ安全検査の設計どおり)。独立再計算一致 (不一致0)・差分査読済み。A1 (確率最大候補) は M_time +0.0025 で不合格のため不採用。抽出元: wt_a1 ace3a7f、docs/agent_coordination/A1B_COMPLETION_SCORE_20261003.md、DECISIONS.md 59d155a。"
+
+EXCHANGE_EVENT_ADOPTED: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('--completion-score-max-chain', '2026-10-03', A1B_ADOPTION_REASON),
+    AdoptedFlag('--a2-safety-review', '2026-10-03', A2_ADOPTION_REASON),
+    AdoptedFlag('--death-history-boundary-start', '2026-10-03', DV2H2B_ADOPTION_REASON),
+    AdoptedFlag('--post-counter-completion-recent-integrity', '2026-10-03', DV2H2B_ADOPTION_REASON),
+    AdoptedFlag('--death-integrity-v2h2', '2026-10-03', DV2H2B_ADOPTION_REASON),
+    AdoptedFlag('--death-freshness-cap', '2026-10-03', DV2H2B_ADOPTION_REASON),
+    AdoptedFlag('--death-input-integrity', '2026-10-02', DV2D_ADOPTION_REASON),
+    AdoptedFlag('--score-attribution-v2', '2026-10-02', DV2D_ADOPTION_REASON),
+    AdoptedFlag('--post-counter-current-puyo-integrity-v2c', '2026-10-02', DV2D_ADOPTION_REASON),
+    AdoptedFlag('--death-history-integrity', '2026-10-02', DV2D_ADOPTION_REASON),
+    AdoptedFlag(
+        '--exchange-event-static-gfe-dir models/exchange_event_v1_r1_hgb', '2026-10-02',
+        "G_fe 段2b R1s (通常静止の G_fe のみ現行59列 HistGBC、仮想着弾は現行 LR) — 115試合 M_time −0.0043 [−0.0086, −0.0001]、M_agree −0.0005、±3帯反転 321→242 / 327→260、誤確定・3:00場面不変、G_fe P95 3.3ms。独立再計算一致・差分査読・CLI配線確認済み (wt_phase af583a5)。評価セット上の診断後に作った構成のため選択の楽観が残る。抽出元: wt_phase logs/gfe_phase_stage2b_20261002/SUMMARY.md、DECISIONS.md 2026-10-02。",
+    ),
+    AdoptedFlag(
+        '--exchange-event-update', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--exchange-event-model-dir models/exchange_event_v3', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--exchange-event-live-count', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--exchange-event-death-guard', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--confirmed-death-hold', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--death-formula-guard', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--color-score-safety', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--multi-landing-death', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--midchain-completion', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--death-pending-ledger', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--hidden-row-death', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--prefire-snapshot', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--hidden-row-belief', "2026-09-29",
+        'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
+    ),
+    AdoptedFlag(
+        '--post-counter-death-bound', "2026-09-30",
+        'E35 打ち返し後の死亡上限 (コミット0f28a04)。 e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+    AdoptedFlag(
+        '--single-death-proof-guard', "2026-09-30",
+        'D5 単発着弾死亡を全応手の消去後盤面で証明してから確定 (71d378d)。 e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+    AdoptedFlag(
+        '--single-death-proof-negative-only', "2026-09-30",
+        'D5b 取消を生存枝・相殺可能の証明だけに限定 (0b8a76b)。 e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+    AdoptedFlag(
+        '--post-counter-early-exit', "2026-09-30",
+        'E35で最初に死なない候補が見つかった時点で残りの候補証明を省く (判定は同一、監査のproofsだけ短くなる)。 評価遅延対策B2 (6f370c8/92d5460): 保存記録5本の再生で現本番と出力一致 (内訳proofsを除く51/51ファイル)・門通過 (q .507567 / zenchi 7,671/8,333 / 誤発火0/37 / 3:00場面 2760.38秒 / 第14試合0)。rt由来のb20窓 (4,196通知) で最大 18.9秒→0.62秒・1秒超 66→0件。ノード上限(B1)は実在の死亡確定を1件失うため不採用 (座長判定、DECISIONS.md 2026-09-30)。抽出元: logs/multilanding_speed/RESULT.md、logs/multilanding_speed/gate_bounded2/SUMMARY.json。',
+    ),
+    AdoptedFlag(
+        '--hidden-scenario-cap 256', "2026-09-30",
+        '隠し段の得点候補が256通りを超えるとき重み上位256通りに絞る (合計重み保存、保存記録5本では発動せず、b20窓の43通知で発動し評価値8,234件中62件が最大3.4ポイント動く・判定変化0)。 評価遅延対策B2 (6f370c8/92d5460): 保存記録5本の再生で現本番と出力一致 (内訳proofsを除く51/51ファイル)・門通過 (q .507567 / zenchi 7,671/8,333 / 誤発火0/37 / 3:00場面 2760.38秒 / 第14試合0)。rt由来のb20窓 (4,196通知) で最大 18.9秒→0.62秒・1秒超 66→0件。ノード上限(B1)は実在の死亡確定を1件失うため不採用 (座長判定、DECISIONS.md 2026-09-30)。抽出元: logs/multilanding_speed/RESULT.md、logs/multilanding_speed/gate_bounded2/SUMMARY.json。',
+    ),
+    AdoptedFlag(
+        '--exchange-event-switch-smoothing', "2026-10-01",
+        '評価器切替時の表示値の飛び対策 (表示のみ・評価値/確率/死亡判定は不変)。(a)旧評価器値もEMA (b)EMA状態を表示値へ連続・試合境界は即時スナップ (c)物理イベントのない由来切替のみ0.5秒線形ブレンド・確定死亡は即時。 保存記録5本 (112,346フレーム・由来切替641回) の再生: 物理イベントなし・由来切替に帰属する飛び 34→16件 (−53%)・全飛び 342→297・試合境界の飛び 33→5。標準q .5075670 (不変) / 表示ベースq .506002→.506334 / 誤発火0/37 / 3:00場面 2760.25秒 / 第14試合0 / 確定死亡の即時性 5,544/5,544行 / 鮮度 (同値率 .1592→.1606・最長同値 85.97秒 同・更新回数/分 1513→1511) / 平滑前の列5記録全一致。zenchi 7,671→7,670 (門7,671に1フレーム未達、2948.483秒 第47試合の窓境界1フレーム: OFFは前試合の古いEMAが偶然勝者側の符号) のため **事後例外 (DECISIONS.md 2026-10-01、user承認)** で採用。抽出元: logs/switch_smoothing/RESULT.md、src/exchange_display_smoothing.py。',
+    ),
+)
+
+# R1b 認識側の置き完了合図照合 (NEXT移動+掛け算式の2合図)。撃ち合い評価の再生CLIは
+# 保存済み記録を読むだけで受け付けないため、EXCHANGE_EVENT_ADOPTED とは別バケットにする。
+# RECOGNITION_ADOPTED は load_default kwargs へ機械変換され (enable_* 名の重複供給で
+# TypeError)、かつ AST 固定テストで凍結されているため、そこへは入れない。
+PLACEMENT_RECONCILE_ADOPTED: tuple[AdoptedFlag, ...] = (
+    # 描画CLIを共有するライブ版にも届く。load_default用kwargsとは分離する。
+    AdoptedFlag('--falling-puyo-integrity', '2026-10-02', DV2D_ADOPTION_REASON),
+    AdoptedFlag(
+        '--placement-signal-reconcile', "2026-09-30",
+        'R1b (82d3baf) 置き完了合図の照合 (NEXT移動+掛け算式、おじゃま合図は含めない): e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+    AdoptedFlag(
+        '--next-recolor-pair-guard', "2026-09-30",
+        'cycle65 NEXT履歴色補正の対整合ガード (d3c5b0d)。確定遅延時に1手先のqueueで着地セルを上書きする誤りを止める (根因: logs/match14_misread/DIAGNOSIS.md)。 c65全長検収 (R1b+E35+D5+D5b+本ガード、E36事前登録門): q .507567 (門 .508040) / zenchi 92.06% (7,671/8,333、門7,671) / 誤発火0/37 (門1/35) / 3:00場面 2760.38秒 (門2766.0秒) / 第14試合1P 884秒の誤確定0。E36b本番比 q +0.000002 / zenchi -5フレーム / 誤発火 1→0。影子測定 4動画 書換セル正解 269→581/584 (悪化1セル zenchi 3155.75秒)。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/c65_guard/e36b_on、logs/c65_guard/RESULT.md。',
+    ),
+    AdoptedFlag(
+        '--verification-pending-chain-expiry', "2026-09-30",
+        '連鎖後答え合わせの pending を新しい連鎖開始で失効 (0c0c338)。q第14試合の幻おじゃま (1,5)(2,5)(3,5) の根因B (logs/match14_misread/DIAGNOSIS.md)。 影子測定 4動画: 答え合わせ248件中失効10、書込セル正解 1,106→1,179/1,467 (悪化0・改善73)。 全長ゲート (事前登録 e9e1912、現本番比非悪化): q .507567 / zenchi 7,671/8,333 / 誤発火0/37 / 3:00場面 2760.38秒 / 第14試合誤確定0 — 評価出力は現本番と同一 (認識記録は q 693行・fc 1,365行が変化、盤面品質のみ改善)。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/pending_expiry/e36b_on、logs/pending_expiry/RESULT.md。',
+    ),
+)
+
+
 def _join(flags: tuple[AdoptedFlag, ...]) -> str:
     """フラグ文字列を空白区切りで連結する。"""
     return " ".join(f.flag for f in flags)
@@ -1409,6 +1678,16 @@ def advantage_overlay_flags() -> str:
     return _join(ADVANTAGE_ADOPTED)
 
 
+def exchange_event_flags() -> str:
+    """撃ち合いイベント評価の本番構成フラグを返す。"""
+    return _join(EXCHANGE_EVENT_ADOPTED)
+
+
+def placement_reconcile_flags() -> str:
+    """R1b認識側の合図照合フラグ (描画CLIだけが受け付ける) を返す。"""
+    return _join(PLACEMENT_RECONCILE_ADOPTED)
+
+
 def visualization_flags() -> str:
     """認識オーバーレイ表示の本番構成フラグを返す。"""
     return _join(VISUALIZATION_ADOPTED)
@@ -1421,10 +1700,13 @@ def describe() -> str:
         ("認識(共通)", RECOGNITION_ADOPTED),
         ("認識(収集専用)", COLLECT_ONLY_ADOPTED),
         ("有利不利", ADVANTAGE_ADOPTED),
+        ("撃ち合いイベント評価", EXCHANGE_EVENT_ADOPTED),
+        ("認識(置き完了合図の照合)", PLACEMENT_RECONCILE_ADOPTED),
         ("表示", VISUALIZATION_ADOPTED),
         ("連鎖シミュレーション", CHAIN_SIM_ADOPTED),
         ("指標大整理", INDICATOR_REORG_DECISIONS),
         ("学習データビルダー", LEARNING_DATA_BUILD_ADOPTED),
+        ("配布版ライブ (CLI/ブリッジ専用、描画CLIへは渡さない)", LIVE_BRIDGE_ADOPTED),
     ):
         lines.append(f"[{title}]")
         for f in flags:
@@ -1432,5 +1714,322 @@ def describe() -> str:
     return "\n".join(lines)
 
 
+# 2026-10-07: 公開時のゲーム画像除外に向けた候補。比較未合格につき未採用。
+IMAGE_FREE_SCORE_OCR_DEFAULT: bool = False
+# 2026-10-07: ×印の蒸留候補。連続フレーム・下流比較未合格につき未採用。
+IMAGE_FREE_UI_MASK_DEFAULT: bool = False
+
+
 if __name__ == "__main__":
     print(describe())
+
+# 2026-10-07: 全UI画像非同梱候補。連続比較の合格前につき未採用。
+IMAGE_FREE_ALL_DEFAULT: bool = False
+# 2026-10-12: 10/10決定の実装候補。評価器の予告判定を得点台帳にする。本番未採用。
+B3_LEDGER_MODE_DEFAULT: bool = False
+# 2026-10-12: 着地量をアイコン差から台帳の観測着弾へ切替。本番未採用。
+B3_LEDGER_LANDING_DEFAULT: bool = False
+# 2026-10-12: lineをlargeに復号。v6のlarge=0分布を変えるため、再学習とセットでのみON。
+B3_ICON_LINE_ALIAS_DEFAULT: bool = False
+# 2026-10-25: 案A。受ける側から見た『正味の予告』列 (net_pending_pN / df_sl_net / ta_*_slnet) を B3 行の末尾へ足す。
+# 既存の sl_pending・sl_inflight から導出するだけで、台帳本体・学習済み重みは変えない。既定OFF・未採用
+# (OFFでは列も値も不変)。採用は PC2 の再学習と LL 比較の後。前提: sl_inflight 列 (PUYO_B3_M3=1)。
+# 根拠: <work>/ledger_chain_diag_20261025/RESULT.md (確定後の値と符号一致 98.2%、アイコン 85.1%)。
+B3_NET_LEDGER_COLS_DEFAULT: bool = False
+# 2026-10-25 (記録のみ・既定値は変えない): 配信の試験フラグ b3_c2 (src/phase_j/live_obs_trial.py、既定OFF、OBS 試験版専用)。
+# 勝率モデルを M3 から C2 (= M3 − アイコン由来 13 列 + 上の正味 17 列 = 299 列) に替え、予告アイコン CNN を読まない。
+# 前提: b3_judgment・b3_async・b3_m3・b3_skip_icon_reading (ON で PUYO_B3_NET_LEDGER_COLS='1'、OFF で '0' を配送)。
+# 根拠: user 決定 2026-10-25 (「アイコンは外す、C2 が合格したら C2 の B3 を使う」)、C2 は PC2 m3_net で PASS
+# (対差 95% 上端 <= +0.00076 かつ ECE 11/11 層、share/m3_net_20261025/results_pc2/RESULT_C2.json)。
+# 本番採用は別 (M3 の 5 フラグ・B3_SKIP_ICON_READING_DEFAULT・B3_LEDGER_*・本番モデルの切替を user に見せてから)。
+# 2026-10-25: 配信の試験フラグ b3_ensemble (src/b3_ensemble.py・src/phase_j/live_obs_trial.py、既定OFF・未採用、前提は b3_c2)。
+# C2 の seed 違いを複数並べ、同じ行の確率を平均する (既定は確率の算術平均、設定で logit 平均)。b3_model はマニフェスト JSON。
+# OFF では設定・出力・b3_config.json・子 process の動きが従来と同一 (src は load_model の分岐 1 か所だけ)。
+# 根拠: user 承認 2026-10-25 15:35。CV は seed 3 本 (1003/1004/1005) の成績の平均で、seed が違うと配信の予測が平均 0.015・
+# 最大 0.26〜0.36 違う (HGB は学習 20 万行超で乱数の抜き取りから bin を決める) ため、配信を CV と同じ条件へ寄せる受け皿。
+# 本番採用は別 (最終学習のモデルの到着・PC2 の平均の仕方の測定・マニフェストの SHA256 登録の後に user へ)。
+B3_ENSEMBLE_DEFAULT: bool = False
+# 2026-10-13: h限定で採用。48,367通知の参照値一致、表示・死亡監査一致。通常既定はOFF。
+LIVE_REFERENCE_TIMES_ONLY_DEFAULT: bool = False
+# 2026-10-13: i限定ON。48,367通知・表示3,191行・死亡証明一致、連鎖P95 47.23→19.33ms。
+LIVE_NEAR_FUTURE_CACHE_DEFAULT: bool = False
+# 2026-10-13: j限定ON。全48,367通知・表示3,191行・死亡証明一致。通常既定はOFF。
+LIVE_EXACT_CONNECTIVITY_DEFAULT: bool = False
+# 2026-10-13: k限定ON。全通知・表示・死亡証明一致。通常既定はOFF。
+LIVE_EXACT_NATIVE_DEFAULT: bool = False
+# 2026-10-13: 保持中の画像を上書きしない補正buffer候補。全件・55分門未達、未採用。
+LIVE_COLOR_BUFFER_DEFAULT: bool = False
+# 2026-10-13: intra=2・スピンなしの認識候補。保存画像の短区間のみ検証、未採用。
+LIVE_ONNX_PARALLEL_DEFAULT: bool = False
+LIVE_PROOF_DELIVERY: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('live_exact_native', '2026-10-13',
+        'build_20261012k限定ON。UNKNOWN壁を保持する単盤面Rustの静止判定・連鎖計算。'
+        'FIX4基準で48,367通知の参照/表示/EMA/署名、表示3,191行の全列バイト、死亡履歴/証明一致。'
+        'j相当との再投入でt=7027.10は1,249.72→754.29ms、hは4,158.35→3,827.06ms。'
+        '候補・探索順・ノード上限・通知は維持。局所連結はjのPython版を維持。'
+        '数秒の計算停止は残り、OBS実機品質合格ではない。'),
+)
+LIVE_STALL_DELIVERY: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('live_exact_connectivity', '2026-10-13',
+        'build_20261012j限定ON。評価子の連結確認と消去グループ生成だけを厳密短縮。'
+        'FIX4基準で表示3,191行の全列バイト・48,367通知署名・死亡履歴/証明一致。'
+        '更新+参照の最大2,526.67→1,267.61ms、h/g停止試合の最大6,949.55/6,964.31→4,151.75/4,193.01ms。'
+        '候補・探索順・ノード上限・通知を維持。数秒の計算停止は残り、OBS実機品質合格ではない。'),
+)
+LIVE_SPEED3_DELIVERY: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('live_near_future_cache', '2026-10-13',
+        'build_20261012i限定ON。コードSHAと全探索入力で結果を再利用し先頭32命中を実計算照合。'
+        '保存入力48,367通知・表示3,191行・死亡履歴/証明一致。連鎖14,503件のP95 47.23→19.33ms。'
+        'おじゃまP99/最大は未改善、保存到着によるキューP95見積り10→9。実機合格ではない。'),
+)
+# 2026-10-13: 同一入力の外枠単独失敗の短期猶予。負例検証前につき既定OFF。
+LIVE_BORDER_GRACE_DEFAULT: bool = False
+# 2026-10-22: 撃った連鎖の火力 X の段1 直接公開 (設計 <work>/live_x_timing_20261022/DESIGN.md §2)。
+# ON は v4.9f の送受信を2 threadに分け、X の初出で評価所有者を起こして B3 完了と同じ経路で即公開し、
+# 判定IDへ X の完了時刻を足し、v4.9f 予測時間の例外門 (MAX_LOW_SPEC_MS) を記録だけにする。
+# 実装・試験のみ。実時間の効果測定 (L 条件 ABBA) 前につき既定OFF・本番未採用 (採用は user 判断)。
+LIVE_X_DIRECT_PUBLISH_DEFAULT: bool = False
+# 2026-10-22: 撃つ直前の暫定 X (段3、DESIGN live_x_timing_20261022 §3・§8)。実装のみ・未採用。
+# shadow = 記録のみ (live_x_prefire.jsonl)、live_x_prefire = 別欄 x_provisional の表示。
+# どちらも live_v49f=true が前提。v4.9f の p1 へは入れない (親裁定 (2)、p1 採用は user 判断)。
+LIVE_X_PREFIRE_SHADOW_DEFAULT: bool = False
+LIVE_X_PREFIRE_DEFAULT: bool = False
+# 2026-10-23: コマ落ちに強い数え方 (設計 <work>/frame_drop_robust_20261023/DESIGN.md)。
+# ON では認識と B3 入力の回数の判定を、仮想 30Hz の刻みと実観測の下限 m = max(2, ⌊N/4⌋) で数える。
+# 全コマ処理では出力が OFF とビット単位で同じ (要件 E1)。配信 (launcher / live_speed) だけで切り替え、
+# 学習データの収集・レビュー台は OFF のまま (user 承認 A 案、2026-10-23)。
+# 入っている型 (2026-10-23 の最初の型): R01・R04 (型 A)、R02・R03 (型 C)、B07 (型 H2)。
+# 2026-10-23 追加: R35 (型 H1、見逃した設置を NEXT の移動と色ぷよ 2 個増・連鎖開始から補う、user 承認)。
+# 2026-10-23 追加: R06・R10 (型 A、連鎖後とおじゃま後の静止待ち 8 回)、R15 (型 B、おじゃま後の煙待ち)。
+# 実装・試験のみ。効きの測定 (段 2b) 前につき既定OFF・本番未採用 (採用は user 判断。採用時は
+# LIVE_FRAME_DROP_ROBUST_DELIVERY に採用日と根拠を記録してから既定値を変える)。
+LIVE_FRAME_DROP_ROBUST_DEFAULT: bool = False
+# 2026-10-23: 処理できるコマ数を上げる試作 (<work>/live_fast_20261023/PLAN.md)。実装・試験のみ、本番未採用。
+# b3_warning_batch: 予告アイコン CNN を存在判定を通ったセルだけ 1 コマ 1 回の forward にまとめる
+#   (src/batched_ojama_warning.py)。判定の分岐は旧 detect と同じ、閾値±1e-4 は単体推論で判定し直す。
+# b3_warning_prefetch: その読取を盤面認識の前に 1 本の worker で始めておく (b3_warning_batch が前提)。
+# 出力不変の確認と速度は PLAN.md。採用は user 判断。
+B3_WARNING_BATCH_DEFAULT: bool = False
+B3_WARNING_PREFETCH_DEFAULT: bool = False
+# 2026-10-24: user「予告の確認は外に出していい」。認識待ちをなくす試作、本番未採用。
+# ON は専用スレッド＋最新一件の batch 処理。parallel/prefetch より優先、skip は最優先。
+B3_WARNING_ASYNC_DEFAULT: bool = False
+# 2026-10-23: 上のフラグが ON のとき、R06・R10・R15 のうち刻みで数える箇所 (段 2b の箇所ごとの採否、
+# 受領票 D:/puyo_analyzer/frame_drop_a_20261023/RECEIPT_R06_R10_R15.json)。user 承認 (12:55) の条件
+# 「足す前の版 (R35 まで) より間引きの台 4 種で悪くならない。悪くする箇所は外す」を、全体の平均差 0.05pt
+# (間引きの OFF 同士の揺れ) を超える悪化で判定した:
+#   R15 入れる (L1 -0.008pt・half -0.005pt)
+#   R06 外す   (L1 +0.187pt。half -0.111pt・third/obs21c は改善で向きが割れる)
+#   R10 外す   (外した版と比べ half +0.429pt・obs21c +0.063pt。試合 1 終盤の状態の道筋は R10 で F に戻る)
+# R06・R10 の実装は残す (ここへ足せば ON の中で働く)。R01・R02/R03・R04・B07・R35 はフラグ ON で常に働く。
+# 2026-10-23 夜 (23y の OBS 試験版、user 承認の条件「間引きの台で足す前の版より悪くならなければ入れる」): FDR の最終構成 (R15 のみ)
+# を間引きの台 4 パターンで測り直した。足す前の版 (R35 まで) との平均差は L1_OFF +0.009・half +0.007・third +0.032・obs21c +0.086pt。
+# obs21c が線 0.05pt を超えたので R15 も外す。既定を空にする (= 刻みで数えるのは R01・R02/R03・R04・B07・R35 だけ)。
+# 受領票 D:/puyo_analyzer/packaging/build_20261023_obs_y/work/thin/summary.json。R15 の実装は残す (ここへ足せば働く)。
+LIVE_FRAME_DROP_ROBUST_SITES: frozenset[str] = frozenset()
+# 2026-10-23: R37 試合開始の判定 (設計 <work>/frame_drop_robust_20261023/DESIGN.md §11.2・§9 Q9)。
+# ON = RecognitionPipeline(enable_lockdown_score_zero_then_move_release=True)。user の決まり (8/19「必ず試合前
+# スコアは 0」、10/23「得点が 0 同士なら試合前、動いた瞬間試合開始」): 試合終了 → 両者 0 点 (試合前) →
+# どちらかの得点が増え、増えた値が 2 回続けて読めたら試合開始。盤面の画素の確認は使わず、試合終了の固定
+# (5 秒) の最中でも開始する (固定の残りで試合外・演出扱いにしない)。今のラッチの解除経路は補助として残り、
+# ON は OFF より遅くならない。enable_post_match_lockdown_latch=True が前提 (False との組合せは ValueError)。
+# 背景: 盤面の画素の確認は 8/18 に「対戦カード紹介の装飾スコアのカウントアップ」対策で足されたが、保存画像
+# (data/verify/boundary_impl_verify_2026-08-18/frames_c18・c20) の実体は次の試合の最初の設置 (診断の取り違え)。
+# 実測 (video_30 試合 2 の始まり、同じ区間 222〜238 秒を本番の認識設定で流した。受領は scratchpad の r37_probe):
+#   全コマ: 試合開始の判定 OFF 232.267 秒 → ON 230.300 秒 (最初の得点 230.267 秒の直後)
+#   13762 コマを飛ばす間引き (3 コマに 1 回): OFF 234.000 秒 (設計 §11.2 の L2・L3 と同じ) → ON 230.550 秒
+#   OFF は基準点 (6257b923) と 960 コマ全て一致 (開始判定・固定・ラッチ・得点・両側の状態)。
+# 実装・試験のみ。配信 (live_speed.recognition_config) への配線はまだ。採用は user 判断 (採用時は
+# AdoptedFlag で採用日と根拠を記録してから既定値を変える)。
+LIVE_LOCKDOWN_SCORE_ZERO_THEN_MOVE_DEFAULT: bool = False
+# 2026-10-24 試作: 告知の左右組と0/0までの保持。録画1本の実測のみのため既定OFF。
+LIVE_MATCH_END_PAIR_DEFAULT: bool = False
+# 2026-10-14 user決定(案2 物理ルール): 確定盤の3列目12段目 (row1 col2) の幻ぷよ (×印・操作中ツモ)
+# を公開盤から外す。実装は src/row1_guard.py。
+# 2026-10-15 user承認「両方OK」で本番ON (v2.1、置き終わりの合図で即確定)。根拠は LIVE_ROW1_GUARD_DELIVERY。
+LIVE_ROW1_GUARD_DEFAULT: bool = True
+# 2026-10-17: user 10/16決定「試験合格後に製品ON」をeo2と独立検収で満たした。
+LIVE_SCORE_ROI_ALIGNMENT_DEFAULT: bool = True
+LIVE_SCORE_ROI_ALIGNMENT_DELIVERY: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('align_score_roi', '2026-10-17',
+        'user 2026-10-16決定。PC2 eo2 (4b590092、5動画×OFF/ON) 全条件PASS・'
+        'PC2 Claude独立検収合格。39/94の有効式0.51→16.07%・5.56→17.22%、(0,-2)px。'
+        '29/65/79は(0,0)px、認識・表示勝率・死亡・個数DTO・式得点原票が完全一致。'
+        '固定枠平均NCC閾値0.80を維持。settled事後EMAの既知非決定性は公開表示と区別。'),
+)
+LIVE_ROW1_GUARD_DELIVERY: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('live_row1_guard', '2026-10-15',
+        'PC2 en段4 (5動画×OFF/ON、HEAD 5bf5bb81)・PC1再集計: 対象外セル差0/68,273,282、'
+        '表示勝率差0 (442,101コマ)・死亡判定差0 (246試合)。再現した幻の陽性コマ461→191 (59%減)、'
+        '持続約5秒→0.7〜2.2秒、2件は不変。品質門の不合格は着地未反映2件でOFFでも同じ既存欠測。'),
+)
+LIVE_FIX4_DELIVERY: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('live_reference_times_only', '2026-10-13',
+        'build_20261012h限定ON。10/12保存入力48,367通知で物理時刻一致。'
+        '表示と死亡証明は同一、連鎖中の参照平均8.811→0.045ms。'
+        '通知・評価・EMA更新を省略せず、不要な履歴の深い複製だけを除く。'),
+)
+
+# 2026-10-12 user承認A: v6を維持し、配布eだけ予告CNNを省略して欠測を渡す。
+B3_SKIP_ICON_READING_DEFAULT: bool = False
+B3_ICON_OFF_DELIVERY: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('b3_ledger_mode / b3_ledger_landing / b3_skip_icon_reading', '2026-10-12',
+        'build_20261012e限定でON。予告は得点台帳を主とし、アイコンは補助のため省略。'
+        'v6・列構成を維持し、既存のNaN欠測経路へ渡す。大アイコン補正はOFF。'),
+)
+
+
+def b3_ledger_mode_enabled() -> bool:
+    """配布設定をspawn先でも受け取る。未指定時は本番既定値を使う。"""
+    import os
+    return os.environ.get('PUYO_B3_LEDGER_MODE', str(int(B3_LEDGER_MODE_DEFAULT))) == '1'
+
+
+def b3_ledger_landing_enabled() -> bool:
+    """着地量の入力元を配布設定から解決する。学習側の既定は変更しない。"""
+    import os
+    return os.environ.get('PUYO_B3_LEDGER_LANDING', str(int(B3_LEDGER_LANDING_DEFAULT))) == '1'
+
+
+def b3_net_ledger_cols_enabled() -> bool:
+    """正味の予告列 (案A) を行へ足すか。環境変数 PUYO_B3_NET_LEDGER_COLS=1 で spawn 先にも伝える。既定OFF。"""
+    import os
+    return os.environ.get('PUYO_B3_NET_LEDGER_COLS', str(int(B3_NET_LEDGER_COLS_DEFAULT))) == '1'
+# 2026-10-24: 入力検証の小条件を観測する試作。判定変更前の原因収集用、既定 OFF。
+LIVE_VERIFY_REASON_LOG_DEFAULT = False
+
+# 2026-10-24: 配信本体の HSV を既存 Rust 実装へ切り替える試作。既定 OFF。
+# 2026-08-20 のビット一致検証と 08-21 の短縮実測が根拠。実効値は認識子で記録する。
+LIVE_NATIVE_HSV_MAIN_DEFAULT: bool = False
+# 2026-10-24: OBS の同期 OCR によるコマ落ち対策。実機採用前のため既定 OFF。
+LIVE_VERIFY_ASYNC_DEFAULT = False
+
+# 2026-10-24: 起動と停止のガード (OBS 試験 24b の精査)。
+# 二重起動の許可。False = 二重起動を検出して止める (PuyoLive 1 つの正常な使い方は変わらない)。
+# 根拠: Windows の ThreadingHTTPServer は SO_REUSEADDR で同じ port への 2 つ目の bind が黙って成功し、
+# 24b では 2 つ目が HTTP 送信 0 件のまま 2 時間 CPU を取り合った (単体の実測: tests/test_stream_overlay_exclusive.py)。
+ALLOW_SECOND_INSTANCE_DEFAULT = False
+# カメラの再接続。入力経路を変えるため試作・既定 OFF。実機 (OBS 仮想カメラの再起動) での検証前。
+LIVE_CAPTURE_RECONNECT_DEFAULT = False
+# B3 作業 process が Ctrl+C を無視し、親の終了の合図だけで止まる。停止経路を変えるため試作・既定 OFF。
+# 根拠: 手で止めた 18 件の b3_async_status.json が全て finished=null (作業 process が KeyboardInterrupt で
+# done を返さず死ぬ。smoke_NEW の b3_updates.jsonl に {"fatal": "KeyboardInterrupt: "})。
+B3_WORKER_GRACEFUL_STOP_DEFAULT = False
+
+# 2026-10-24: 盤面読取 (read_board / read_board_hsv_only / classify_batch / CNN 前処理) の
+# マスごとの Python ループを numpy・Rust の一括呼出に置き換える試作 (src/live_board_vectorized.py)。
+# 既定 OFF。根拠: 出力を 1 ビットも変えずに 1 コマの呼出回数と毎コマの 6MB 新規確保を減らす。
+# 配布 Python・配布 CNN (cnn_phase_b_large_v2.pt) の実コマ (d04 動画 / 23y 録画) で、
+# ON と OFF の盤面・確率・HSV 画素・内部記録・PipelineResult がビット一致 (0 件の違い)。
+# 同じ実コマ 1,000 コマの交互測定で read_both_boards 平均 9.4〜14.2 → 7.1〜10.7ms、
+# 認識 1 コマ平均 19.5〜23.6 → 16.8〜19.8ms (測定条件・母数は
+# scripts/verify_live_board_vectorized.py / bench_live_board_vectorized.py の出力を参照)。
+# 実機での採用前に OBS 試験で実効値 (live_trial_flags.json の runtime) を確認すること。
+# ネイティブ HSV (LIVE_NATIVE_HSV_MAIN_DEFAULT) が無効のときは HSV 分類の一括だけが働かない。
+LIVE_BOARD_VECTORIZED_DEFAULT: bool = False
+
+# 2026-10-25: 認識ループの Python 側の出力不変の高速化 (src/recog_speed_py.py)。既定 OFF・未採用。
+# 24d の単独試験 (C2) は認識 1 コマ平均 46.97ms・周期 48.17ms (20.76 コマ/秒)。洗い出し
+# (<work>/python_hotspots_20261025/RESULT.json) の「出力を変えずに削れる」項目だけを束ねる:
+# read_board_hsv_only の同コマ重複呼び・NextSlideDetector の前コマのグレー化・発火前画像リングの
+# 盤面領域だけの保持と一括分類・表示得点の再読 (B3_SHARE_SCORE_READ が前提)。
+# read_board の中身・hybrid_classifier のループ (Rust 移植の担当) には触れない。
+# ON にする前の条件: <work>/recog_speed_py_20261025/RESULT.md の全行一致 (出力不変) の母数を確認し、
+# user が承認すること。採用時は AdoptedFlag で採用日と根拠を記録する。
+LIVE_RECOG_SPEED_PY_DEFAULT: bool = False
+# 同上のうち、壁時計に依存する 1 項目だけを別の旗にする: 終了の組の crop を worker が取り出すときに複製する
+# (毎コマの約 5MB の複製を 0.5 秒に 1 回へ)。終了の組の照合は元から 0.5 秒ごとの壁時計で動き、評価に使うコマが
+# 1 コマずれうるため、全行一致での確認ができない。単体 (決定的な待ち方) の試験だけが根拠。既定 OFF・未採用。
+LIVE_RECOG_SPEED_PY_PAIR_LAZY_DEFAULT: bool = False
+# 2026-10-25: read_board の 1st pass (背景パッチ NCC・HSV 中央値・ガード分類) を Rust の 1 回呼出にする試作
+# (src/live_native_read_board.py、native/puyo_core/src/board_first_pass.rs)。既定 OFF。
+# 認識 1 コマの 1 割を占めた Python のセル単位ループ (盤面 1 枚で NCC 72 回・中央値・ガード分類) を消す。
+# live_board_vectorized が ON のときだけ働く。判定は従来経路と全セルで一致させる (整数で決まる値はビット一致、
+# NCC は numpy と同じペアワイズ総和で、np.dot の最終桁だけ CPU 依存)。根拠・母数・時間は
+# <work>/recog_speed_rust_20261025/RESULT.md と scripts/verify_live_native_read_board.py の出力を参照。
+# 実機での採用前に OBS 試験で実効値 (live_trial_flags.json の runtime) を確認すること。
+LIVE_NATIVE_READ_BOARD_DEFAULT: bool = False
+
+# 2026-10-26: OBS 24f 試作の表示切替。未採用、配布の試験腕だけで有効にする。
+LIVE_WINRATE_SWITCH_DEFAULT: bool = False
+
+# C群: 採用日空欄。2026-10-26 の独立比較候補、本番未採用。
+# 2026-10-27 24h配線候補。未採用、既定OFF。PC2のD/ref3と配信検収後に採否を決める。
+LIVE_24H_DEFAULT = False
+LIVE_C_ITEMS_DEFAULTS: dict[str, bool] = {'live_color_roi': False, 'live_capture_thread': False, 'live_boundary_half_second': False, 'live_hsv_lazy': False}
+LIVE_C_ITEMS_CANDIDATES: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag('live_color_roi', "", '使用画素だけ補正、全画面消費者は全画面。逆変換入力の全行一致が条件。'),
+    AdoptedFlag('live_capture_thread', "", '取得を専用スレッドへ。品質・速度評価は user の OBS 試験。'),
+    AdoptedFlag('live_boundary_half_second', "", '同期の試合状態・OCRゼロ判定を0.5秒周期へ。境界時刻と表示品質で検証。'),
+    AdoptedFlag('live_hsv_lazy', "", 'HSV盤を最初の消費時まで遅延。復旧・色保護・おじゃま検出を維持。'),
+)
+
+# 2026-10-28: 撃った盤は配信の比較試験用。採用未決定のため既定OFF。
+LIVE_B3_FIRE_BOARD_DEFAULT = False
+
+
+# 2026-11-01 採用: PC1 Claude の release_prep_20261101/PROMPT と22:4xの追補。
+# 24w2の全コマ確認済み構成を配布入口で使用する。Aは学習列・モデル・表示の一組、
+# Bは認識・終了・復帰の修正。ensembleと直接公開もAへ移すとの判断を含む。
+# 下位の実験CLIやUserConfigの生データ型は比較再生用の従来値を保ち、
+# 利用者JSONはlauncherの検証前にこの既定を補う。明示値を優先し、旗は削除しない。
+RELEASE_LIVE_A_FLAGS: tuple[str, ...] = (
+    'live_24h', 'live_24h_retr', 'live_24h_xc', 'live_24h_tape_next',
+    'live_24h_media_fresh', 'live_24h_row_time', 'live_24h_retr_h_forecast',
+    'live_24h_early_submit', 'live_24h_stable_key', 'live_24h_xc_same_time',
+    'live_chain_split_place', 'live_b3_fire_board', 'b3_c2', 'b3_skip_icon_reading',
+    'live_24h_retr_second', 'live_24h_retr_move050', 'live_24h_retr_deadline_extend',
+    'b3_ensemble', 'live_x_direct_publish',
+)
+RELEASE_LIVE_B_FLAGS: tuple[str, ...] = (
+    'live_frame_drop_robust', 'live_lockdown_score_zero_then_move_release',
+    'live_match_end_pair', 'live_match_end_feed_on_hold', 'match_end_yatta_text_template',
+    'live_capture_reconnect', 'b3_worker_graceful_stop', 'live_verify_soft_hold',
+    'live_native_hsv_main', 'live_native_read_board', 'b3_share_score_read',
+    'live_color_roi', 'live_death_check_retr', 'live_verify_read_fast',
+)
+# 2026-11-02 PC1採用。24j〜24w2のOBS試験と全コマの確認でONのまま回った19旗。
+# 24w2と同じ動きで配布する。明示Falseによる巻き戻しのため旗は残す。
+RELEASE_LIVE_OBS_FLAGS: tuple[str, ...] = (
+    'b3_time_gate', 'live_score_cadence', 'live_static_exact', 'fast_first_judgment',
+    'evaluation_freshness_gate', 'terminal_display_hold',
+    'live_disable_placement_reconcile', 'b3_score_matmul', 'live_reference_times_only',
+    'b3_ledger_mode', 'b3_ledger_landing', 'live_near_future_cache',
+    'live_exact_connectivity', 'live_exact_native', 'live_verify_async',
+    'live_board_vectorized', 'live_hsv_lazy', 'live_recog_speed_py',
+    'live_recog_speed_py_pair_lazy',
+)
+# 同じ11/2判断によりOBS台本の環境を配布入口にも適用する。利用者の環境を優先。
+RELEASE_LIVE_ENV_DEFAULTS: dict[str, str] = {
+    'PUYO_LEDGER_PARTIAL': '1', 'PUYO_X_BOARD_ONLY': '1', 'PUYO_X_B3_BOUNDARY': '1',
+    # 2026-11-02 PC1: 配布の参照exe起動を防止。threadsは24w2コードの既定2。
+    'PUYO_OBS_AMA_RUST': '1', 'PUYO_OBS_AMA_RUST_THREADS': '2',
+    'PUYO_OBS_CPU_ISOLATION': '0', 'PUYO_OBS_AMA_IDLE': '0',
+    'PUYO_OBS_EXACT_SEED': '1', 'PUYO_OBS_PREPARE_EXACT': '1',
+}
+# OBS Virtual Cameraのみ24w2と同じ色行列補正。他機器の既定offは維持する。
+RELEASE_OBS_DEVICE_NAME = 'OBS Virtual Camera'
+RELEASE_OBS_COLOR_CORRECTION = '601to709'
+
+# Aの前提と運用値。24w2のC2/EX資産構成、200msの遅延、2秒の鮮度を維持する。
+# モデルの中身・SHAの更新は本ジョブでは行わず、配布時のmanifest検査に従う。
+RELEASE_LIVE_DEFAULTS: dict[str, bool | float] = {
+    **dict.fromkeys(RELEASE_LIVE_A_FLAGS + RELEASE_LIVE_B_FLAGS, True),
+    **dict.fromkeys(RELEASE_LIVE_OBS_FLAGS, True),
+    'b3_judgment': True, 'b3_async': True, 'b3_m3': True,
+    'live_24h_ex_speed': True, 'live_24h_ex_fire_first': True, 'live_24h_ama': True,
+    'live_24h_delay_ms': 200.0, 'live_24h_ex_fresh_sec': 2.0,
+    # 窓なし常駐の省電力抑制解除。配布既定ONの採用根拠は10/30の提案と11/1の指示。
+    'live_disable_power_throttling': True,
+    # 追補で24w2との差を許可された診断記録。その他のDも既存OFFを維持する。
+    'live_stage_timing': False, 'live_verify_reason_log': False,
+    # 2026-11-02 PC1案・user確認待ち。低水準の比較用既定はOFFを維持。
+    'live_verify_entry_fast_retry': True,
+    'live_chain_forecast_recheck': True,
+    'live_chain_end_formula': True,
+}
+RELEASE_LIVE_MODEL_PATHS: dict[str, str] = {
+    'b3_model': 'models/b3_c2_ens/ensemble_ref3_logit.json',
+    'b3_timing_table': 'models/b3/timing_table.json',
+    'live_24h_model': 'models/b3_ex_L200H_retR/ensemble.json',
+}

@@ -2,7 +2,7 @@
 # パネルレイアウト (字幕余白入り、--layout panel) の全編本番生成 (2026-08-10 user指示)。
 # 構成は src/production_config.py の採用フラグ (デモ本番と同一) + counter-reach。
 # 入力は生の保持動画 (5時間30分、60fps) をそのまま渡す (切り出しなし=「全編」)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/frames/video_c96.mp4

@@ -38,7 +38,7 @@ use numpy::{IntoPyArray, PyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::prelude::*;
 
 /// 色コード (src/board.py と一致させる)
-const COLOR_EMPTY: i32 = 0;
+pub(crate) const COLOR_EMPTY: i32 = 0;
 const COLOR_RED: i32 = 1;
 const COLOR_OJAMA: i32 = 9;
 
@@ -72,7 +72,7 @@ pub struct HsvParams {
 ///
 /// counting sort でヒストグラムを作り k 番目の順序統計量を取る。
 /// 偶数長は中央 2 値の f64 平均 — `_median_fast` と同式。
-fn median_u8(hist: &[u32; 256], n: usize) -> f64 {
+pub(crate) fn median_u8(hist: &[u32; 256], n: usize) -> f64 {
     debug_assert!(n > 0);
     let k = n / 2;
     if n % 2 == 1 {
@@ -123,29 +123,22 @@ fn median_i16(vals: &mut Vec<i16>) -> f64 {
 }
 
 /// 1 パッチ分の H/S/V ヒストグラムと画素数。
-struct PatchStats {
-    h_hist: [u32; 256],
-    s_hist: [u32; 256],
-    v_hist: [u32; 256],
+#[derive(Clone, Copy)]
+pub(crate) struct PatchStats {
+    pub(crate) h_hist: [u32; 256],
+    pub(crate) s_hist: [u32; 256],
+    pub(crate) v_hist: [u32; 256],
     /// specular 除外後の S ヒストグラム (有効画素のみ)
     s_hist_valid: [u32; 256],
     n_specular: usize,
     /// H の低域/高域カウント (赤2峰判定用)
     n_low: usize,
     n_high: usize,
-    n: usize,
+    pub(crate) n: usize,
 }
 
-/// HSV パッチ (ROI 内の矩形) を 1 パスで走査して統計を作る。
-fn collect_stats(
-    hsv: &ArrayView3<u8>,
-    y1: usize,
-    y2: usize,
-    x1: usize,
-    x2: usize,
-    p: &HsvParams,
-) -> PatchStats {
-    let mut st = PatchStats {
+fn empty_stats() -> PatchStats {
+    PatchStats {
         h_hist: [0; 256],
         s_hist: [0; 256],
         v_hist: [0; 256],
@@ -154,7 +147,128 @@ fn collect_stats(
         n_low: 0,
         n_high: 0,
         n: 0,
-    };
+    }
+}
+
+/// C 連続の HSV 画像 (H, W, 3) を平坦な列として読む高速版 (2026-10-25)。
+/// 添字版 (`collect_stats` の下半分) と同じ値を作る。行ごとの切り出しで境界検査を 1 回にし、
+/// 条件の加算は分岐でなく真偽値の加算にしている。
+#[allow(clippy::too_many_arguments)]
+fn collect_stats_flat(
+    flat: &[u8],
+    width: usize,
+    y1: usize,
+    y2: usize,
+    x1: usize,
+    x2: usize,
+    p: &HsvParams,
+) -> PatchStats {
+    let mut st = empty_stats();
+    for y in y1..y2 {
+        accumulate_row(flat, y * width + x1, y * width + x2, &mut st, p);
+    }
+    st
+}
+
+/// 平坦な画素列の [start, end) 番目 (画素単位) を統計へ足す。
+fn accumulate_row(flat: &[u8], start: usize, end: usize, st: &mut PatchStats, p: &HsvParams) {
+    for px in flat[start * 3..end * 3].chunks_exact(3) {
+        let (h, s, v) = (px[0], px[1], px[2]);
+        st.h_hist[h as usize] += 1;
+        st.s_hist[s as usize] += 1;
+        st.v_hist[v as usize] += 1;
+        st.n_low += usize::from(i32::from(h) <= p.red_hue_low_max);
+        st.n_high += usize::from(i32::from(h) >= p.red_hue_wrap_threshold);
+        // specular = 明るく (V高) かつ白っぽい (S低)
+        let specular = i32::from(v) >= p.specular_v_min && i32::from(s) <= p.specular_s_max;
+        st.n_specular += usize::from(specular);
+        st.s_hist_valid[s as usize] += u32::from(!specular);
+    }
+    st.n += end - start;
+}
+
+/// サブ領域 vote 用の 4 分割の統計を 1 回の走査で作る (2026-10-25)。分割は Python と同じ
+/// (h2 = 高さ/2, w2 = 幅/2 で [:h2,:w2], [:h2,w2:], [h2:,:w2], [h2:,w2:] の順)。
+/// 空判定されるセルは中央の分類に加えて 4 分割も分類するので、全体と 4 分割を別々に走査していた
+/// (空のセルが 1 セル約 13us、色つきの 2.4 倍)。4 分割は全体を過不足なく分けるので、全体の統計は
+/// 4 分割の和 (整数の加算) で正確に求まる。
+#[allow(clippy::too_many_arguments)]
+fn collect_quad_stats_flat(
+    flat: &[u8],
+    width: usize,
+    y1: usize,
+    y2: usize,
+    x1: usize,
+    x2: usize,
+    p: &HsvParams,
+) -> Box<[PatchStats; 4]> {
+    let (h2, w2) = ((y2 - y1) / 2, (x2 - x1) / 2);
+    let mut quads = Box::new([empty_stats(); 4]);
+    for y in y1..y2 {
+        let upper_or_lower = if y - y1 >= h2 { 2 } else { 0 };
+        let base = y * width;
+        accumulate_row(flat, base + x1, base + x1 + w2, &mut quads[upper_or_lower], p);
+        accumulate_row(flat, base + x1 + w2, base + x2, &mut quads[upper_or_lower + 1], p);
+    }
+    quads
+}
+
+/// 4 分割の統計の和 (= 全体の統計)。
+fn merge_stats(quads: &[PatchStats; 4]) -> PatchStats {
+    let mut total = empty_stats();
+    for q in quads {
+        for i in 0..256 {
+            total.h_hist[i] += q.h_hist[i];
+            total.s_hist[i] += q.s_hist[i];
+            total.v_hist[i] += q.v_hist[i];
+            total.s_hist_valid[i] += q.s_hist_valid[i];
+        }
+        total.n_specular += q.n_specular;
+        total.n_low += q.n_low;
+        total.n_high += q.n_high;
+        total.n += q.n;
+    }
+    total
+}
+
+/// セルの統計。全体と、(使える場合は) サブ領域 vote 用の 4 分割。
+pub(crate) struct CellStats {
+    pub(crate) full: PatchStats,
+    quads: Option<Box<[PatchStats; 4]>>,
+}
+
+/// セルの統計を作る。C 連続の画像でサブ領域 vote の対象の大きさなら、4 分割を 1 回の走査で作って
+/// 全体を合算する。それ以外は全体だけ (4 分割は必要になったときに従来どおり走査する)。
+pub(crate) fn collect_cell_stats(
+    hsv: &ArrayView3<u8>,
+    y1: usize,
+    y2: usize,
+    x1: usize,
+    x2: usize,
+    p: &HsvParams,
+) -> CellStats {
+    if let Some(flat) = hsv.as_slice() {
+        if y2 - y1 >= p.subregion_min_h && x2 - x1 >= p.subregion_min_w {
+            let quads = collect_quad_stats_flat(flat, hsv.shape()[1], y1, y2, x1, x2, p);
+            return CellStats { full: merge_stats(&quads), quads: Some(quads) };
+        }
+    }
+    CellStats { full: collect_stats(hsv, y1, y2, x1, x2, p), quads: None }
+}
+
+/// HSV パッチ (ROI 内の矩形) を 1 パスで走査して統計を作る。C 連続なら平坦な高速版を使う。
+pub(crate) fn collect_stats(
+    hsv: &ArrayView3<u8>,
+    y1: usize,
+    y2: usize,
+    x1: usize,
+    x2: usize,
+    p: &HsvParams,
+) -> PatchStats {
+    if let Some(flat) = hsv.as_slice() {
+        return collect_stats_flat(flat, hsv.shape()[1], y1, y2, x1, x2, p);
+    }
+    let mut st = empty_stats();
     for y in y1..y2 {
         for x in x1..x2 {
             let h = hsv[[y, x, 0]];
@@ -267,7 +381,7 @@ fn bgr_channel_median(
 }
 
 /// 色レンジ 1 行 = [color_code, h_min, h_max, s_min, s_max, v_min, v_max]
-type RangeRow = [i32; 7];
+pub(crate) type RangeRow = [i32; 7];
 
 /// 閾値照合の共通部 (レンジ走査)。`with_red_break` で 2 実装の差を切り替える。
 ///
@@ -342,12 +456,29 @@ fn classify_no_subregion(
         return COLOR_EMPTY;
     }
     let st = collect_stats(hsv, y1, y2, x1, x2, p);
-    let h = stable_h_median(&st, hsv, y1, y2, x1, x2, p);
-    let s = specular_robust_s(&st, p);
+    classify_no_subregion_from_stats(&st, bgr, hsv, y1, y2, x1, x2, ranges, p)
+}
+
+/// `classify_no_subregion` の統計を作った後の部分。V の中央値が空の下限未満なら H・S の中央値を求めずに返す
+/// (H・S の中央値に副作用は無いので、結果は同じ)。
+#[allow(clippy::too_many_arguments)]
+fn classify_no_subregion_from_stats(
+    st: &PatchStats,
+    bgr: &ArrayView3<u8>,
+    hsv: &ArrayView3<u8>,
+    y1: usize,
+    y2: usize,
+    x1: usize,
+    x2: usize,
+    ranges: &[RangeRow],
+    p: &HsvParams,
+) -> i32 {
     let v = median_u8(&st.v_hist, st.n) as i32;
     if v < p.empty_v_threshold {
         return COLOR_EMPTY;
     }
+    let h = stable_h_median(st, hsv, y1, y2, x1, x2, p);
+    let s = specular_robust_s(st, p);
     let mut rg = || {
         let g = bgr_channel_median(bgr, 1, y1, y2, x1, x2);
         let r = bgr_channel_median(bgr, 2, y1, y2, x1, x2);
@@ -364,7 +495,7 @@ fn classify_no_subregion(
 
 /// 1 セルを分類する (`ColorClassifier.classify` と同値、vote_mode=False 経路)。
 #[allow(clippy::too_many_arguments)]
-fn classify_cell(
+pub(crate) fn classify_cell(
     bgr: &ArrayView3<u8>,
     hsv: &ArrayView3<u8>,
     y1: usize,
@@ -377,13 +508,32 @@ fn classify_cell(
     if y2 <= y1 || x2 <= x1 {
         return COLOR_EMPTY;
     }
-    let st = collect_stats(hsv, y1, y2, x1, x2, p);
-    let h = stable_h_median(&st, hsv, y1, y2, x1, x2, p);
-    let s = specular_robust_s(&st, p);
+    let stats = collect_cell_stats(hsv, y1, y2, x1, x2, p);
+    classify_cell_from_stats(&stats, bgr, hsv, y1, y2, x1, x2, ranges, p)
+}
+
+/// 統計を作った後の分類 (`classify_cell` の後半)。統計を別の用途 (背景との距離など) と
+/// 共有したい呼出側 (board_first_pass.rs) が、同じパッチを 2 度走査しないために切り出した。
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn classify_cell_from_stats(
+    stats: &CellStats,
+    bgr: &ArrayView3<u8>,
+    hsv: &ArrayView3<u8>,
+    y1: usize,
+    y2: usize,
+    x1: usize,
+    x2: usize,
+    ranges: &[RangeRow],
+    p: &HsvParams,
+) -> i32 {
+    let st = &stats.full;
+    // V の中央値が空の下限未満なら H・S の中央値を求めずに返す (H・S の中央値に副作用は無い)
     let v = median_u8(&st.v_hist, st.n) as i32;
     if v < p.empty_v_threshold {
         return COLOR_EMPTY;
     }
+    let h = stable_h_median(st, hsv, y1, y2, x1, x2, p);
+    let s = specular_robust_s(st, p);
     let mut rg = || {
         let g = bgr_channel_median(bgr, 1, y1, y2, x1, x2);
         let r = bgr_channel_median(bgr, 2, y1, y2, x1, x2);
@@ -412,11 +562,16 @@ fn classify_cell(
         // 厳密な `>` 比較で最大を取る (同数なら先に出た色が勝つ)
         let mut order: Vec<i32> = Vec::with_capacity(4);
         let mut count: Vec<usize> = Vec::with_capacity(4);
-        for (sy1, sy2, sx1, sx2) in subs {
+        for (k, (sy1, sy2, sx1, sx2)) in subs.into_iter().enumerate() {
             if sy2 <= sy1 || sx2 <= sx1 {
                 continue; // sp.size == 0 に相当
             }
-            let c = classify_no_subregion(bgr, hsv, sy1, sy2, sx1, sx2, ranges, p);
+            let c = match &stats.quads {
+                Some(quads) => {
+                    classify_no_subregion_from_stats(&quads[k], bgr, hsv, sy1, sy2, sx1, sx2, ranges, p)
+                }
+                None => classify_no_subregion(bgr, hsv, sy1, sy2, sx1, sx2, ranges, p),
+            };
             if c == COLOR_EMPTY || c == 10 {
                 continue; // COLOR_EMPTY / COLOR_UNKNOWN は候補にしない
             }

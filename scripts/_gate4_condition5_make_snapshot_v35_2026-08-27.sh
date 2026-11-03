@@ -1,7 +1,7 @@
 #!/bin/bash
 # v34の最小予測ガードを極端な方向反転だけに限定したv35固定snapshot。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 SNAP=data/verify/gate4_condition5_2026-08-26/_snapshot_cond5_codex_20260827_v35
 if [[ -e "$SNAP" ]]; then

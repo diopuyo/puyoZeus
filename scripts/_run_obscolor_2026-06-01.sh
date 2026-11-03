@@ -2,7 +2,7 @@
 # 真因A: 着地色をCNN==HSV観測一致で補正(--landing-observed-color, 42024d9) の検証。
 # chainexitはdefault ON化済。比較: final(yellow->red=6470), hsvfb(B単独=5656,横滑り+1700)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
 VIDEOS="v29_match01,v29_match02,v40_match01,v40_match02,v51_match01,v51_match02,v57_match01,v57_match02,v70_match01,v70_match02,v89_match01,v89_match02,v95_match01,v95_match02,v97_match01,v97_match02"
 HOLDOUT="v29_match01,v29_match02,v40_match01,v40_match02,v89_match01,v89_match02"
 VDIR="data/match_clips"; SI="0.03333333"

@@ -4,7 +4,7 @@
 # 2. E2E OFF (陽性対照)
 # 3. 大連鎖10ケース プローブ (フラグON)
 # 4. 偽イベント率 before/after (2ウィンドウ × off/on)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 PY="./venv/bin/python"
 export PYTHONPATH=.
 

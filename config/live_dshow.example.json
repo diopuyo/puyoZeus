@@ -1,0 +1,13 @@
+{
+  "source": "dshow",
+  "name": "OBS Virtual Camera",
+  "index": 0,
+  "verification_only": true,
+  "coalesce_features": true,
+  "mc_rollouts": 30,
+  "cpu_threads": 1,
+  "evaluation_nice": 10,
+  "cnn_device": "cpu",
+  "host": "127.0.0.1",
+  "port": 8765
+}

@@ -1,0 +1,16 @@
+{
+  "description": "B6ライブ評価。B5のe14構成を固定し、別worktreeのstatusログへの依存を除く。入出力と時刻はCLIで置換。",
+  "command": [
+    "--worker", "--video", "input.mp4", "--out", "overlay.mp4",
+    "--start-sec", "2600", "--end-sec", "2640", "--warmup-sec", "1",
+    "--dump-timeline", "settled.npz", "--dump-display-timeline", "display.npz",
+    "--early-fire-reaction", "--per-side-settled", "--no-score-lead-bias", "--no-pressure",
+    "--sample-interval", "0", "--counter-reach", "--normalize-fps-30",
+    "--production-recognition", "--resize-1080p", "--resolved-exchange-eval",
+    "--resolved-decisive-amplify", "--resolved-live-defender", "--resolved-live-defender-strict",
+    "--resolved-kill-override", "--exchange-event-update",
+    "--exchange-event-record", "inputs.jsonl.gz", "--dump-exchange-events", "events.jsonl",
+    "--review-data-panel", "--review-data-csv", "review_data.csv",
+    "--exchange-event-model-dir", "models/exchange_event_v2"
+  ]
+}

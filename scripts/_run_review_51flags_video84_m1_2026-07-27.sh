@@ -10,7 +10,7 @@
 # cnn-flicker-hsv-fallback/initial-confirm-vote) をON指定する
 # (scripts/visualize_advantage_overlay.py に新規配線、コミット済)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 OUT_DIR="data/verify/review_video_51flags_2026-07-27"
 mkdir -p "${OUT_DIR}"
 RAW="${OUT_DIR}/advantage_recog_video84_match1_full_score0to0.mp4"

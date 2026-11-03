@@ -2816,9 +2816,11 @@ def _apply_record_time_observation_fix(
     if cnn_board is None or frame_bgr is None or image_reader is None:
         return board, 0
     from src.recognition_pipeline import DEFAULT_P1_REGION, DEFAULT_P2_REGION
+    from src.recog_speed_py import read_hsv_only
     region = DEFAULT_P1_REGION if side_label == "1P" else DEFAULT_P2_REGION
     try:
-        hsv_board = image_reader.read_board_hsv_only(frame_bgr, region)
+        # live_recog_speed_py (既定 OFF): 同じコマの _step_side の読取りと共有。OFF は従来の呼出と同じ。
+        hsv_board = read_hsv_only(image_reader, frame_bgr, region)
     except Exception:
         return board, 0
     if hsv_board is None:
@@ -2904,6 +2906,10 @@ def _process_side_lean(
     frame_bgr: Any = None,
     image_reader: Any = None,
     landing_chain_started: bool = False,
+    # コマ落ちに強い数え方 (2026-10-23、B07 型 H2、既定 None): 1手区切り窓の締切判定に使う
+    # コマ番号。配信 (src/b3_live_queues.py) が刻みモードのときだけ「前回の観測 + 1 刻み」
+    # を渡す。None なら従来どおり frame_idx で判定する (学習の収集は常に None = bit-identical)。
+    move_window_frame_idx: int | None = None,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -3046,7 +3052,7 @@ def _process_side_lean(
         state, effective_board, effective_bstate, exclude_phantom=exclude_phantom,
         raw_pixel_stable=raw_pixel_stable,
         enable_move_segmented_recording=enable_move_segmented_recording,
-        frame_idx=frame_idx,
+        frame_idx=frame_idx if move_window_frame_idx is None else move_window_frame_idx,
         enable_physics_persistence_filter=enable_physics_persistence_filter,
         physics_sim=physics_sim,
     ):

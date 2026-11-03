@@ -3,7 +3,7 @@
 # 拡張13本 (c1,c2,c3,c4,c6,c7,c8,c9,c32,c33,c82,c84,c95) の発火ラベル生成→
 # sim付与→既存66動画分とマージ→79動画で三つ巴再学習まで一気通貫。
 set -eu
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 EXPAND13_NPZ_DIR="data/indicators_v2/boards_lean_regen_expand13_2026-08-04"
 REGEN_NPZ_DIR="data/indicators_v2/boards_lean_regen_2026-07-31"

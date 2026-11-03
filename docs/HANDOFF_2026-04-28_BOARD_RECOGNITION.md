@@ -131,10 +131,10 @@ purple: ...
 cat /c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/docs/HANDOFF_2026-04-28_BOARD_RECOGNITION.md
 
 # 全テスト走行 (約 3 分)
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"
 
 # 最新レビュー動画を開く
-explorer.exe "C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\verify\review_videos\field_review_v02_m1_eyes.mp4"
+explorer.exe "<home>\.gemini\antigravity\scratch\puyo_analyzer\data\verify\review_videos\field_review_v02_m1_eyes.mp4"
 
 # 動画再生成 (パラメータ調整時)
 PYTHONPATH=. ./venv/bin/python -m scripts.render_field_review_video \
@@ -158,7 +158,7 @@ PYTHONPATH=. ./venv/bin/python -m scripts.diagnose_field_recognition \
 ## 再開プロンプト (新セッションでコピペ)
 
 ```
-ぷよぷよeスポーツ動画解析プロジェクト (C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer) を再開します。
+ぷよぷよeスポーツ動画解析プロジェクト (<home>\.gemini\antigravity\scratch\puyo_analyzer) を再開します。
 
 直前まで Phase T (盤面認識精度向上) を進行中です。次の手順で作業を続けてください:
 
@@ -166,7 +166,7 @@ PYTHONPATH=. ./venv/bin/python -m scripts.diagnose_field_recognition \
    docs/HANDOFF_2026-04-28_BOARD_RECOGNITION.md
 
 2. 必要なら全テスト走行 (約 3 分、920+ passed / 2 skipped を確認):
-   wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"
+   wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"
 
 3. 直前のユーザレビュー対象動画 (cycle 1+2+5+A+8 統合最新版):
    - data/verify/review_videos/field_review_v02_m1_eyes.mp4

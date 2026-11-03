@@ -1,6 +1,6 @@
 #!/bin/bash
 # plB/plD の残り動画 + チャンネル新着プレイリスト候補のタイトルを列挙 (ティア確認用)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 OUT="data/_pending_dl_candidates_2026-08-07.tsv"
 : > "$OUT"
 echo "=== plB (全12本、既DL=先頭6) ==="

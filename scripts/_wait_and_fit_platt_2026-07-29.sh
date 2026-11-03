@@ -9,7 +9,7 @@
 # 収集完走を待つ理由: 学習は 73,416 行 x 132 特徴量の GroupKFold で、収集14並列と
 # 競合すると 45 分以上かかって終わらなかった。CPU が空いてから回す。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 export PYTHONPATH=.
 
 LOG=logs/fit_platt_calibration_2026-07-29.log

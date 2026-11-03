@@ -231,7 +231,10 @@ class OjamaWarningDetector:
             cnn_confidence_min: CNN 出力の confidence 下限。これ未満は
                 テンプレ NCC + HSV にフォールバック
         """
-        self._templates = _load_templates(template_dir)
+        from src.image_free_ui import enabled, LearnedTemplates, require_default
+        if enabled():
+            require_default(ncc_threshold, TEMPLATE_NCC_THRESHOLD)
+        self._templates = LearnedTemplates("ojama") if enabled() else _load_templates(template_dir)
         self._ncc_threshold = ncc_threshold
         self._cnn_confidence_min = float(cnn_confidence_min)
         self._cnn = None
@@ -403,6 +406,9 @@ class OjamaWarningDetector:
         各 kind が複数のサブテンプレ (クラスタリング結果) を持つ場合、
         その中で最高 NCC スコアを採用してから kind 間で比較する。
         """
+        from src.image_free_ui import LearnedTemplates, predict
+        if isinstance(self._templates, LearnedTemplates):
+            return predict("ojama", cell, False)
         if not self._templates:
             return None
         best_kind: str | None = None

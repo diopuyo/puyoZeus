@@ -36,7 +36,7 @@ npz から再構成不能なため本診断では検証しない** (OJAMA_FALL�
 過大集計されている可能性がある (限界として stdout レポートに明記する)。
 
 ## 視覚グロー再検証
-onset_t_sec ±1秒の数フレームを実動画 (`/home/ryouj/frames/video_<stem>.mp4`)
+onset_t_sec ±1秒の数フレームを実動画 (`<home>/frames/video_<stem>.mp4`)
 から抽出し、`src/effect_glow_detector.py` の `compute_cell_bright_ratio` /
 `is_effect_glow_active` をそのまま再利用して bright_ratio_max を再計算する
 (HSV 変換・閾値ロジックは一切再実装しない)。
@@ -52,6 +52,14 @@ Usage:
     PYTHONPATH=. ./venv/bin/python -m scripts._diag_c_zero_effect_2026-08-04
 """
 from __future__ import annotations
+
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
 
 import csv
 import importlib
@@ -85,7 +93,7 @@ _MC = importlib.import_module("scripts.measure_effect_gate_c_2026-08-04")
 # 定数 (マジックナンバー禁止のため全て定数化)
 # =============================================================================
 
-VIDEO_DIR: Path = Path("/home/ryouj/frames")
+VIDEO_DIR: Path = Path(_public_dev_text('<home>/frames'))
 OUTPUT_CSV_PATH: Path = Path("data/verify/effect_gate_2026-08-04_c/diag_zero_effect.csv")
 
 # 時間窓再構成 (npz 近似、docstring 参照)。

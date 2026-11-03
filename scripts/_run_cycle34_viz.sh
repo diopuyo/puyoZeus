@@ -4,7 +4,7 @@
 # CNN の EMPTY logit に bg_fp 距離由来のブーストを加算する soft prior 化。
 # 既 default model + image_reader 改修済 (= 1st/2nd pass で bg_distance 連携)。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle34
 mkdir -p logs/board_logs

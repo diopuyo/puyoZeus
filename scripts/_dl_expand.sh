@@ -1,7 +1,7 @@
 #!/bin/bash
 # data/_dl_expand.tsv (name<TAB>id<TAB>title) を H.264強制で直列DL。既存はskip。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
-FF=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+FF=<home>/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
 ok=0; skip=0; fail=0
 while IFS=$'\t' read -r name id rest; do
   [ -z "$id" ] && continue

@@ -2,7 +2,7 @@
 # cycle 50b: 末尾 skip 360 frame (= 6 秒) で v86m17 中心の再抽出
 # 勝利 telop 「やった」 混入対策。 28 動画全再抽出は時間かかるので、
 # 朝のレビュー対象 4 動画 + 主要 4 動画優先。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health cycle50b_seed_regen

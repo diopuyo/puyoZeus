@@ -2,7 +2,7 @@
 # cycle 56_v4 系: ojama seed 含む 7 クラス真 fine-tune を複数パラメータで連続試行.
 # seed 採取完了後に順次起動 (= GPU は 1 つなので並列不可、 順次)。
 # 各 candidate は ~5 分で完了見込み。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 SEED_ROOT="data/phase_l/seeds_cycle56_ojama"
 BASE_MODEL="models/cnn_phase_b_large_v2.pt"

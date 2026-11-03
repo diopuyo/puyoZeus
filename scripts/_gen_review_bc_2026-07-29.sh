@@ -7,7 +7,7 @@
 #   C: 校正OFF + warmupなし                 -> Aとの差分=warmupだけの効果
 # nice -n 19、逐次 (B完了後にC、並列にしない)。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 
 LOG=logs/gen_review_bc_2026-07-29.log

@@ -168,6 +168,7 @@ video_c54 2P側の実9連鎖イベントで結果が **3** になる大きな過
 compat)。
 """
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 import math
 from dataclasses import dataclass
@@ -351,7 +352,7 @@ def _ensure_1080p(frame: np.ndarray) -> np.ndarray | None:
         return frame
     if h < 100 or w < 100:
         return None
-    return cv2.resize(frame, (EXPECTED_FRAME_SHAPE[1], EXPECTED_FRAME_SHAPE[0]),
+    return cv2.resize(full_image(frame), (EXPECTED_FRAME_SHAPE[1], EXPECTED_FRAME_SHAPE[0]),
                       interpolation=cv2.INTER_AREA)
 
 
@@ -534,6 +535,9 @@ class ChainCountOcr:
         として取り込む。追加ソースが1つも無いディレクトリでは旧来と
         bit-identical (primary のみの単一テンプレ) になる。
         """
+        from src.image_free_ui import enabled, LearnedChain
+        if enabled():
+            return LearnedChain(min_confidence)
         primary, extra = cls._load_template_sources_from_dir(template_dir)
         return cls(templates=primary, min_confidence=min_confidence, extra_templates=extra)
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 # 非決定性調査の最終バッチ: r2 を含む全ペア突合 + 走査器 + 判断影響
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 D=data/verify/adv_nondeterminism_2026-08-25
 G=data/verify/gate3r6_planA_2026-08-25
 PY=./venv/bin/python

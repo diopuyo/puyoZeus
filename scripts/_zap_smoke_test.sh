@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 mkdir -p data/indicators_v2/overlay/zap/raw logs/zap_reel
 echo "[smoke start] $(date +%s)"
 PYTHONPATH=. nice -n 10 ./venv/bin/python -m scripts._zap_1t \

@@ -2,7 +2,7 @@
 # demo2レンダ(v7、fresh restart) + demo2v2 selfverify(元祖205891) の完了待ち。
 # MSYSの \| エスケープ事故 (memory feedback_msys_pipe_escape) を踏まえ、
 # pgrep のアルタネーション(|)は使わず単発呼び出しを複数回に分ける。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 i=0
 while true; do
   R1=done

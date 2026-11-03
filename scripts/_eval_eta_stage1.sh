@@ -3,7 +3,7 @@
 # cnn_phase_l.pt (= load_default) + per-video HSV inject (--hsv-state 省略) で実行。
 # baseline_v3 critical 合計 1512 との比較基準で退行有無を判定する。
 # 並列上限 3 (= CLAUDE.md / CYCLE_FINDINGS.md ルール準拠)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health eta_stage1_eval

@@ -1,7 +1,7 @@
 #!/bin/bash
 # 勝者一致率の横展開検証を3並列で回すジョブプール(コード変更ゼロの回帰確認)。
 # 各動画は自分自身を学習から除外(リーク防止)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 pkill -f "scripts.validate_advantage_winner" 2>/dev/null  # 前回の残骸掃除
 sleep 2

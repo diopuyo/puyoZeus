@@ -98,5 +98,5 @@ scripts/ から Python 起動時に `from src.board import ...` 失敗。`sys.pa
 
 - 稼働 PID 一覧（現状）: watchdog 17004 / wrapper DEAD / python DEAD
 - 停止マーカー: `data/training_stopped` (touch 済、watchdog が尊重)
-- 学習再開: `wsl bash -c 'rm /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/training_stopped'` で可能（ただし holdout は頭打ち）
+- 学習再開: `wsl bash -c 'rm <home>/.gemini/antigravity/scratch/puyo_analyzer/data/training_stopped'` で可能（ただし holdout は頭打ち）
 - 権限設定: `.claude/settings.local.json` に `defaultMode: bypassPermissions` + 広めの allowlist 設定済

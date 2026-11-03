@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle 56_v2 model (= 真 fine-tune 軽量) の baseline_v3 8 動画 eval.
 # F + E (= state machine + HSV 修正) は既適用、 model のみ cnn_cycle56_v2.pt に変更。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health cycle56_v2_eval

@@ -12,7 +12,7 @@
 #   - patch_fp_eval/ (= NCC 導入後 baseline)
 #   - piece_persistence_eval/ (= B1、並行 eval 中)
 # 並列上限: B1 eval 並行中のため 2 並列で起動 (resource 競合考慮)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health tier1_warmup_eval

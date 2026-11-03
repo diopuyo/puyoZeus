@@ -4,7 +4,7 @@
 #   final_2_stable_tsumo.mp4  : ツモ落下中とSTABLEの間だけオーバーレイを出す
 # 下部のおじゃま予告パネル+優勢バーは user 指示で非表示 (--hide-ojama-forecast)。
 # 構成は src/production_config.py から取得 (手書きしない)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/verify/youtube_demo_2026-08-07/dio_vs_ts_m01_clip.mp4

@@ -1,7 +1,7 @@
 #!/bin/bash
 # 未収集の適格プレイリスト中身を列挙 → data/_new_pl_candidates_2026-08-07.tsv
 # 列: pl_tag \t playlist_index \t id \t duration \t title
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 YT="./venv/bin/python -m yt_dlp --no-update"
 OUT="data/_new_pl_candidates_2026-08-07.tsv"
 : > "$OUT"

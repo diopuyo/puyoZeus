@@ -4,7 +4,7 @@
 # 再起動したため、番人プロセス自体を止める。
 # 複雑なコマンド置換は wsl 経由の直書きだと MSYS に壊されるためスクリプト化
 # (memory feedback_msys_pipe_escape)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 pkill -f _run_stall_watchdog
 pkill -f _stall_watchdog_2026-08-18

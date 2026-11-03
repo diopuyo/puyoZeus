@@ -1,0 +1,17 @@
+{
+  "source": "dshow",
+  "device_name": "OBS Virtual Camera",
+  "device_index": 0,
+  "port": 8765,
+  "output_dir": "output",
+  "dshow_color_correction": "601to709",
+  "b3_judgment": true,
+  "align_score_roi": true,
+  "b3_model": "app/models/b3/model.joblib",
+  "b3_timing_table": "app/models/b3/timing_table.json",
+  "overlay": {
+    "mascot_expressions": false,
+    "mascot_flip_right": false,
+    "mascot_band_edges": [10, 30, 70, 90]
+  }
+}

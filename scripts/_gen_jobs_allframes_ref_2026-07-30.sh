@@ -11,7 +11,7 @@
 #
 # 使い方: bash scripts/_gen_jobs_allframes_ref_2026-07-30.sh
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 
 python3 -m scripts._select_allframes_ref_games_2026-07-30
 STATUS=$?

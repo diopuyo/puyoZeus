@@ -3,7 +3,7 @@
 # 分割点は既存の fixed/v3/final バージョンで確立済みの試合境界と同一
 # (0-56s=1試合目, 56-116s=2試合目, 116-148s(末尾)=3試合目、確認済み合計148s)。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 SRC=data/verify/demo_fixed_2026-08-13/demo_fixed_3match.mp4
 OUT=data/verify/demo_fixed_2026-08-13
 FF=$(./venv/bin/python -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())")

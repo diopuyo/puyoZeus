@@ -1,0 +1,1075 @@
+{
+ "single": {
+  "gates": {
+   "false_death": true,
+   "regression": true,
+   "m_time": true,
+   "m_agree": true,
+   "score_median": true
+  },
+  "passed": true,
+  "metrics": {
+   "games": 115,
+   "bootstrap": {
+    "n": 10000,
+    "seed": 0
+   },
+   "metrics": {
+    "m_time": {
+     "paired": {
+      "diff": 0.00033074512855957305,
+      "ci95": [
+       -0.007867959414251901,
+       0.00804028353348482
+      ],
+      "se": 0.004012613145298113,
+      "mdd": 0.011241676798670015
+     },
+     "prod": 0.5977332279555303,
+     "a1": 0.5980639730840899
+    },
+    "m_agree": {
+     "paired": {
+      "diff": -0.001393430968292364,
+      "ci95": [
+       -0.008951012663665709,
+       0.006230751535892989
+      ],
+      "se": 0.0038495456690458476,
+      "mdd": 0.010784829403213812
+     },
+     "prod": 0.8400540309967297,
+     "a1": 0.8386606000284373
+    }
+   }
+  },
+  "regression": {
+   "scene": {
+    "first_display_sec": 2762.2833333333333,
+    "legacy_metric_sec": 2762.55,
+    "passed": true
+   },
+   "game14_false_times": [],
+   "passed": true
+  },
+  "deaths": {
+   "set1": {
+    "correct_before": 18,
+    "correct_retained": 17,
+    "lost": [
+     {
+      "game": 18,
+      "side": "2P",
+      "first_sec": 1224.15,
+      "false": false,
+      "in_display_span": true,
+      "candidate_observed_death_sec": 1228.4166666666667,
+      "delay_sec": 4.2666666666666515
+     }
+    ],
+    "delays": [],
+    "added": []
+   },
+   "set2": {
+    "correct_before": 15,
+    "correct_retained": 15,
+    "lost": [],
+    "delays": [
+     {
+      "game": 52,
+      "side": "1P",
+      "seconds": 0.23333333333357587
+     }
+    ],
+    "added": []
+   },
+   "review": {
+    "correct_before": 2,
+    "correct_retained": 2,
+    "lost": [],
+    "delays": [],
+    "added": []
+   },
+   "q_7gc4TgFig": {
+    "correct_before": 4,
+    "correct_retained": 4,
+    "lost": [],
+    "delays": [],
+    "added": []
+   },
+   "fcXG83vInDY": {
+    "correct_before": 2,
+    "correct_retained": 2,
+    "lost": [],
+    "delays": [
+     {
+      "game": 11,
+      "side": "2P",
+      "seconds": 0.8333333333333712
+     }
+    ],
+    "added": []
+   },
+   "mia8KCjr52g": {
+    "correct_before": 0,
+    "correct_retained": 0,
+    "lost": [],
+    "delays": [],
+    "added": []
+   },
+   "zenchi": {
+    "correct_before": 4,
+    "correct_retained": 4,
+    "lost": [],
+    "delays": [],
+    "added": []
+   }
+  },
+  "histories": {
+   "prod": {
+    "records": {
+     "review": {
+      "games": 4,
+      "incomplete": 1
+     },
+     "q_7gc4TgFig": {
+      "games": 15,
+      "incomplete": 6
+     },
+     "fcXG83vInDY": {
+      "games": 13,
+      "incomplete": 7
+     },
+     "mia8KCjr52g": {
+      "games": 12,
+      "incomplete": 7
+     },
+     "zenchi": {
+      "games": 19,
+      "incomplete": 1
+     },
+     "c1": {
+      "games": 7,
+      "incomplete": 7
+     },
+     "c2": {
+      "games": 7,
+      "incomplete": 1
+     },
+     "c3": {
+      "games": 8,
+      "incomplete": 1
+     },
+     "c4": {
+      "games": 8,
+      "incomplete": 1
+     },
+     "c5": {
+      "games": 8,
+      "incomplete": 3
+     },
+     "c6": {
+      "games": 9,
+      "incomplete": 1
+     },
+     "s0": {
+      "games": 3,
+      "incomplete": 2
+     },
+     "s1": {
+      "games": 11,
+      "incomplete": 6
+     },
+     "s2": {
+      "games": 11,
+      "incomplete": 5
+     },
+     "s3": {
+      "games": 11,
+      "incomplete": 1
+     },
+     "s4": {
+      "games": 11,
+      "incomplete": 1
+     },
+     "s5": {
+      "games": 10,
+      "incomplete": 6
+     },
+     "s6": {
+      "games": 9,
+      "incomplete": 0
+     }
+    },
+    "games": 176,
+    "incomplete": 57
+   },
+   "a1": {
+    "records": {
+     "review": {
+      "games": 4,
+      "incomplete": 1
+     },
+     "q_7gc4TgFig": {
+      "games": 15,
+      "incomplete": 6
+     },
+     "fcXG83vInDY": {
+      "games": 13,
+      "incomplete": 7
+     },
+     "mia8KCjr52g": {
+      "games": 12,
+      "incomplete": 7
+     },
+     "zenchi": {
+      "games": 19,
+      "incomplete": 1
+     },
+     "c1": {
+      "games": 7,
+      "incomplete": 7
+     },
+     "c2": {
+      "games": 7,
+      "incomplete": 1
+     },
+     "c3": {
+      "games": 8,
+      "incomplete": 1
+     },
+     "c4": {
+      "games": 8,
+      "incomplete": 1
+     },
+     "c5": {
+      "games": 8,
+      "incomplete": 3
+     },
+     "c6": {
+      "games": 9,
+      "incomplete": 1
+     },
+     "s0": {
+      "games": 3,
+      "incomplete": 2
+     },
+     "s1": {
+      "games": 11,
+      "incomplete": 6
+     },
+     "s2": {
+      "games": 11,
+      "incomplete": 5
+     },
+     "s3": {
+      "games": 11,
+      "incomplete": 1
+     },
+     "s4": {
+      "games": 11,
+      "incomplete": 1
+     },
+     "s5": {
+      "games": 10,
+      "incomplete": 6
+     },
+     "s6": {
+      "games": 9,
+      "incomplete": 0
+     }
+    },
+    "games": 176,
+    "incomplete": 57
+   }
+  },
+  "resources": {
+   "records": [
+    {
+     "name": "review",
+     "started": "2026-10-03T06:32:32.575174+00:00",
+     "seconds": 77.13515189499594
+    },
+    {
+     "name": "q_7gc4TgFig",
+     "started": "2026-10-03T06:34:35.293186+00:00",
+     "seconds": 278.1865555819968
+    },
+    {
+     "name": "fcXG83vInDY",
+     "started": "2026-10-03T06:38:36.236249+00:00",
+     "seconds": 230.98469666599703
+    },
+    {
+     "name": "mia8KCjr52g",
+     "started": "2026-10-03T06:39:57.641939+00:00",
+     "seconds": 158.100941607001
+    },
+    {
+     "name": "zenchi",
+     "started": "2026-10-03T06:38:35.157241+00:00",
+     "seconds": 230.54141312900174
+    },
+    {
+     "name": "c1",
+     "started": "2026-10-03T06:43:29.323759+00:00",
+     "seconds": 114.31379127100809
+    },
+    {
+     "name": "c2",
+     "started": "2026-10-03T06:43:13.405156+00:00",
+     "seconds": 122.5733500510105
+    },
+    {
+     "name": "c3",
+     "started": "2026-10-03T06:43:27.736603+00:00",
+     "seconds": 111.80718693499512
+    },
+    {
+     "name": "c4",
+     "started": "2026-10-03T06:46:11.122785+00:00",
+     "seconds": 126.343618496001
+    },
+    {
+     "name": "c5",
+     "started": "2026-10-03T06:45:57.239224+00:00",
+     "seconds": 123.40051624299667
+    },
+    {
+     "name": "c6",
+     "started": "2026-10-03T06:46:06.909451+00:00",
+     "seconds": 112.4723586189939
+    },
+    {
+     "name": "s0",
+     "started": "2026-10-03T06:48:46.048693+00:00",
+     "seconds": 18.392601525993086
+    },
+    {
+     "name": "s1",
+     "started": "2026-10-03T06:48:50.592093+00:00",
+     "seconds": 238.2786885569949
+    },
+    {
+     "name": "s2",
+     "started": "2026-10-03T06:49:08.967769+00:00",
+     "seconds": 229.43000189099985
+    },
+    {
+     "name": "s3",
+     "started": "2026-10-03T06:49:49.905095+00:00",
+     "seconds": 180.09111593199486
+    },
+    {
+     "name": "s4",
+     "started": "2026-10-03T06:53:35.796618+00:00",
+     "seconds": 196.74736765999114
+    },
+    {
+     "name": "s5",
+     "started": "2026-10-03T06:53:40.871978+00:00",
+     "seconds": 184.25544576300308
+    },
+    {
+     "name": "s6",
+     "started": "2026-10-03T06:57:26.633746+00:00",
+     "seconds": 71.24105796001095
+    }
+   ],
+   "total_seconds": 2804.2958597829856,
+   "started": "2026-10-03T06:32:32.575174+00:00"
+  },
+  "republish": {
+   "total": 0,
+   "records": {
+    "review": 0,
+    "q_7gc4TgFig": 0,
+    "fcXG83vInDY": 0,
+    "mia8KCjr52g": 0,
+    "zenchi": 0,
+    "c1": 0,
+    "c2": 0,
+    "c3": 0,
+    "c4": 0,
+    "c5": 0,
+    "c6": 0,
+    "s0": 0,
+    "s1": 0,
+    "s2": 0,
+    "s3": 0,
+    "s4": 0,
+    "s5": 0,
+    "s6": 0
+   },
+   "replayed_records": 18,
+   "prior_count_available": false,
+   "reason": "保存済み出力は更新後の値のみのため全18記録を再生"
+  }
+ },
+ "combo": {
+  "gates": {
+   "false_death": true,
+   "regression": true,
+   "m_time": true,
+   "m_agree": true,
+   "score_median": true
+  },
+  "passed": true,
+  "metrics": {
+   "games": 115,
+   "bootstrap": {
+    "n": 10000,
+    "seed": 0
+   },
+   "metrics": {
+    "m_time": {
+     "paired": {
+      "diff": -0.0013126097523080693,
+      "ci95": [
+       -0.012100211178771436,
+       0.008441501077747444
+      ],
+      "se": 0.005281584502473861,
+      "mdd": 0.014796807918363233
+     },
+     "prod": 0.5977332279555303,
+     "a1": 0.5964206182032222
+    },
+    "m_agree": {
+     "paired": {
+      "diff": 0.0007251528508459559,
+      "ci95": [
+       -0.015198056297752796,
+       0.02039328155673197
+      ],
+      "se": 0.009049287006146855,
+      "mdd": 0.02535234673711594
+     },
+     "prod": 0.8400540309967297,
+     "a1": 0.8407791838475757
+    }
+   }
+  },
+  "regression": {
+   "scene": {
+    "first_display_sec": 2762.2833333333333,
+    "legacy_metric_sec": 2762.55,
+    "passed": true
+   },
+   "game14_false_times": [],
+   "passed": true
+  },
+  "deaths": {
+   "set1": {
+    "correct_before": 18,
+    "correct_retained": 16,
+    "lost": [
+     {
+      "game": 10,
+      "side": "1P",
+      "first_sec": 730.7166666666667,
+      "false": false,
+      "in_display_span": true,
+      "candidate_observed_death_sec": 746.0833333333334,
+      "delay_sec": 15.366666666666674
+     },
+     {
+      "game": 18,
+      "side": "2P",
+      "first_sec": 1224.15,
+      "false": false,
+      "in_display_span": true,
+      "candidate_observed_death_sec": 1228.4166666666667,
+      "delay_sec": 4.2666666666666515
+     }
+    ],
+    "delays": [],
+    "added": [
+     {
+      "game": 2,
+      "side": "2P",
+      "first_sec": 186.46666666666667,
+      "false": false,
+      "in_display_span": true
+     },
+     {
+      "game": 5,
+      "side": "2P",
+      "first_sec": 405.06666666666666,
+      "false": false,
+      "in_display_span": true
+     },
+     {
+      "game": 6,
+      "side": "2P",
+      "first_sec": 476.03333333333336,
+      "false": false,
+      "in_display_span": true
+     },
+     {
+      "game": 31,
+      "side": "1P",
+      "first_sec": 2026.3333333333333,
+      "false": false,
+      "in_display_span": true
+     },
+     {
+      "game": 33,
+      "side": "2P",
+      "first_sec": 2161.0333333333333,
+      "false": false,
+      "in_display_span": true
+     }
+    ]
+   },
+   "set2": {
+    "correct_before": 15,
+    "correct_retained": 15,
+    "lost": [],
+    "delays": [
+     {
+      "game": 24,
+      "side": "1P",
+      "seconds": -0.16666666666606034
+     },
+     {
+      "game": 52,
+      "side": "1P",
+      "seconds": 0.23333333333357587
+     }
+    ],
+    "added": [
+     {
+      "game": 1,
+      "side": "1P",
+      "first_sec": 3475.366666666667,
+      "false": false,
+      "in_display_span": true
+     },
+     {
+      "game": 11,
+      "side": "1P",
+      "first_sec": 4272.566666666667,
+      "false": false,
+      "in_display_span": true
+     },
+     {
+      "game": 19,
+      "side": "1P",
+      "first_sec": 4811.333333333333,
+      "false": false,
+      "in_display_span": true
+     },
+     {
+      "game": 43,
+      "side": "1P",
+      "first_sec": 6199.0,
+      "false": false,
+      "in_display_span": true
+     },
+     {
+      "game": 49,
+      "side": "1P",
+      "first_sec": 6621.8,
+      "false": false,
+      "in_display_span": true
+     }
+    ]
+   },
+   "review": {
+    "correct_before": 2,
+    "correct_retained": 2,
+    "lost": [],
+    "delays": [],
+    "added": []
+   },
+   "q_7gc4TgFig": {
+    "correct_before": 4,
+    "correct_retained": 4,
+    "lost": [],
+    "delays": [],
+    "added": [
+     {
+      "source": "q_7gc4TgFig",
+      "game": 9,
+      "side": "1P",
+      "first_sec": 656.9333333333333,
+      "bound": false,
+      "observed_death_sec": 663.1666666666666,
+      "opponent_death_sec": null,
+      "winners": [
+       "2P"
+      ],
+      "false": false,
+      "unresolved": false,
+      "lead_sec": 6.2333333333333485
+     },
+     {
+      "source": "q_7gc4TgFig",
+      "game": 13,
+      "side": "1P",
+      "first_sec": 848.3666666666667,
+      "bound": false,
+      "observed_death_sec": 852.6,
+      "opponent_death_sec": null,
+      "winners": [
+       "2P"
+      ],
+      "false": false,
+      "unresolved": false,
+      "lead_sec": 4.2333333333333485
+     }
+    ]
+   },
+   "fcXG83vInDY": {
+    "correct_before": 2,
+    "correct_retained": 2,
+    "lost": [],
+    "delays": [
+     {
+      "game": 11,
+      "side": "2P",
+      "seconds": 0.8333333333333712
+     }
+    ],
+    "added": [
+     {
+      "source": "fcXG83vInDY",
+      "game": 4,
+      "side": "2P",
+      "first_sec": 435.6,
+      "bound": false,
+      "observed_death_sec": 440.6,
+      "opponent_death_sec": null,
+      "winners": [],
+      "false": false,
+      "unresolved": false,
+      "lead_sec": 5.0
+     },
+     {
+      "source": "fcXG83vInDY",
+      "game": 6,
+      "side": "1P",
+      "first_sec": 626.7333333333333,
+      "bound": false,
+      "observed_death_sec": 631.0,
+      "opponent_death_sec": null,
+      "winners": [
+       "2P"
+      ],
+      "false": false,
+      "unresolved": false,
+      "lead_sec": 4.2666666666666515
+     }
+    ]
+   },
+   "mia8KCjr52g": {
+    "correct_before": 0,
+    "correct_retained": 0,
+    "lost": [],
+    "delays": [],
+    "added": []
+   },
+   "zenchi": {
+    "correct_before": 4,
+    "correct_retained": 4,
+    "lost": [],
+    "delays": [],
+    "added": []
+   }
+  },
+  "histories": {
+   "prod": {
+    "records": {
+     "review": {
+      "games": 4,
+      "incomplete": 1
+     },
+     "q_7gc4TgFig": {
+      "games": 15,
+      "incomplete": 6
+     },
+     "fcXG83vInDY": {
+      "games": 13,
+      "incomplete": 7
+     },
+     "mia8KCjr52g": {
+      "games": 12,
+      "incomplete": 7
+     },
+     "zenchi": {
+      "games": 19,
+      "incomplete": 1
+     },
+     "c1": {
+      "games": 7,
+      "incomplete": 7
+     },
+     "c2": {
+      "games": 7,
+      "incomplete": 1
+     },
+     "c3": {
+      "games": 8,
+      "incomplete": 1
+     },
+     "c4": {
+      "games": 8,
+      "incomplete": 1
+     },
+     "c5": {
+      "games": 8,
+      "incomplete": 3
+     },
+     "c6": {
+      "games": 9,
+      "incomplete": 1
+     },
+     "s0": {
+      "games": 3,
+      "incomplete": 2
+     },
+     "s1": {
+      "games": 11,
+      "incomplete": 6
+     },
+     "s2": {
+      "games": 11,
+      "incomplete": 5
+     },
+     "s3": {
+      "games": 11,
+      "incomplete": 1
+     },
+     "s4": {
+      "games": 11,
+      "incomplete": 1
+     },
+     "s5": {
+      "games": 10,
+      "incomplete": 6
+     },
+     "s6": {
+      "games": 9,
+      "incomplete": 0
+     }
+    },
+    "games": 176,
+    "incomplete": 57
+   },
+   "a1": {
+    "records": {
+     "review": {
+      "games": 4,
+      "incomplete": 1
+     },
+     "q_7gc4TgFig": {
+      "games": 15,
+      "incomplete": 2
+     },
+     "fcXG83vInDY": {
+      "games": 13,
+      "incomplete": 2
+     },
+     "mia8KCjr52g": {
+      "games": 12,
+      "incomplete": 2
+     },
+     "zenchi": {
+      "games": 19,
+      "incomplete": 1
+     },
+     "c1": {
+      "games": 7,
+      "incomplete": 2
+     },
+     "c2": {
+      "games": 7,
+      "incomplete": 1
+     },
+     "c3": {
+      "games": 8,
+      "incomplete": 1
+     },
+     "c4": {
+      "games": 8,
+      "incomplete": 1
+     },
+     "c5": {
+      "games": 8,
+      "incomplete": 1
+     },
+     "c6": {
+      "games": 9,
+      "incomplete": 1
+     },
+     "s0": {
+      "games": 3,
+      "incomplete": 1
+     },
+     "s1": {
+      "games": 11,
+      "incomplete": 2
+     },
+     "s2": {
+      "games": 11,
+      "incomplete": 1
+     },
+     "s3": {
+      "games": 11,
+      "incomplete": 1
+     },
+     "s4": {
+      "games": 11,
+      "incomplete": 1
+     },
+     "s5": {
+      "games": 10,
+      "incomplete": 1
+     },
+     "s6": {
+      "games": 9,
+      "incomplete": 0
+     }
+    },
+    "games": 176,
+    "incomplete": 22
+   }
+  },
+  "resources": {
+   "records": [
+    {
+     "name": "review",
+     "started": "2026-10-03T07:17:23.891722+00:00",
+     "seconds": 65.60887305100914
+    },
+    {
+     "name": "q_7gc4TgFig",
+     "started": "2026-10-03T07:19:25.127020+00:00",
+     "seconds": 228.6036558229971
+    },
+    {
+     "name": "fcXG83vInDY",
+     "started": "2026-10-03T07:22:15.136782+00:00",
+     "seconds": 223.05161636898993
+    },
+    {
+     "name": "mia8KCjr52g",
+     "started": "2026-10-03T07:23:51.602158+00:00",
+     "seconds": 152.82136073400034
+    },
+    {
+     "name": "zenchi",
+     "started": "2026-10-03T07:17:22.872436+00:00",
+     "seconds": 256.5926609899907
+    },
+    {
+     "name": "c1",
+     "started": "2026-10-03T07:26:43.258310+00:00",
+     "seconds": 120.80882028800261
+    },
+    {
+     "name": "c2",
+     "started": "2026-10-03T07:26:58.081601+00:00",
+     "seconds": 129.83274597900163
+    },
+    {
+     "name": "c3",
+     "started": "2026-10-03T07:22:25.844335+00:00",
+     "seconds": 122.79832064401126
+    },
+    {
+     "name": "c4",
+     "started": "2026-10-03T07:29:22.780771+00:00",
+     "seconds": 149.92152520400123
+    },
+    {
+     "name": "c5",
+     "started": "2026-10-03T07:29:47.209236+00:00",
+     "seconds": 139.00826291300473
+    },
+    {
+     "name": "c6",
+     "started": "2026-10-03T07:25:12.086356+00:00",
+     "seconds": 125.10783830600849
+    },
+    {
+     "name": "s0",
+     "started": "2026-10-03T07:32:46.240898+00:00",
+     "seconds": 24.445133239991264
+    },
+    {
+     "name": "s1",
+     "started": "2026-10-03T07:27:51.698701+00:00",
+     "seconds": 213.07332636498904
+    },
+    {
+     "name": "s2",
+     "started": "2026-10-03T07:17:22.871036+00:00",
+     "seconds": 246.28508952999255
+    },
+    {
+     "name": "s3",
+     "started": "2026-10-03T07:33:51.519171+00:00",
+     "seconds": 136.77733106800588
+    },
+    {
+     "name": "s4",
+     "started": "2026-10-03T07:31:56.235148+00:00",
+     "seconds": 185.88163348200032
+    },
+    {
+     "name": "s5",
+     "started": "2026-10-03T07:32:33.881099+00:00",
+     "seconds": 168.94100555499608
+    },
+    {
+     "name": "s6",
+     "started": "2026-10-03T07:36:03.804824+00:00",
+     "seconds": 64.31548147799913
+    }
+   ],
+   "total_seconds": 2753.8746810189914,
+   "started": "2026-10-03T07:17:22.871036+00:00"
+  },
+  "republish": {
+   "total": 1,
+   "records": {
+    "review": 0,
+    "q_7gc4TgFig": 0,
+    "fcXG83vInDY": 0,
+    "mia8KCjr52g": 0,
+    "zenchi": 0,
+    "c1": 0,
+    "c2": 0,
+    "c3": 0,
+    "c4": 0,
+    "c5": 0,
+    "c6": 0,
+    "s0": 0,
+    "s1": 0,
+    "s2": 1,
+    "s3": 0,
+    "s4": 0,
+    "s5": 0,
+    "s6": 0
+   },
+   "replayed_records": 18,
+   "prior_count_available": false,
+   "reason": "保存済み出力は更新後の値のみのため全18記録を再生"
+  },
+  "adopted_a2_comparison": {
+   "adoption": "6d3c4dc",
+   "baseline": "/mnt/d/puyo_analyzer/wt_a2/logs/a2_safety/replay/a2",
+   "metrics": {
+    "m_time": {
+     "a2": 0.5956180339405653,
+     "combo": 0.5964206182032222,
+     "paired": {
+      "diff": 0.0008025842626568913,
+      "ci95": [
+       -0.007881712155172194,
+       0.00900896439647424
+      ],
+      "se": 0.004346347218679223,
+      "mdd": 0.012176661172643431
+     }
+    },
+    "m_agree": {
+     "a2": 0.8446893217688042,
+     "combo": 0.8407791838475757,
+     "paired": {
+      "diff": -0.003910137921228518,
+      "ci95": [
+       -0.01484558523136736,
+       0.006504357097106616
+      ],
+      "se": 0.005406826141083437,
+      "mdd": 0.01514768301446724
+     }
+    }
+   },
+   "gates": {
+    "false_death": true,
+    "regression": true,
+    "m_time": true,
+    "m_agree": true
+   },
+   "deaths": {
+    "set1": {
+     "correct_before": 22,
+     "correct_retained": 21,
+     "lost": [
+      {
+       "game": 18,
+       "side": "2P",
+       "first_sec": 1224.15,
+       "false": false,
+       "in_display_span": true,
+       "candidate_observed_death_sec": 1228.4166666666667,
+       "delay_sec": 4.2666666666666515
+      }
+     ],
+     "delays": [],
+     "added": []
+    },
+    "set2": {
+     "correct_before": 20,
+     "correct_retained": 20,
+     "lost": [],
+     "delays": [
+      {
+       "game": 24,
+       "side": "1P",
+       "seconds": -0.16666666666606034
+      }
+     ],
+     "added": []
+    },
+    "review": {
+     "correct_before": 2,
+     "correct_retained": 2,
+     "lost": [],
+     "delays": [],
+     "added": []
+    },
+    "q_7gc4TgFig": {
+     "correct_before": 6,
+     "correct_retained": 6,
+     "lost": [],
+     "delays": [],
+     "added": []
+    },
+    "fcXG83vInDY": {
+     "correct_before": 4,
+     "correct_retained": 4,
+     "lost": [],
+     "delays": [
+      {
+       "game": 11,
+       "side": "2P",
+       "seconds": 0.8333333333333712
+      }
+     ],
+     "added": []
+    },
+    "mia8KCjr52g": {
+     "correct_before": 0,
+     "correct_retained": 0,
+     "lost": [],
+     "delays": [],
+     "added": []
+    },
+    "zenchi": {
+     "correct_before": 4,
+     "correct_retained": 4,
+     "lost": [],
+     "delays": [],
+     "added": []
+    }
+   }
+  }
+ },
+ "reported_utc": "2026-10-03T07:41:43.776430+00:00",
+ "replay_wall_seconds": 4151.201256
+}

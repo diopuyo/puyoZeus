@@ -9,7 +9,7 @@
 #   v89m7  (改善動画 = -65)
 # 出力: data/verify/ncc_sweep/<thresh>/<video>.json
 # 並列上限 3 (= CLAUDE.md ルール)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health ncc_sweep

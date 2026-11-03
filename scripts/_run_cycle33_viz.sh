@@ -3,7 +3,7 @@
 # 既 default model (cnn_phase_b_large_v2.pt) + image_reader の tier 1 ON で viz 生成
 # 3 動画 (v89m3, v97m11, v70m2) 直列。 board log も同時に出力。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle33
 mkdir -p logs/board_logs

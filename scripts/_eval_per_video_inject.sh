@@ -3,7 +3,7 @@
 # 動画名から動画 ID を自動抽出 → 該当 per-video JSON を inject (resolve_hsv_path)
 # --hsv-state 省略で自動選択 (= 案 K の本体は visualize_recognition.py 側)
 # 8 動画 eval + 4 動画 viz を並列 3 で実行。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/verify/per_video_inject_viz
 mkdir -p data/verify/per_video_inject_eval

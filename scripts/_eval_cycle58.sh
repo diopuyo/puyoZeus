@@ -1,6 +1,6 @@
 #!/bin/bash
 # cycle 58 評価 並列 3 (= 4 動画 viz + 8 動画 eval).
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/verify/cycle58_viz
 mkdir -p data/verify/cycle58_eval

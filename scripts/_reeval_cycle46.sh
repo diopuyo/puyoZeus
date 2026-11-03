@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 for v in v29m2 v40m7 v51m2 v57m2 v70m2 v89m3 v95m15 v97m11; do
   PYTHONPATH=. ./venv/bin/python -m scripts.evaluate_recognition \
     --board-log "logs/board_logs/cycle46_${v}_buf15.jsonl" \

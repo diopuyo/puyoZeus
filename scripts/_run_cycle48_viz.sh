@@ -2,7 +2,7 @@
 # cycle 48: 偽 chain ガード追加 (= recognition_pipeline.py 改修済)
 # evaluation_videos_v2 (= 8 動画 buf15s) で評価
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle48
 mkdir -p logs/board_logs

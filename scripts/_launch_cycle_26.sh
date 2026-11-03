@@ -5,7 +5,7 @@
 #   A4: NEXT 色 prior 強化 (ratio>=0.7) + 早期確定 (len>=5, ratio>=0.8)
 #   model: cnn_phase_i_hsv_seed.pt (= cycle_19 baseline と同条件)
 #   cycle_19 (mismatch 38) と比較して、 viz 上の「置いた直後の誤認」 削減を検証
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 PYTHONPATH=. ./venv/bin/python -m scripts.multi_video_cycle \
     --cycle 26 --parallel 3 \
     --cnn-model models/cnn_phase_i_hsv_seed.pt \

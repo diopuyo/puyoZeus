@@ -1,0 +1,24 @@
+FAILED tests/phase_j/test_brand_shortcuts.py::test_upgrade_migrates_only_same_installation[PuyoLive-]
+FAILED tests/phase_j/test_brand_shortcuts.py::test_upgrade_migrates_only_same_installation[puyoZeus-]
+FAILED tests/test_live_b11.py::test_b11_does_not_start_without_idle
+FAILED tests/test_live_b11.py::test_b11_waits_for_prior_then_uses_correct_interval
+FAILED tests/test_live_b12.py::test_affinity_covers_existing_threads
+FAILED tests/test_live_b12.py::test_affinity_does_not_modify_external_process
+FAILED tests/test_live_b12.py::test_affinity_handles_inherited_partition[evaluation]
+FAILED tests/test_live_b12.py::test_affinity_handles_inherited_partition[mc]
+FAILED tests/test_live_b12.py::test_affinity_handles_inherited_partition[recognition]
+FAILED tests/test_live_b12.py::test_proc_parser_excludes_guests_and_other_group
+FAILED tests/test_live_b20.py::test_fast_terminal_default_is_off
+FAILED tests/test_live_b20.py::test_fast_terminal_is_decision_identical_on_positive_and_negative_frames
+FAILED tests/test_live_b20.py::test_local_peak_is_lower_bound_and_fallback_keeps_decisions
+FAILED tests/test_live_b20.py::test_off_path_scores_equal_original_formula
+FAILED tests/test_live_b7.py::test_measurement_cpu_once_or_timeout[False]
+FAILED tests/test_live_b7.py::test_measurement_cpu_once_or_timeout[True]
+FAILED tests/test_live_b9.py::test_owned_process_cleans_up_on_monitor_error
+FAILED tests/test_live_speed.py::test_observation_uses_opt_in_paths[False-False]
+FAILED tests/test_live_speed.py::test_observation_uses_opt_in_paths[False-True]
+FAILED tests/test_live_speed.py::test_observation_uses_opt_in_paths[True-False]
+FAILED tests/test_live_speed.py::test_observation_uses_opt_in_paths[True-True]
+FAILED tests/test_recognition_pipeline.py::test_load_default_calibration_kwargs_default_none_backward_compat
+FAILED tests/test_recognition_pipeline.py::test_load_default_exposes_chain_hold_calibration_kwargs
+23 failed in 3.49s

@@ -1,7 +1,7 @@
 #!/bin/bash
 # 条件1を基準に条件3/2/4を密なdisplay timelineで一括比較する。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 ROOT=data/verify/gate4_formal_dense_2026-08-26
 OFF="$ROOT/cond1_off_baseline"

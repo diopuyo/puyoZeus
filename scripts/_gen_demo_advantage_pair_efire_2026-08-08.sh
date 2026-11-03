@@ -3,7 +3,7 @@
 #   映像A = 有利不利の表示のみ (視聴者が試合として見られる版)
 #   映像B = A に認識オーバーレイを重ねた版 (--show-recognition)
 # 台本 docs/YOUTUBE_SCRIPT_2026-08-08.md の前半/後半に対応する。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/verify/youtube_demo_2026-08-07/dio_vs_ts_m01_clip.mp4

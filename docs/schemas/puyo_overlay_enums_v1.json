@@ -1,0 +1,94 @@
+{
+  "manifest_version": "puyo-overlay-enums/v1",
+  "schema_versions": ["puyo-overlay-snapshot/v1", "puyo-overlay-health/v1"],
+  "enums": {
+    "visibility": {
+      "values": ["visible", "hidden"],
+      "nullable": false
+    },
+    "display_status": {
+      "values": ["live", "physical_prediction", "hold", "terminal_fact", "result", "waiting", "integrity_fault"],
+      "nullable": false
+    },
+    "update_reason": {
+      "values": ["initial_snapshot", "observation_update", "physical_fact_update", "prediction_committed", "hold_started", "hold_reason_changed", "hold_expired", "terminal_confirmed", "result_transition", "formal_boundary", "config_pending", "worker_state_changed", "timer_elapsed", "integrity_fault"],
+      "nullable": false
+    },
+    "hold_reason": {
+      "values": ["terminal_confirmation_pending", "recognition_unreliable", "physics_ambiguous", "prediction_worker_fault", "prediction_deadline_missed", "calculation_pending", "both_chaining_no_new_fact"],
+      "nullable": true
+    },
+    "integrity_status": {
+      "values": ["ok", "degraded", "fault"],
+      "nullable": false
+    },
+    "fault_code": {
+      "values": ["sequence_gap", "sequence_reversed", "id_content_conflict", "asset_bundle_changed_mid_match", "schema_invalid", "cutoff_violation", "snapshot_revision_stale", "unexpected_boundary", "internal_invariant_failed"],
+      "nullable": false
+    },
+    "evaluation_mode": {
+      "values": ["practical", "best_action", "both"],
+      "nullable": false
+    },
+    "evaluation_availability": {
+      "values": ["available", "pending", "unavailable"],
+      "nullable": false
+    },
+    "practical_origin": {
+      "values": ["observed", "physical_prediction", "model"],
+      "nullable": true
+    },
+    "board_provenance": {
+      "values": ["confirmed", "physics_projected", "unknown"],
+      "nullable": false
+    },
+    "recognition_quality_status": {
+      "values": ["trusted", "partial", "untrusted"],
+      "nullable": false
+    },
+    "recognition_reason": {
+      "values": ["board_unstable", "board_conflict", "next_unknown", "capture_gap", "calibration_unavailable", "recognition_asset_mismatch"],
+      "nullable": false
+    },
+    "unresolved_physics_reason": {
+      "values": ["chain_resolving", "cancel_unresolved", "garbage_pending", "landing_ambiguous", "terminal_candidate_pending"],
+      "nullable": false
+    },
+    "terminal_state": {
+      "values": ["none", "candidate", "confirmed"],
+      "nullable": false
+    },
+    "terminal_winner": {
+      "values": ["1P", "2P"],
+      "nullable": true
+    },
+    "terminal_evidence_kind": {
+      "values": ["visual_result_logo_bilateral_2x2"],
+      "nullable": true
+    },
+    "terminal_result_code": {
+      "values": ["p1_win", "p2_win"],
+      "nullable": true
+    },
+    "runtime_status": {
+      "values": ["starting", "healthy", "degraded"],
+      "nullable": false
+    },
+    "runtime_tier": {
+      "values": ["lightweight", "standard", "high_accuracy", "analysis"],
+      "nullable": false
+    },
+    "worker_health": {
+      "values": ["starting", "healthy", "degraded", "restarting", "disabled"],
+      "nullable": false
+    },
+    "telemetry_health": {
+      "values": ["healthy", "degraded", "unavailable"],
+      "nullable": false
+    },
+    "health_error_code": {
+      "values": ["telemetry_sink_degraded", "telemetry_sink_unavailable", "practical_worker_fault", "best_action_worker_fault", "snapshot_stale", "internal_health_invariant_failed"],
+      "nullable": true
+    }
+  }
+}

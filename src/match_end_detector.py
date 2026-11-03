@@ -28,6 +28,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from src.prepared_template import PreparedTemplate
+
 # 既定テンプレートディレクトリ
 DEFAULT_TEMPLATE_DIR: Path = Path("models/ui_templates")
 # テンプレ名 prefix (match_end_*.png をすべて読み込む)
@@ -73,9 +75,12 @@ class MatchEndDetector:
         lockdown_sec: float = DEFAULT_LOCKDOWN_SEC,
     ) -> None:
         self._templates = templates
+        self._prepared = {name: PreparedTemplate(value) for name, value in templates.items()}
         self._threshold = threshold
         self._lockdown_sec = lockdown_sec
         self._last_detected_t: float | None = None
+        self.last_detection: MatchEndDetectionResult | None = None
+        self.last_detection_t: float | None = None
 
     @classmethod
     def load_default(
@@ -83,8 +88,12 @@ class MatchEndDetector:
         template_dir: Path = DEFAULT_TEMPLATE_DIR,
         threshold: float = DEFAULT_NCC_THRESHOLD,
         lockdown_sec: float = DEFAULT_LOCKDOWN_SEC,
+        pair_mode: bool = False,
     ) -> "MatchEndDetector":
         """既定ディレクトリから match_end_*.png を読み込む。"""
+        from src.image_free_ui import enabled, LearnedMatchEnd
+        if enabled() and not pair_mode:
+            return LearnedMatchEnd(threshold, lockdown_sec)
         templates: dict[str, np.ndarray] = {}
         if template_dir.exists():
             for p in sorted(template_dir.glob(f"{MATCH_END_PREFIX}*.png")):
@@ -93,6 +102,9 @@ class MatchEndDetector:
                     continue
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 templates[p.stem] = gray
+        if pair_mode:
+            from src.async_match_end_pair import AsyncMatchEndPairDetector
+            return AsyncMatchEndPairDetector(templates)
         return cls(
             templates=templates,
             threshold=threshold,
@@ -125,8 +137,7 @@ class MatchEndDetector:
             tH, tW = tmpl.shape[:2]
             if roi_gray.shape[0] < tH or roi_gray.shape[1] < tW:
                 continue
-            result = cv2.matchTemplate(roi_gray, tmpl, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, _ = cv2.minMaxLoc(result)
+            max_val, _ = self._prepared[name].peak(roi_gray, self._threshold)
             if max_val > best_score:
                 best_score = float(max_val)
                 best_name = name
@@ -144,6 +155,9 @@ class MatchEndDetector:
             bool: 現在 (= t_sec 時点で) ロック中か。
         """
         result = self.detect(frame_bgr)
+        # 計装専用。間引かれた次フレームと区別できるよう観測時刻も保存する。
+        self.last_detection = result
+        self.last_detection_t = t_sec
         if result.detected:
             self._last_detected_t = t_sec
         return self.is_locked(t_sec)
@@ -157,6 +171,8 @@ class MatchEndDetector:
     def reset(self) -> None:
         """内部タイマーをリセット (試合間で呼ぶ場合)。"""
         self._last_detected_t = None
+        self.last_detection = None
+        self.last_detection_t = None
 
     @property
     def last_detected_t(self) -> float | None:

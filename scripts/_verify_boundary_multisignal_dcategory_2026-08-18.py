@@ -14,6 +14,14 @@ is_match_active=False として正しく除外されるようになったかを�
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import json
 import sys
 from dataclasses import dataclass
@@ -29,8 +37,7 @@ from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 
 VIDEO_DIR: Path = Path.home() / "frames"
 OUT_DIR: Path = Path(
-    "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
-    "/data/verify/boundary_impl_verify_2026-08-18"
+    _public_dev_text('<repo>/data/verify/boundary_impl_verify_2026-08-18')
 )
 WARMUP_MARGIN_SEC: float = 2.0
 TAIL_MARGIN_SEC: float = 3.0

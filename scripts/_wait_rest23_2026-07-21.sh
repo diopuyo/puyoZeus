@@ -1,7 +1,7 @@
 #!/bin/bash
 # 残り23本収集の完了を待つ(ALL DONEログ検知 or タイムアウト)。
 # fd/途中npzは進捗指標にしない (memory project_collect_indicators_v2_perf_2026-07-20 の教訓)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 LOG=logs/lean_next_rest23_2026-07-21.log
 MAX_WAIT_SEC=7200   # 最大2時間待つ (安全上限)
 ELAPSED=0

@@ -132,3 +132,11 @@ data/verify/*
 # archive / examples 除外
 archive/
 examples/
+
+# ライブ入力の機器別較正profileは各機器に保存し、共有設定には混ぜない。
+config/device_calibration/*.json
+
+# 調査用のゲーム画面フレームは git に入れない (2026-10-03、配布に必要な画像は models/ 配下)
+logs/**/*.png
+logs/**/*.jpg
+logs/**/*.jpeg

@@ -1,0 +1,15 @@
+{
+  "schema_version": "puyo-overlay-health/v1",
+  "server_status": "starting",
+  "session_id": "session-starting-example",
+  "latest_stream_seq": 0,
+  "latest_snapshot_age_ms": 0,
+  "subscriber_count": 0,
+  "subscriber_limit": 4,
+  "telemetry_health": "healthy",
+  "bound_host": "127.0.0.1",
+  "bound_port": 8765,
+  "started_at_utc": "2026-09-02T07:00:00Z",
+  "checked_at_utc": "2026-09-02T07:00:00Z",
+  "last_error_code": null
+}

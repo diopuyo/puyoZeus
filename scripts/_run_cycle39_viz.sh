@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle 39: threshold 27 (= c37 25 と c38 30 の中間)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle39
 mkdir -p logs/board_logs

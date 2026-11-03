@@ -22,7 +22,7 @@
 #   LABEL_CLI=opencv   ← OpenCV 版 (scripts.label_cells) で起動
 #   LABEL_CLI=gui      ← Tkinter 版 (scripts.label_cells_gui) で起動 (default)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 # WSLg 用 DISPLAY 環境変数を明示設定 (= wsl 直接実行ではプロファイルが読まれない).
 # WSL2 + Windows 11 + WSLg なら以下のデフォルトで GUI が転送される.

@@ -2,7 +2,7 @@
 # cycle 43: video_30 試合 11 (= 89 秒) 完全切り出し holdout 評価
 # 試合開始から終了まで完全に含む = ユーザー指示「試合切り抜き必要」 対応
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/holdout_videos
 mkdir -p data/review_videos/cycle43

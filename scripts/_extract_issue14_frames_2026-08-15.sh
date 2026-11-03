@@ -1,6 +1,6 @@
 #!/bin/bash
 # 指摘14 証拠フレーム抽出 (final3_m1.mp4、デモ内相対秒 = 絶対秒-162)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 FF=./venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2
 OUT=data/verify/diag_issue14_2026-08-15
 mkdir -p "$OUT"

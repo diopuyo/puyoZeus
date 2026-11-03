@@ -1,7 +1,7 @@
 #!/bin/bash
 # 新おいうリーグ・チャレンジャー30本(pl_new_missing.tsv)をH.264強制でDL。video_c4..c33。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
-FF=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+FF=<home>/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
 i=4
 while IFS=$'\t' read -r id dur title; do
   [ -z "$id" ] && continue

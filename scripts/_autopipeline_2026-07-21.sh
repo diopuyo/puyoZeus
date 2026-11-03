@@ -1,6 +1,6 @@
 #!/bin/bash
 # 収集完了を待って自動的にフェーズ3+4まで走らせる自律パイプライン。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 LOG=logs/lean_next_rest23_2026-07-21.log
 MAX_WAIT_SEC=7200
 ELAPSED=0

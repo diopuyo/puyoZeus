@@ -4,7 +4,7 @@
 #   2. 必要な動画を ext4 ($HOME/frames) にコピー (/mnt/c の 9p I/O ボトルネック回避)
 #   3. _run_safe.sh MAXPAR=12 で detach 起動
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 JOBS=scripts/_jobs_collect_xii_rest.txt
 : > "$JOBS"

@@ -77,7 +77,7 @@ wc -l data/diagnostics/v91_match1_75s_diag_phase1b.jsonl
 ```
 
 ## 既に取得済 viz (= ユーザーレビュー済)
-- Phase 1a viz: `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v91_match1_75s_viz_phase1a.mp4`
+- Phase 1a viz: `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v91_match1_75s_viz_phase1a.mp4`
   - 観察: 物理推論効いている (= 全体品質向上)、 ただし**置いた後の位置誤り + 後から修正が目立つ**
 
 ## 次セッション優先タスク

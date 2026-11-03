@@ -1,0 +1,448 @@
+F9 単調性事後検査の対象列（統括決定 2026-10-05）
+
+出典: src/b3_column_spec.py の COLUMN_SPECS（台帳順を保持）。
+出典SHA256（確定コミットのgit blob、LF）: 77320891464f8dcf3d8c60b0ff3bcf26900fdb46ac5fb70e7be1a70be551d650
+抽出規則: role == "feature" かつ列名が次の正規表現に fullmatch する列だけを採用する。
+(?:cells_color_p[12]|ind_board_color_puyo_total_p[12]|df_cells_color|df_ind_board_color_puyo_total)
+意味: 現在の盤面の色ぷよ(1-5、row0込み)総数、その既存正規化表現、および両側の差のみ。
+おじゃま・予告・高さ・火力・連鎖を含む列は除外する。単なる依存関係では選ばない。
+量だけか迷う列は除外する。発火前/開始時保持数・消費数は過去の連鎖文脈なので除外する。
+抽出は列台帳の読み込みと上記条件の適用のみ。学習行・封印データを読まない。
+kind の既存規則を保持: side_abs は側交換、diff_raw は符号反転、diff_centered は 1-x。
+正規化・欠測処理は既存仕様に従い、対象外列（層・maskを含む）は差し替えない。
+
+採用列: 6列
+列名	kind	norm
+cells_color_p1	side_abs	none
+cells_color_p2	side_abs	none
+ind_board_color_puyo_total_p1	side_abs	0-1(既存指標)
+ind_board_color_puyo_total_p2	side_abs	0-1(既存指標)
+df_ind_board_color_puyo_total	diff_centered	0.5+0.5*(p1-p2)
+df_cells_color	diff_raw	none
+
+除外列と理由（全非採用列を列台帳順に列挙）
+列名	理由
+row_key	role=meta の補助情報であり色ぷよ量そのものではない
+video_id	role=meta の補助情報であり色ぷよ量そのものではない
+game_idx	role=meta の補助情報であり色ぷよ量そのものではない
+frame_idx	role=meta の補助情報であり色ぷよ量そのものではない
+t_sec	role=meta の補助情報であり色ぷよ量そのものではない
+orientation	role=meta の補助情報であり色ぷよ量そのものではない
+trigger_mask	role=meta の補助情報であり色ぷよ量そのものではない
+held_sec	role=label の補助情報であり色ぷよ量そのものではない
+weight	role=label の補助情報であり色ぷよ量そのものではない
+won_p1	role=label の補助情報であり色ぷよ量そのものではない
+av_max	role=audit の補助情報であり色ぷよ量そのものではない
+av_frame	role=audit の補助情報であり色ぷよ量そのものではない
+lean_row_p1	role=meta の補助情報であり色ぷよ量そのものではない
+lean_row_p2	role=meta の補助情報であり色ぷよ量そのものではない
+av_board_p1	role=audit の補助情報であり色ぷよ量そのものではない
+av_board_p2	role=audit の補助情報であり色ぷよ量そのものではない
+av_queue_p1	role=audit の補助情報であり色ぷよ量そのものではない
+av_queue_p2	role=audit の補助情報であり色ぷよ量そのものではない
+av_fire_p1	role=audit の補助情報であり色ぷよ量そのものではない
+av_fire_p2	role=audit の補助情報であり色ぷよ量そのものではない
+av_formula_p1	role=audit の補助情報であり色ぷよ量そのものではない
+av_formula_p2	role=audit の補助情報であり色ぷよ量そのものではない
+av_icon_p1	role=audit の補助情報であり色ぷよ量そのものではない
+av_icon_p2	role=audit の補助情報であり色ぷよ量そのものではない
+phase	おじゃまを含む総量・局面であり色ぷよ量だけではない
+phase_total_max	おじゃまを含む総量・局面であり色ぷよ量だけではない
+mk_phase	role=audit の補助情報であり色ぷよ量そのものではない
+elapsed_first_move	時間・換算レートであり色ぷよ量ではない
+rate_now	時間・換算レートであり色ぷよ量ではない
+mode_exchange	連鎖・着弾状態であり色ぷよ量ではない
+mode_bits	連鎖・着弾状態であり色ぷよ量ではない
+n_known_colors	色の種類数であり色ぷよの個数ではない
+cells_ojama_p1	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+cells_ojama_p2	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+cells_unknown_p1	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+cells_unknown_p2	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+cells_total_p1	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+cells_total_p2	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+max_height_p1	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+max_height_p2	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+board_age_p1	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+board_age_p2	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+is_dead_p1	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+is_dead_p2	おじゃま・UNKNOWN・混合総量・高さ・盤面年齢・窒息を表す
+mk_board_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_board_p2	role=audit の補助情報であり色ぷよ量そのものではない
+ind_board_puyo_total_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_board_puyo_total_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_max_column_height_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_max_column_height_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_column_bumpiness_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_column_bumpiness_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_death_margin_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_death_margin_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_death_margin_neighbor_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_death_margin_neighbor_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_center_bulge_color_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_center_bulge_color_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_center_bulge_ojama_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_center_bulge_ojama_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_board_ojama_count_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_board_ojama_count_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_color_diversity_evenness_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_color_diversity_evenness_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_buried_hole_count_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_buried_hole_count_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_current_max_chain_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_current_max_chain_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_dig_resistance_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_dig_resistance_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_ukeyasusa_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_ukeyasusa_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_sub_chain_count_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_sub_chain_count_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_immediate_fire_power_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_immediate_fire_power_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_chain_efficiency_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_chain_efficiency_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_min_puyos_to_ignite_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_min_puyos_to_ignite_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_second_chain_potential_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_second_chain_potential_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_main_linked_pair_count_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_main_linked_pair_count_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_isolated_pair_count_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_isolated_pair_count_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_main_linked_ratio_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_main_linked_ratio_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_ignition_point_count_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_ignition_point_count_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_multi_color_ignition_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_multi_color_ignition_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_simultaneous_pop_richness_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_simultaneous_pop_richness_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_saturation_chain_upper_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_saturation_chain_upper_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_chain_articulation_point_count_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_chain_articulation_point_count_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_conn_pair_count_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_conn_pair_count_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_conn_triple_count_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_conn_triple_count_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_conn_max_group_size_p1	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+ind_conn_max_group_size_p2	形状・色分布・連結・消去能力等または混合総量を含み、色ぷよ量だけとは確定できない
+mk_ind_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_ind_p2	role=audit の補助情報であり色ぷよ量そのものではない
+k1_ojama_p1	探索・火力を含む
+k1_ojama_p2	探索・火力を含む
+k1_nf_p1	探索・火力を含む
+k1_nf_p2	探索・火力を含む
+k2_ojama_p1	探索・火力を含む
+k2_ojama_p2	探索・火力を含む
+k2_nf_p1	探索・火力を含む
+k2_nf_p2	探索・火力を含む
+k3_ojama_p1	探索・火力を含む
+k3_ojama_p2	探索・火力を含む
+k3_nf_p1	探索・火力を含む
+k3_nf_p2	探索・火力を含む
+k4_ojama_p1	探索・火力を含む
+k4_ojama_p2	探索・火力を含む
+k4_nf_p1	探索・火力を含む
+k4_nf_p2	探索・火力を含む
+k5_ojama_p1	探索・火力を含む
+k5_ojama_p2	探索・火力を含む
+k5_nf_p1	探索・火力を含む
+k5_nf_p2	探索・火力を含む
+search_done_h_p1	探索・火力を含む
+search_done_h_p2	探索・火力を含む
+mk_k_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_k_p2	role=audit の補助情報であり色ぷよ量そのものではない
+queue_age_p1	NEXT情報の年齢
+queue_age_p2	NEXT情報の年齢
+mk_queue_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_queue_p2	role=audit の補助情報であり色ぷよ量そのものではない
+score_p1	得点
+score_p2	得点
+mk_score_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_score_p2	role=audit の補助情報であり色ぷよ量そのものではない
+icon_raw_total_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_total_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_total_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_total_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_small_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_small_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_small_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_small_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_large_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_large_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_large_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_large_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_rock_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_rock_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_rock_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_rock_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_star_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_star_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_star_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_star_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_moon_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_moon_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_moon_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_moon_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_crown_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_raw_crown_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_crown_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_crown_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_nf_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_corr_nf_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_big_clipped_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_big_clipped_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_ub_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_ub_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_omitted_p1	role=reference_only の補助情報であり色ぷよ量そのものではない
+icon_omitted_p2	role=reference_only の補助情報であり色ぷよ量そのものではない
+mk_icon_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_icon_p2	role=audit の補助情報であり色ぷよ量そのものではない
+sl_pending_p1	得点・予告おじゃまの台帳
+sl_pending_p2	得点・予告おじゃまの台帳
+sl_generated_p1	得点・予告おじゃまの台帳
+sl_generated_p2	得点・予告おじゃまの台帳
+sl_offset_p1	得点・予告おじゃまの台帳
+sl_offset_p2	得点・予告おじゃまの台帳
+sl_dropped_p1	得点・予告おじゃまの台帳
+sl_dropped_p2	得点・予告おじゃまの台帳
+sl_carry_p1	得点・予告おじゃまの台帳
+sl_carry_p2	得点・予告おじゃまの台帳
+sl_observed_landing_p1	得点・予告おじゃまの台帳
+sl_observed_landing_p2	得点・予告おじゃまの台帳
+sl_board_increase_p1	得点・予告おじゃまの台帳
+sl_board_increase_p2	得点・予告おじゃまの台帳
+sl_board_excess_p1	得点・予告おじゃまの台帳
+sl_board_excess_p2	得点・予告おじゃまの台帳
+sl_pending_nf_p1	得点・予告おじゃまの台帳
+sl_pending_nf_p2	得点・予告おじゃまの台帳
+sl_rate	得点・予告おじゃまの台帳
+mk_sl_c	role=audit の補助情報であり色ぷよ量そのものではない
+av_ledger	role=audit の補助情報であり色ぷよ量そのものではない
+mk_sl_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_sl_p2	role=audit の補助情報であり色ぷよ量そのものではない
+land_icon_drop_p1	おじゃま着弾
+land_icon_drop_p2	おじゃま着弾
+land_board_net_p1	おじゃま着弾
+land_board_net_p2	おじゃま着弾
+land_age_p1	おじゃま着弾
+land_age_p2	おじゃま着弾
+land_count_p1	おじゃま着弾
+land_count_p2	おじゃま着弾
+mk_land_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_land_p2	role=audit の補助情報であり色ぷよ量そのものではない
+r_ledger_pending_p1	role=R_only の補助情報であり色ぷよ量そのものではない
+r_ledger_pending_p2	role=R_only の補助情報であり色ぷよ量そのものではない
+r_ledger_forecast_p1	role=R_only の補助情報であり色ぷよ量そのものではない
+r_ledger_forecast_p2	role=R_only の補助情報であり色ぷよ量そのものではない
+r_ledger_net_balance	role=R_only の補助情報であり色ぷよ量そのものではない
+chain_active_p1	連鎖の状態・段数・時間・得点・火力
+chain_active_p2	連鎖の状態・段数・時間・得点・火力
+chain_n_steps_p1	連鎖の状態・段数・時間・得点・火力
+chain_n_steps_p2	連鎖の状態・段数・時間・得点・火力
+chain_pred_l_p1	連鎖の状態・段数・時間・得点・火力
+chain_pred_l_p2	連鎖の状態・段数・時間・得点・火力
+chain_rem_stages_p1	連鎖の状態・段数・時間・得点・火力
+chain_rem_stages_p2	連鎖の状態・段数・時間・得点・火力
+chain_rem_sec_p1	連鎖の状態・段数・時間・得点・火力
+chain_rem_sec_p2	連鎖の状態・段数・時間・得点・火力
+chain_rem_sec_table_p1	連鎖の状態・段数・時間・得点・火力
+chain_rem_sec_table_p2	連鎖の状態・段数・時間・得点・火力
+chain_age_p1	連鎖の状態・段数・時間・得点・火力
+chain_age_p2	連鎖の状態・段数・時間・得点・火力
+chain_pred_score_p1	連鎖の状態・段数・時間・得点・火力
+chain_pred_score_p2	連鎖の状態・段数・時間・得点・火力
+chain_pred_ojama_p1	連鎖の状態・段数・時間・得点・火力
+chain_pred_ojama_p2	連鎖の状態・段数・時間・得点・火力
+endsig_stable_p1	連鎖の状態・段数・時間・得点・火力
+endsig_stable_p2	連鎖の状態・段数・時間・得点・火力
+endsig_next_p1	連鎖の状態・段数・時間・得点・火力
+endsig_next_p2	連鎖の状態・段数・時間・得点・火力
+endsig_ojama_p1	連鎖の状態・段数・時間・得点・火力
+endsig_ojama_p2	連鎖の状態・段数・時間・得点・火力
+mk_chain_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_chain_p2	role=audit の補助情報であり色ぷよ量そのものではない
+ep_closed_n_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_closed_n_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_age_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_age_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_denominator_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_denominator_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_steps_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_steps_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_consumed_formula_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_consumed_formula_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_ratio_formula_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_ratio_formula_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_consumed_board_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_consumed_board_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_ratio_board_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_ratio_board_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_honsen60_formula_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_honsen60_formula_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_honsen60_board_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_honsen60_board_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_saisoku_formula_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_saisoku_formula_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_chain7plus_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_chain7plus_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_sent_ojama_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+ep_sent_ojama_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+pf_available_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+pf_available_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+pf_color_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+pf_color_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+pf_before_color_p1	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+pf_before_color_p2	発火前・開始時の保持量または連鎖エピソードの消費量・割合・状態であり、現在盤面の量だけとは確定できない（保守的除外）
+mk_ep_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_ep_p2	role=audit の補助情報であり色ぷよ量そのものではない
+mk_ep_f_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_ep_f_p2	role=audit の補助情報であり色ぷよ量そのものではない
+mk_ep_b_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_ep_b_p2	role=audit の補助情報であり色ぷよ量そのものではない
+mk_pf_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_pf_p2	role=audit の補助情報であり色ぷよ量そのものではない
+ta_active_p1	時間軸の火力・予告・相殺を含む
+ta_active_p2	時間軸の火力・予告・相殺を含む
+ta_a_rem_sec_p1	時間軸の火力・予告・相殺を含む
+ta_a_rem_sec_p2	時間軸の火力・予告・相殺を含む
+ta_b_busy_p1	時間軸の火力・予告・相殺を含む
+ta_b_busy_p2	時間軸の火力・予告・相殺を含む
+ta_window_p1	時間軸の火力・予告・相殺を含む
+ta_window_p2	時間軸の火力・予告・相殺を含む
+ta_hand_med_sec_p1	時間軸の火力・予告・相殺を含む
+ta_hand_med_sec_p2	時間軸の火力・予告・相殺を含む
+ta_hand_fast_sec_p1	時間軸の火力・予告・相殺を含む
+ta_hand_fast_sec_p2	時間軸の火力・予告・相殺を含む
+ta_H_med_p1	時間軸の火力・予告・相殺を含む
+ta_H_med_p2	時間軸の火力・予告・相殺を含む
+ta_H_fast_p1	時間軸の火力・予告・相殺を含む
+ta_H_fast_p2	時間軸の火力・予告・相殺を含む
+ta_req_h_p1	時間軸の火力・予告・相殺を含む
+ta_req_h_p2	時間軸の火力・予告・相殺を含む
+ta_done_h_p1	時間軸の火力・予告・相殺を含む
+ta_done_h_p2	時間軸の火力・予告・相殺を含む
+ta_trunc_p1	時間軸の火力・予告・相殺を含む
+ta_trunc_p2	時間軸の火力・予告・相殺を含む
+ta_q_med_p1	時間軸の火力・予告・相殺を含む
+ta_q_med_p2	時間軸の火力・予告・相殺を含む
+ta_q_fast_p1	時間軸の火力・予告・相殺を含む
+ta_q_fast_p2	時間軸の火力・予告・相殺を含む
+ta_i_pred_p1	時間軸の火力・予告・相殺を含む
+ta_i_pred_p2	時間軸の火力・予告・相殺を含む
+ta_i_sl_p1	時間軸の火力・予告・相殺を含む
+ta_i_sl_p2	時間軸の火力・予告・相殺を含む
+ta_i_icon_p1	時間軸の火力・予告・相殺を含む
+ta_i_icon_p2	時間軸の火力・予告・相殺を含む
+ta_q_med_nf_p1	時間軸の火力・予告・相殺を含む
+ta_q_med_nf_p2	時間軸の火力・予告・相殺を含む
+ta_q_fast_nf_p1	時間軸の火力・予告・相殺を含む
+ta_q_fast_nf_p2	時間軸の火力・予告・相殺を含む
+ta_m_pred_med_p1	時間軸の火力・予告・相殺を含む
+ta_m_pred_med_p2	時間軸の火力・予告・相殺を含む
+ta_mg_pred_med_p1	時間軸の火力・予告・相殺を含む
+ta_mg_pred_med_p2	時間軸の火力・予告・相殺を含む
+ta_recv_pred_med_p1	時間軸の火力・予告・相殺を含む
+ta_recv_pred_med_p2	時間軸の火力・予告・相殺を含む
+ta_send_pred_med_p1	時間軸の火力・予告・相殺を含む
+ta_send_pred_med_p2	時間軸の火力・予告・相殺を含む
+ta_unc72_pred_med_p1	時間軸の火力・予告・相殺を含む
+ta_unc72_pred_med_p2	時間軸の火力・予告・相殺を含む
+ta_m_pred_fast_p1	時間軸の火力・予告・相殺を含む
+ta_m_pred_fast_p2	時間軸の火力・予告・相殺を含む
+ta_mg_pred_fast_p1	時間軸の火力・予告・相殺を含む
+ta_mg_pred_fast_p2	時間軸の火力・予告・相殺を含む
+ta_recv_pred_fast_p1	時間軸の火力・予告・相殺を含む
+ta_recv_pred_fast_p2	時間軸の火力・予告・相殺を含む
+ta_send_pred_fast_p1	時間軸の火力・予告・相殺を含む
+ta_send_pred_fast_p2	時間軸の火力・予告・相殺を含む
+ta_unc72_pred_fast_p1	時間軸の火力・予告・相殺を含む
+ta_unc72_pred_fast_p2	時間軸の火力・予告・相殺を含む
+ta_m_sl_med_p1	時間軸の火力・予告・相殺を含む
+ta_m_sl_med_p2	時間軸の火力・予告・相殺を含む
+ta_mg_sl_med_p1	時間軸の火力・予告・相殺を含む
+ta_mg_sl_med_p2	時間軸の火力・予告・相殺を含む
+ta_recv_sl_med_p1	時間軸の火力・予告・相殺を含む
+ta_recv_sl_med_p2	時間軸の火力・予告・相殺を含む
+ta_send_sl_med_p1	時間軸の火力・予告・相殺を含む
+ta_send_sl_med_p2	時間軸の火力・予告・相殺を含む
+ta_unc72_sl_med_p1	時間軸の火力・予告・相殺を含む
+ta_unc72_sl_med_p2	時間軸の火力・予告・相殺を含む
+ta_m_sl_fast_p1	時間軸の火力・予告・相殺を含む
+ta_m_sl_fast_p2	時間軸の火力・予告・相殺を含む
+ta_mg_sl_fast_p1	時間軸の火力・予告・相殺を含む
+ta_mg_sl_fast_p2	時間軸の火力・予告・相殺を含む
+ta_recv_sl_fast_p1	時間軸の火力・予告・相殺を含む
+ta_recv_sl_fast_p2	時間軸の火力・予告・相殺を含む
+ta_send_sl_fast_p1	時間軸の火力・予告・相殺を含む
+ta_send_sl_fast_p2	時間軸の火力・予告・相殺を含む
+ta_unc72_sl_fast_p1	時間軸の火力・予告・相殺を含む
+ta_unc72_sl_fast_p2	時間軸の火力・予告・相殺を含む
+ta_m_icon_med_p1	時間軸の火力・予告・相殺を含む
+ta_m_icon_med_p2	時間軸の火力・予告・相殺を含む
+ta_mg_icon_med_p1	時間軸の火力・予告・相殺を含む
+ta_mg_icon_med_p2	時間軸の火力・予告・相殺を含む
+ta_recv_icon_med_p1	時間軸の火力・予告・相殺を含む
+ta_recv_icon_med_p2	時間軸の火力・予告・相殺を含む
+ta_send_icon_med_p1	時間軸の火力・予告・相殺を含む
+ta_send_icon_med_p2	時間軸の火力・予告・相殺を含む
+ta_unc72_icon_med_p1	時間軸の火力・予告・相殺を含む
+ta_unc72_icon_med_p2	時間軸の火力・予告・相殺を含む
+ta_m_icon_fast_p1	時間軸の火力・予告・相殺を含む
+ta_m_icon_fast_p2	時間軸の火力・予告・相殺を含む
+ta_mg_icon_fast_p1	時間軸の火力・予告・相殺を含む
+ta_mg_icon_fast_p2	時間軸の火力・予告・相殺を含む
+ta_recv_icon_fast_p1	時間軸の火力・予告・相殺を含む
+ta_recv_icon_fast_p2	時間軸の火力・予告・相殺を含む
+ta_send_icon_fast_p1	時間軸の火力・予告・相殺を含む
+ta_send_icon_fast_p2	時間軸の火力・予告・相殺を含む
+ta_unc72_icon_fast_p1	時間軸の火力・予告・相殺を含む
+ta_unc72_icon_fast_p2	時間軸の火力・予告・相殺を含む
+mk_ta_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_ta_p2	role=audit の補助情報であり色ぷよ量そのものではない
+ta2_q_med_p1	一往復の火力・相殺を含む
+ta2_q_med_p2	一往復の火力・相殺を含む
+ta2_m_med_p1	一往復の火力・相殺を含む
+ta2_m_med_p2	一往復の火力・相殺を含む
+mk_ta2_p1	role=audit の補助情報であり色ぷよ量そのものではない
+mk_ta2_p2	role=audit の補助情報であり色ぷよ量そのものではない
+mk_df_ind	role=audit の補助情報であり色ぷよ量そのものではない
+mk_df_k	role=audit の補助情報であり色ぷよ量そのものではない
+mk_df_board	role=audit の補助情報であり色ぷよ量そのものではない
+mk_df_icon	role=audit の補助情報であり色ぷよ量そのものではない
+df_ind_board_puyo_total	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_max_column_height	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_column_bumpiness	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_death_margin	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_death_margin_neighbor	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_center_bulge_color	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_center_bulge_ojama	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_board_ojama_count	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_color_diversity_evenness	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_buried_hole_count	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_current_max_chain	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_dig_resistance	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_ukeyasusa	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_sub_chain_count	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_immediate_fire_power	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_chain_efficiency	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_min_puyos_to_ignite	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_second_chain_potential	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_main_linked_pair_count	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_isolated_pair_count	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_main_linked_ratio	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_ignition_point_count	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_multi_color_ignition	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_simultaneous_pop_richness	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_saturation_chain_upper	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_chain_articulation_point_count	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_conn_pair_count	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_conn_triple_count	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_ind_conn_max_group_size	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_k1_nf	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_k2_nf	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_k3_nf	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_k4_nf	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_k5_nf	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_cells_ojama	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない
+df_icon_corr_total	差の元に形状・色分布・連結・火力・おじゃま等を含み、色ぷよ量の差だけではない

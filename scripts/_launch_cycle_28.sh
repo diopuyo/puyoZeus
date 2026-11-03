@@ -5,7 +5,7 @@
 #   = cycle_21 の (a+b) を viz 評価込みで再検証
 #   model: cnn_phase_i_hsv_seed.pt (= cycle_19 baseline と同条件)
 #   cycle_27 と比較して連鎖後の背景誤認 / 認識補正効果を確認
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 PYTHONPATH=. ./venv/bin/python -m scripts.multi_video_cycle \
     --cycle 28 --parallel 3 \
     --cnn-model models/cnn_phase_i_hsv_seed.pt \

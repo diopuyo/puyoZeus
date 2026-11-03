@@ -14,7 +14,7 @@
 # counter-remaining-time / counter-defender-only) は userレビュー合格済みだが
 # production_config.py に未登録・CLI既定OFF のため、ここで明示指定が必須。
 # この管理上の穴は user へ報告済み (採用登録の要否は user 判断)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/frames/review_demo_2026-08-12.mp4

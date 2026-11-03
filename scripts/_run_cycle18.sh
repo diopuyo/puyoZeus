@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle_18 = B3: cycle_14 model + bg_fp 50 + BG_FP_FORCE_MAX_PUYO 緩和
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 LOG=logs/cycle18_pipeline.log
 exec > >(tee -a "$LOG") 2>&1
 echo "=== START cycle18 $(date) ==="

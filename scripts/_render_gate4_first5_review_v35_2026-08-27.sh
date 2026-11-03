@@ -1,7 +1,7 @@
 #!/bin/bash
 # 条件5 v35（実盤面単発補正+極端な40点方向反転ガード）の先頭5試合レビュー動画。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 export PYTHONHASHSEED=0
 export OMP_NUM_THREADS=1

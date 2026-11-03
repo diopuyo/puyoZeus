@@ -1,0 +1,6457 @@
+[
+  {
+    "name": "A0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 31.190800000331365,
+        "p95": 49.43093999754637,
+        "mean": 34.28055503358361
+      },
+      "rec_ms": {
+        "p50": 29.62860000116052,
+        "p95": 47.586939999018796,
+        "mean": 32.84868053664553
+      },
+      "pre_ms": {
+        "p50": 0.1438999970559962,
+        "p95": 0.20013999892398715,
+        "mean": 0.14795033573118294
+      },
+      "fps_mean": 29.17105627433192,
+      "fps_p50": 32.06073585766881,
+      "steady_proc_cpu_cores": 0.9792844464450299,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.318560799998522,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9825819884119286,
+      "sys_cpu_mean": 27.96013804637077,
+      "sys_cpu_p95": 31.85148612619729,
+      "sys_cpu_samples": 18,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "A0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "sides": false,
+      "cv": 1
+    }
+  },
+  {
+    "name": "base_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 31.717600002593827,
+        "p95": 50.22688000026392,
+        "mean": 34.021363087250826
+      },
+      "rec_ms": {
+        "p50": 30.22699999564793,
+        "p95": 48.07810000493191,
+        "mean": 32.62029865773429
+      },
+      "pre_ms": {
+        "p50": 0.1401999979862012,
+        "p95": 0.18553999834693966,
+        "mean": 0.1453865767669889
+      },
+      "fps_mean": 29.39329613088725,
+      "fps_p50": 31.52823668620013,
+      "steady_proc_cpu_cores": 0.9655871283722257,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.076707599997462,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9657273745385883,
+      "sys_cpu_mean": 28.787294339353195,
+      "sys_cpu_p95": 39.78531916466705,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "base_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "sides": false,
+      "cv": 1
+    }
+  },
+  {
+    "name": "base_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 31.078799998795148,
+        "p95": 46.297520000371144,
+        "mean": 33.47063825503632
+      },
+      "rec_ms": {
+        "p50": 29.66300000116462,
+        "p95": 44.70454000402241,
+        "mean": 32.06541946311341
+      },
+      "pre_ms": {
+        "p50": 0.14139999984763563,
+        "p95": 0.16898000030778346,
+        "mean": 0.14289060394449984
+      },
+      "fps_mean": 29.8769325036558,
+      "fps_p50": 32.176274503480435,
+      "steady_proc_cpu_cores": 0.9896174191090449,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.555242000002181,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9898901749357694,
+      "sys_cpu_mean": 26.315996094952695,
+      "sys_cpu_p95": 35.194615915441446,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "base_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "both2_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 30.913399998098612,
+        "p95": 45.8029399960651,
+        "mean": 33.32486442948892
+      },
+      "rec_ms": {
+        "p50": 29.538700000557583,
+        "p95": 44.30493999825558,
+        "mean": 31.865641610769575
+      },
+      "pre_ms": {
+        "p50": 0.14279999595601112,
+        "p95": 0.1842799989390187,
+        "mean": 0.1465637583930933
+      },
+      "fps_mean": 30.007623950455077,
+      "fps_p50": 32.34843142654987,
+      "steady_proc_cpu_cores": 4.889574333063545,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.082867600001919,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 4.364329278563042,
+      "sys_cpu_mean": 49.32575076049548,
+      "sys_cpu_p95": 57.20581550560987,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "both2_0",
+      "intra": 2,
+      "inter": 2,
+      "parallel": true,
+      "sides": false,
+      "cv": 1
+    }
+  },
+  {
+    "name": "both2_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 28.875199997855816,
+        "p95": 43.78596000169637,
+        "mean": 31.141016778521298
+      },
+      "rec_ms": {
+        "p50": 27.21449999808101,
+        "p95": 42.52628000249388,
+        "mean": 29.75426778584428
+      },
+      "pre_ms": {
+        "p50": 0.1390999968862161,
+        "p95": 0.17825999821070582,
+        "mean": 0.14269127498377715
+      },
+      "fps_mean": 32.1119893776148,
+      "fps_p50": 34.631794760703194,
+      "steady_proc_cpu_cores": 4.955000494692697,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.058508499998425,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 4.4537553072019485,
+      "sys_cpu_mean": 40.632084776179596,
+      "sys_cpu_p95": 50.1632183908046,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "both2_1",
+      "intra": 2,
+      "inter": 2,
+      "parallel": true,
+      "no_spin": false,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "cv2_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 27.779700001701713,
+        "p95": 42.00080000300659,
+        "mean": 29.871883221455434
+      },
+      "rec_ms": {
+        "p50": 26.411800005007535,
+        "p95": 40.67348000098718,
+        "mean": 28.622353691328396
+      },
+      "pre_ms": {
+        "p50": 0.13040000339969993,
+        "p95": 0.1445800022338517,
+        "mean": 0.1299516781312945
+      },
+      "fps_mean": 33.476295839351415,
+      "fps_p50": 35.997508970173996,
+      "steady_proc_cpu_cores": 1.0359369253721769,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.957750199995644,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.03868867359075,
+      "sys_cpu_mean": 17.38444875641742,
+      "sys_cpu_p95": 22.546244582054534,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "cv2_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "sides": false,
+      "cv": 2
+    }
+  },
+  {
+    "name": "cv2_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 30.510399999911897,
+        "p95": 46.63819999695988,
+        "mean": 32.87905838928262
+      },
+      "rec_ms": {
+        "p50": 28.99539999634726,
+        "p95": 44.878220000828144,
+        "mean": 31.495218792416143
+      },
+      "pre_ms": {
+        "p50": 0.13559999933931977,
+        "p95": 0.19261999987065792,
+        "mean": 0.14049060339570646
+      },
+      "fps_mean": 30.414496308263,
+      "fps_p50": 32.775709266443165,
+      "steady_proc_cpu_cores": 1.045813824864883,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.528828900001827,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0186040899469961,
+      "sys_cpu_mean": 27.37019638232251,
+      "sys_cpu_p95": 35.35711132204587,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "cv2_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "sides": false,
+      "cv": 2,
+      "prepare": null
+    }
+  },
+  {
+    "name": "cv3_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 29.48389999801293,
+        "p95": 43.51017999870237,
+        "mean": 31.919844966429057
+      },
+      "rec_ms": {
+        "p50": 27.869799996551592,
+        "p95": 41.9186399973114,
+        "mean": 30.570787919201614
+      },
+      "pre_ms": {
+        "p50": 0.1384999995934777,
+        "p95": 0.15776000072946772,
+        "mean": 0.13904630876694737
+      },
+      "fps_mean": 31.328472962563772,
+      "fps_p50": 33.91681562030108,
+      "steady_proc_cpu_cores": 1.0772845263324298,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.255795400000352,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0674319763301818,
+      "sys_cpu_mean": 24.54526450700591,
+      "sys_cpu_p95": 33.22234362196121,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "cv3_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "sides": false,
+      "cv": 3
+    }
+  },
+  {
+    "name": "cv3_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 30.12079999462003,
+        "p95": 44.795960004557855,
+        "mean": 32.20000872480286
+      },
+      "rec_ms": {
+        "p50": 28.587500004505273,
+        "p95": 43.24584000132745,
+        "mean": 30.835913422788202
+      },
+      "pre_ms": {
+        "p50": 0.13679999392479658,
+        "p95": 0.18627999670570713,
+        "mean": 0.14120469771438096
+      },
+      "fps_mean": 31.055892206318724,
+      "fps_p50": 33.19964941763211,
+      "steady_proc_cpu_cores": 1.0390550225619037,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.335053099996003,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0441595147131304,
+      "sys_cpu_mean": 24.62214535092331,
+      "sys_cpu_p95": 31.785611897184292,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "cv3_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "sides": false,
+      "cv": 3,
+      "prepare": null
+    }
+  },
+  {
+    "name": "cv4_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 29.352099998504855,
+        "p95": 42.77165999956196,
+        "mean": 31.59054765103138
+      },
+      "rec_ms": {
+        "p50": 27.943300003244076,
+        "p95": 41.279120004037395,
+        "mean": 30.259149664432442
+      },
+      "pre_ms": {
+        "p50": 0.1384999995934777,
+        "p95": 0.16483999934280288,
+        "mean": 0.138510738369765
+      },
+      "fps_mean": 31.655038432591137,
+      "fps_p50": 34.06911260355948,
+      "steady_proc_cpu_cores": 1.07255258369583,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.27716070000315,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0854416539232565,
+      "sys_cpu_mean": 24.540978369279486,
+      "sys_cpu_p95": 33.396050425253925,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "cv4_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "sides": false,
+      "cv": 4,
+      "prepare": null
+    }
+  },
+  {
+    "name": "cv4_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 29.645100003108382,
+        "p95": 43.11291999765672,
+        "mean": 31.563127516769264
+      },
+      "rec_ms": {
+        "p50": 28.227399998286273,
+        "p95": 41.539639997063205,
+        "mean": 30.24524697992324
+      },
+      "pre_ms": {
+        "p50": 0.13619999663205817,
+        "p95": 0.16645999712636694,
+        "mean": 0.13808053697462525
+      },
+      "fps_mean": 31.682538413492363,
+      "fps_p50": 33.73238747365153,
+      "steady_proc_cpu_cores": 1.0903824654624592,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.046379300001718,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0874456291164565,
+      "sys_cpu_mean": 18.27698973747732,
+      "sys_cpu_p95": 22.014948695244545,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "cv4_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "sides": false,
+      "cv": 4,
+      "prepare": null
+    }
+  },
+  {
+    "name": "inter2_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 32.02639999653911,
+        "p95": 47.96194000082323,
+        "mean": 34.87007919466123
+      },
+      "rec_ms": {
+        "p50": 30.524900001182687,
+        "p95": 46.18091999727767,
+        "mean": 33.39926442970333
+      },
+      "pre_ms": {
+        "p50": 0.14670000382466242,
+        "p95": 0.18651999707799405,
+        "mean": 0.15012416118426222
+      },
+      "fps_mean": 28.677881527527607,
+      "fps_p50": 31.224240005372554,
+      "steady_proc_cpu_cores": 2.9841580965740513,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.189714300002379,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 2.7136316958181763,
+      "sys_cpu_mean": 42.14729604023426,
+      "sys_cpu_p95": 46.967288987624784,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "inter2_0",
+      "intra": 1,
+      "inter": 2,
+      "parallel": true,
+      "sides": false,
+      "cv": 1
+    }
+  },
+  {
+    "name": "inter2_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 32.72650000144495,
+        "p95": 49.41069999767933,
+        "mean": 35.15852348990902
+      },
+      "rec_ms": {
+        "p50": 31.331599995610304,
+        "p95": 47.820359996694606,
+        "mean": 33.710495972798455
+      },
+      "pre_ms": {
+        "p50": 0.14670000382466242,
+        "p95": 0.17309999966528267,
+        "mean": 0.14939798682267097
+      },
+      "fps_mean": 28.44260511357974,
+      "fps_p50": 30.556277021858367,
+      "steady_proc_cpu_cores": 2.962622491692229,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.305259300002945,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 2.6681819602804775,
+      "sys_cpu_mean": 35.21226317698121,
+      "sys_cpu_p95": 40.90769262425794,
+      "sys_cpu_samples": 18,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "inter2_1",
+      "intra": 1,
+      "inter": 2,
+      "parallel": true,
+      "no_spin": false,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "inter3_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 36.3844000021345,
+        "p95": 54.75630000291858,
+        "mean": 39.18016644295511
+      },
+      "rec_ms": {
+        "p50": 34.9592999991728,
+        "p95": 53.13286000309745,
+        "mean": 37.511459060502396
+      },
+      "pre_ms": {
+        "p50": 0.15260000509442762,
+        "p95": 0.19825999916065484,
+        "mean": 0.15793624153359162
+      },
+      "fps_mean": 25.523117709465666,
+      "fps_p50": 27.48430645939839,
+      "steady_proc_cpu_cores": 4.947106068601231,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.791535700001987,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 4.46335757117151,
+      "sys_cpu_mean": 50.172325242010395,
+      "sys_cpu_p95": 60.22670594985875,
+      "sys_cpu_samples": 18,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "inter3_0",
+      "intra": 1,
+      "inter": 3,
+      "parallel": true,
+      "sides": false,
+      "cv": 1
+    }
+  },
+  {
+    "name": "inter3_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 28.916600000229664,
+        "p95": 43.551559998013545,
+        "mean": 31.854183892617876
+      },
+      "rec_ms": {
+        "p50": 27.44729999540141,
+        "p95": 42.011220002314076,
+        "mean": 30.505812752014496
+      },
+      "pre_ms": {
+        "p50": 0.14059999375604093,
+        "p95": 0.17493999912403518,
+        "mean": 0.14227516770451923
+      },
+      "fps_mean": 31.39305038769954,
+      "fps_p50": 34.582212293010166,
+      "steady_proc_cpu_cores": 4.915019763806294,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.59530839999934,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 4.310127487688847,
+      "sys_cpu_mean": 42.81303534898882,
+      "sys_cpu_p95": 49.658087032391755,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "inter3_1",
+      "intra": 1,
+      "inter": 3,
+      "parallel": true,
+      "no_spin": false,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "inter4_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 38.72209999826737,
+        "p95": 64.99309999780962,
+        "mean": 40.52406308726969
+      },
+      "rec_ms": {
+        "p50": 36.95690000313334,
+        "p95": 63.79844000184676,
+        "mean": 38.93311812090977
+      },
+      "pre_ms": {
+        "p50": 0.149200001033023,
+        "p95": 0.20565999730024484,
+        "mean": 0.15431409408713398
+      },
+      "fps_mean": 24.676696358074278,
+      "fps_p50": 25.82504564692373,
+      "steady_proc_cpu_cores": 6.629272714536554,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 10.552092600002652,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 5.974821998812269,
+      "sys_cpu_mean": 60.81414500065483,
+      "sys_cpu_p95": 71.86856028961292,
+      "sys_cpu_samples": 19,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "inter4_0",
+      "intra": 1,
+      "inter": 4,
+      "parallel": true,
+      "sides": false,
+      "cv": 1
+    }
+  },
+  {
+    "name": "inter4_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 36.47780000028433,
+        "p95": 72.9360400015139,
+        "mean": 41.8034744966676
+      },
+      "rec_ms": {
+        "p50": 35.308600003190804,
+        "p95": 71.37772000132827,
+        "mean": 40.401644966465064
+      },
+      "pre_ms": {
+        "p50": 0.1368000012007542,
+        "p95": 0.17610000359127295,
+        "mean": 0.1381442955075513
+      },
+      "fps_mean": 23.92145657844101,
+      "fps_p50": 27.413933954136635,
+      "steady_proc_cpu_cores": 6.179191564011125,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 10.765970799999195,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 5.593434267906848,
+      "sys_cpu_mean": 48.470382080270774,
+      "sys_cpu_p95": 63.822798295454525,
+      "sys_cpu_samples": 19,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "inter4_1",
+      "intra": 1,
+      "inter": 4,
+      "parallel": true,
+      "no_spin": false,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "intra2_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 29.375999998592306,
+        "p95": 48.03825999988475,
+        "mean": 32.52483691278714
+      },
+      "rec_ms": {
+        "p50": 27.86430000560358,
+        "p95": 45.83107999787899,
+        "mean": 31.130715436223994
+      },
+      "pre_ms": {
+        "p50": 0.1416000013705343,
+        "p95": 0.1647600016440265,
+        "mean": 0.14191543654696515
+      },
+      "fps_mean": 30.74573448842875,
+      "fps_p50": 34.041394337143245,
+      "steady_proc_cpu_cores": 2.9453526081504173,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.768541500001447,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 2.6657797080616135,
+      "sys_cpu_mean": 41.12552104539427,
+      "sys_cpu_p95": 47.867144204692835,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "intra2_0",
+      "intra": 2,
+      "inter": 1,
+      "parallel": false,
+      "sides": false,
+      "cv": 1
+    }
+  },
+  {
+    "name": "intra2_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 29.17180000076769,
+        "p95": 44.723799997882445,
+        "mean": 31.416302013418782
+      },
+      "rec_ms": {
+        "p50": 27.47240000462625,
+        "p95": 42.84827999945264,
+        "mean": 30.0353208055072
+      },
+      "pre_ms": {
+        "p50": 0.14000000373926014,
+        "p95": 0.16768000059528274,
+        "mean": 0.1425060395041212
+      },
+      "fps_mean": 31.83060818465751,
+      "fps_p50": 34.27968106094529,
+      "steady_proc_cpu_cores": 2.9896522745318,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.28726020000613,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 2.7300940786175945,
+      "sys_cpu_mean": 35.83781737502996,
+      "sys_cpu_p95": 43.30259811046512,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "intra2_1",
+      "intra": 2,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "intra3_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 34.616600001754705,
+        "p95": 56.34327999869128,
+        "mean": 36.47340738254399
+      },
+      "rec_ms": {
+        "p50": 32.768199998827185,
+        "p95": 54.35200000065378,
+        "mean": 34.899729530205136
+      },
+      "pre_ms": {
+        "p50": 0.15179999900283292,
+        "p95": 0.18513999821152535,
+        "mean": 0.15309395969981301
+      },
+      "fps_mean": 27.417235508371927,
+      "fps_p50": 28.887874602049603,
+      "steady_proc_cpu_cores": 4.941486081841878,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.225511699994968,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 4.450972621932982,
+      "sys_cpu_mean": 52.89864608293508,
+      "sys_cpu_p95": 66.8560606060606,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "intra3_0",
+      "intra": 3,
+      "inter": 1,
+      "parallel": false,
+      "sides": false,
+      "cv": 1
+    }
+  },
+  {
+    "name": "intra3_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 30.234300000302028,
+        "p95": 44.38939999672584,
+        "mean": 31.98269932884754
+      },
+      "rec_ms": {
+        "p50": 28.59310000349069,
+        "p95": 42.71632000018144,
+        "mean": 30.548991946550007
+      },
+      "pre_ms": {
+        "p50": 0.1436000020476058,
+        "p95": 0.18290000152774152,
+        "mean": 0.1477194631014382
+      },
+      "fps_mean": 31.26690432592807,
+      "fps_p50": 33.0750174467413,
+      "steady_proc_cpu_cores": 4.9472255537494965,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.395568399995682,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 4.442447875240846,
+      "sys_cpu_mean": 43.35870429656204,
+      "sys_cpu_p95": 53.065387790990684,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "intra3_1",
+      "intra": 3,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "intra4_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 34.45169999758946,
+        "p95": 53.71163999807322,
+        "mean": 37.09297046979855
+      },
+      "rec_ms": {
+        "p50": 32.98690000519855,
+        "p95": 51.54088000272168,
+        "mean": 35.36490201330884
+      },
+      "pre_ms": {
+        "p50": 0.1494999960414134,
+        "p95": 0.1956199979758821,
+        "mean": 0.15478120778254453
+      },
+      "fps_mean": 26.959286013887983,
+      "fps_p50": 29.026143849794604,
+      "steady_proc_cpu_cores": 6.866529113882208,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.77281380000204,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 6.017969972986462,
+      "sys_cpu_mean": 62.34671173560329,
+      "sys_cpu_p95": 78.33362926136364,
+      "sys_cpu_samples": 18,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "intra4_0",
+      "intra": 4,
+      "inter": 1,
+      "parallel": false,
+      "sides": false,
+      "cv": 1
+    }
+  },
+  {
+    "name": "intra4_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 30.435499997111037,
+        "p95": 48.88094000052661,
+        "mean": 33.35193892617221
+      },
+      "rec_ms": {
+        "p50": 28.730799996992573,
+        "p95": 46.94373999809613,
+        "mean": 31.69080335568737
+      },
+      "pre_ms": {
+        "p50": 0.13839999883202836,
+        "p95": 0.18527999782236293,
+        "mean": 0.35817651013646823
+      },
+      "fps_mean": 29.98326430776928,
+      "fps_p50": 32.856368388721094,
+      "steady_proc_cpu_cores": 6.327194801537143,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.875696199997037,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 5.628079631659393,
+      "sys_cpu_mean": 49.122024919091366,
+      "sys_cpu_p95": 64.01717557251908,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "intra4_1",
+      "intra": 4,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_cv2_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 26.189100004557986,
+        "p95": 38.85609999997541,
+        "mean": 28.304910067126666
+      },
+      "rec_ms": {
+        "p50": 25.055799997062422,
+        "p95": 37.75411999959033,
+        "mean": 27.134224160931044
+      },
+      "pre_ms": {
+        "p50": 0.12599999899975955,
+        "p95": 0.14375999890035018,
+        "mean": 0.1251798658026226
+      },
+      "fps_mean": 35.32955934600903,
+      "fps_p50": 38.18382456159084,
+      "steady_proc_cpu_cores": 0.9983359661893879,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.378125700000965,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9974586093049401,
+      "sys_cpu_mean": 13.660567820345952,
+      "sys_cpu_p95": 19.167350102796284,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_cv2_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_cv2_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 25.90349999809405,
+        "p95": 37.739339999097865,
+        "mean": 28.033898657704658
+      },
+      "rec_ms": {
+        "p50": 24.685199998202734,
+        "p95": 36.269560002256185,
+        "mean": 26.85795704727319
+      },
+      "pre_ms": {
+        "p50": 0.12469999637687579,
+        "p95": 0.14799999917158857,
+        "mean": 0.12696644291477027
+      },
+      "fps_mean": 35.67109991407372,
+      "fps_p50": 38.60482174507611,
+      "steady_proc_cpu_cores": 1.0508116553304971,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.275845399999525,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0372505990850895,
+      "sys_cpu_mean": 14.167457693771578,
+      "sys_cpu_p95": 19.462156862745097,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_cv2_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 2,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_cv2_2",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 26.05300000141142,
+        "p95": 37.90882000030251,
+        "mean": 27.944081208065867
+      },
+      "rec_ms": {
+        "p50": 24.776700003712904,
+        "p95": 36.635960001149215,
+        "mean": 26.770256376112716
+      },
+      "pre_ms": {
+        "p50": 0.12479999713832512,
+        "p95": 0.14432000025408342,
+        "mean": 0.12568791930941903
+      },
+      "fps_mean": 35.78575343215639,
+      "fps_p50": 38.383295587679925,
+      "steady_proc_cpu_cores": 1.0460750073649356,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.202992600003199,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0282184657522362,
+      "sys_cpu_mean": 15.11495210554765,
+      "sys_cpu_p95": 21.85061405570572,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_cv2_2",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 2,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_cv2_3",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 27.66690000134986,
+        "p95": 40.53136000147788,
+        "mean": 29.83949597317088
+      },
+      "rec_ms": {
+        "p50": 26.407600002130494,
+        "p95": 39.073859999189146,
+        "mean": 28.600645637735038
+      },
+      "pre_ms": {
+        "p50": 0.13390000094659626,
+        "p95": 0.15741999959573147,
+        "mean": 0.13302751655077824
+      },
+      "fps_mean": 33.51263040431763,
+      "fps_p50": 36.14427348026741,
+      "steady_proc_cpu_cores": 0.990556400479086,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.722930100004305,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9893427625346163,
+      "sys_cpu_mean": 21.842638258552704,
+      "sys_cpu_p95": 26.600574997521548,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_cv2_3",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_cv4_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 28.383999997458886,
+        "p95": 41.25867999973707,
+        "mean": 30.52876375837489
+      },
+      "rec_ms": {
+        "p50": 27.051899996877182,
+        "p95": 39.949759996670764,
+        "mean": 29.261062416285526
+      },
+      "pre_ms": {
+        "p50": 0.1360000023851171,
+        "p95": 0.15540000022156164,
+        "mean": 0.13555503323761708
+      },
+      "fps_mean": 32.755993918216625,
+      "fps_p50": 35.231116124912845,
+      "steady_proc_cpu_cores": 0.9959447610576404,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.866101899999194,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9971584527783455,
+      "sys_cpu_mean": 24.956777746019796,
+      "sys_cpu_p95": 32.08333333333333,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_cv4_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_cv4_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 29.861700000765268,
+        "p95": 44.55154000315815,
+        "mean": 32.35187986577531
+      },
+      "rec_ms": {
+        "p50": 28.19889999955194,
+        "p95": 42.93008000240661,
+        "mean": 30.974491275469976
+      },
+      "pre_ms": {
+        "p50": 0.14000000373926014,
+        "p95": 0.1673999984632246,
+        "mean": 0.14176241622420477
+      },
+      "fps_mean": 30.91010488876996,
+      "fps_p50": 33.48771168333929,
+      "steady_proc_cpu_cores": 1.1128526378889425,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.410558600000513,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0645101503721113,
+      "sys_cpu_mean": 29.648690929877624,
+      "sys_cpu_p95": 37.975285171102655,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_cv4_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 4,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_cv4_2",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 27.75199999450706,
+        "p95": 40.465519997815136,
+        "mean": 29.54568590602803
+      },
+      "rec_ms": {
+        "p50": 26.32650000305148,
+        "p95": 38.954620000731666,
+        "mean": 28.30729664402198
+      },
+      "pre_ms": {
+        "p50": 0.13210000179242343,
+        "p95": 0.1667000033194199,
+        "mean": 0.1351751680892186
+      },
+      "fps_mean": 33.84588881031785,
+      "fps_p50": 36.03343903855324,
+      "steady_proc_cpu_cores": 1.0892822802493107,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.762379200001305,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0748959545803427,
+      "sys_cpu_mean": 20.891315756682115,
+      "sys_cpu_p95": 34.30475579968832,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_cv4_2",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 4,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_cv4_3",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 28.349699998216238,
+        "p95": 42.08123999997042,
+        "mean": 30.837540939604963
+      },
+      "rec_ms": {
+        "p50": 27.04000000085216,
+        "p95": 40.60048000101233,
+        "mean": 29.537472483173058
+      },
+      "pre_ms": {
+        "p50": 0.13590000162366778,
+        "p95": 0.17779999907361338,
+        "mean": 0.1382389259774663
+      },
+      "fps_mean": 32.42800721232898,
+      "fps_p50": 35.27374187603114,
+      "steady_proc_cpu_cores": 0.9722871232405332,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.995729200003552,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9692674434242416,
+      "sys_cpu_mean": 20.23863965166465,
+      "sys_cpu_p95": 23.870066263324688,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_cv4_3",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_idle_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 28.952400003618095,
+        "p95": 42.64895999949658,
+        "mean": 31.214514093988438
+      },
+      "rec_ms": {
+        "p50": 27.552599996852223,
+        "p95": 41.46269999910146,
+        "mean": 29.918077852096076
+      },
+      "pre_ms": {
+        "p50": 0.13500000204658136,
+        "p95": 0.18646000098669901,
+        "mean": 0.14469932882746545
+      },
+      "fps_mean": 32.03637887775382,
+      "fps_p50": 34.53945095657124,
+      "steady_proc_cpu_cores": 0.9644404155382532,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.081665699995938,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9647608908153574,
+      "sys_cpu_mean": 19.238049868152878,
+      "sys_cpu_p95": 24.075707717799716,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_idle_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_idle_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 29.59069999633357,
+        "p95": 45.708099998591926,
+        "mean": 32.02876107379108
+      },
+      "rec_ms": {
+        "p50": 28.333800000837073,
+        "p95": 44.173780002165586,
+        "mean": 30.715683221454878
+      },
+      "pre_ms": {
+        "p50": 0.13449999823933467,
+        "p95": 0.18407999741611994,
+        "mean": 0.14378120816053336
+      },
+      "fps_mean": 31.221938235328537,
+      "fps_p50": 33.794401623615016,
+      "steady_proc_cpu_cores": 0.9658167416267306,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.449911699994118,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9726432999300716,
+      "sys_cpu_mean": 26.174757441742976,
+      "sys_cpu_p95": 34.50749111414388,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_idle_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": true,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_idle_2",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 28.834500000812113,
+        "p95": 43.150919998879544,
+        "mean": 31.295599328830992
+      },
+      "rec_ms": {
+        "p50": 27.440999998361804,
+        "p95": 41.64228000154253,
+        "mean": 29.997316107267963
+      },
+      "pre_ms": {
+        "p50": 0.13519999629352242,
+        "p95": 0.19218000088585538,
+        "mean": 0.13941744950501522
+      },
+      "fps_mean": 31.953374322464327,
+      "fps_p50": 34.68067765946471,
+      "steady_proc_cpu_cores": 0.9714568262919276,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.023179800002254,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9601087339458398,
+      "sys_cpu_mean": 17.963056313992386,
+      "sys_cpu_p95": 20.43097951924475,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_idle_2",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": true,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_idle_3",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 29.35040000011213,
+        "p95": 43.05017999577103,
+        "mean": 31.924270469788695
+      },
+      "rec_ms": {
+        "p50": 28.06179999606684,
+        "p95": 41.527979998500086,
+        "mean": 30.598045637389262
+      },
+      "pre_ms": {
+        "p50": 0.13810000382363796,
+        "p95": 0.2035199999227188,
+        "mean": 0.14365436233839507
+      },
+      "fps_mean": 31.324130051659058,
+      "fps_p50": 34.07108591352007,
+      "steady_proc_cpu_cores": 0.9719760907845327,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.291267100001278,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9667551296229215,
+      "sys_cpu_mean": 23.726445149787445,
+      "sys_cpu_p95": 33.54261127047285,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_idle_3",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_sets4_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 27.61119999922812,
+        "p95": 40.14591999730328,
+        "mean": 29.63557986577937
+      },
+      "rec_ms": {
+        "p50": 26.27599999686936,
+        "p95": 38.66453999944497,
+        "mean": 28.39633087217792
+      },
+      "pre_ms": {
+        "p50": 0.13179999950807542,
+        "p95": 0.16447999951196832,
+        "mean": 0.13462080535847668
+      },
+      "fps_mean": 33.74322366996147,
+      "fps_p50": 36.21718722938356,
+      "steady_proc_cpu_cores": 0.9937334825886668,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.677369099998032,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9972491748510519,
+      "sys_cpu_mean": 16.22138677433744,
+      "sys_cpu_p95": 23.853785397803893,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_sets4_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_sets4_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 28.69959999952698,
+        "p95": 42.268779997539234,
+        "mean": 30.91419932884461
+      },
+      "rec_ms": {
+        "p50": 27.408400004787836,
+        "p95": 40.775479999138035,
+        "mean": 29.62012281873804
+      },
+      "pre_ms": {
+        "p50": 0.13529999705497175,
+        "p95": 0.1550400018459186,
+        "mean": 0.1360523486029413
+      },
+      "fps_mean": 32.34759501168598,
+      "fps_p50": 34.84369120184538,
+      "steady_proc_cpu_cores": 0.9970812539140683,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.946516000003612,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9988654147297246,
+      "sys_cpu_mean": 21.95242406945919,
+      "sys_cpu_p95": 26.04126683074052,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_sets4_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 4,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_sets4_2",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 31.21050000481773,
+        "p95": 46.548379996966105,
+        "mean": 33.74159463087289
+      },
+      "rec_ms": {
+        "p50": 29.918299995188136,
+        "p95": 45.03058000118472,
+        "mean": 32.35692885927403
+      },
+      "pre_ms": {
+        "p50": 0.14419999934034422,
+        "p95": 0.17095999792218208,
+        "mean": 0.14861744914271074
+      },
+      "fps_mean": 29.637010667095737,
+      "fps_p50": 32.040499186031546,
+      "steady_proc_cpu_cores": 0.9872269844630951,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.751154199999291,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9909407149974231,
+      "sys_cpu_mean": 25.005568538531186,
+      "sys_cpu_p95": 32.7716202857742,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_sets4_2",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 4,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_sets4_3",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 30.087599996477365,
+        "p95": 45.10650000156602,
+        "mean": 33.01544697985917
+      },
+      "rec_ms": {
+        "p50": 28.63699999579694,
+        "p95": 43.353140000544954,
+        "mean": 31.645577852276308
+      },
+      "pre_ms": {
+        "p50": 0.13639999815495685,
+        "p95": 0.16752000228734687,
+        "mean": 0.13882751686376638
+      },
+      "fps_mean": 30.288852385068196,
+      "fps_p50": 33.23628338973794,
+      "steady_proc_cpu_cores": 0.9841236309385245,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.330917799998133,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9884115049126815,
+      "sys_cpu_mean": 25.889290821648466,
+      "sys_cpu_p95": 33.571905716194294,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_sets4_3",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_sides_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 30.44269999372773,
+        "p95": 44.87745999940671,
+        "mean": 31.89494295305324
+      },
+      "rec_ms": {
+        "p50": 29.035699997621123,
+        "p95": 43.35309999878518,
+        "mean": 30.557602013595286
+      },
+      "pre_ms": {
+        "p50": 0.1382000045850873,
+        "p95": 0.170299997262191,
+        "mean": 0.14079395945702725
+      },
+      "fps_mean": 31.35293270384332,
+      "fps_p50": 32.84859753589647,
+      "steady_proc_cpu_cores": 0.9802700745055674,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.186611600001925,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9829310822560714,
+      "sys_cpu_mean": 24.695544617902552,
+      "sys_cpu_p95": 31.113528251537304,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_sides_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_sides_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 34.76750000118045,
+        "p95": 47.92273999628378,
+        "mean": 36.4791516778325
+      },
+      "rec_ms": {
+        "p50": 33.53869999409653,
+        "p95": 46.25082000129623,
+        "mean": 35.174333556647404
+      },
+      "pre_ms": {
+        "p50": 0.13219999527791515,
+        "p95": 0.1651200000196695,
+        "mean": 0.1362879193526999
+      },
+      "fps_mean": 27.4129181739628,
+      "fps_p50": 28.762493707227936,
+      "steady_proc_cpu_cores": 1.112080163809246,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.189816899997822,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.089861213666006,
+      "sys_cpu_mean": 22.61055537237041,
+      "sys_cpu_p95": 29.19047619047619,
+      "sys_cpu_samples": 18,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_sides_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": true,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_sides_2",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 32.51240000099642,
+        "p95": 45.96050000254763,
+        "mean": 34.78182483220906
+      },
+      "rec_ms": {
+        "p50": 31.27649999805726,
+        "p95": 44.64162000367651,
+        "mean": 33.53138590611841
+      },
+      "pre_ms": {
+        "p50": 0.13040000339969993,
+        "p95": 0.15147999656619504,
+        "mean": 0.1301442957291811
+      },
+      "fps_mean": 28.750647926728927,
+      "fps_p50": 30.757495600735492,
+      "steady_proc_cpu_cores": 1.1339619352239403,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.638589799993497,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.106951507294304,
+      "sys_cpu_mean": 15.467408699974811,
+      "sys_cpu_p95": 23.013763644992885,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_sides_2",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": true,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_sides_3",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 28.93220000260044,
+        "p95": 43.008499999996275,
+        "mean": 31.292170469786647
+      },
+      "rec_ms": {
+        "p50": 27.537900001334492,
+        "p95": 41.38647999643581,
+        "mean": 30.00505771772153
+      },
+      "pre_ms": {
+        "p50": 0.13700000272365287,
+        "p95": 0.16617999790469182,
+        "mean": 0.13873020190731528
+      },
+      "fps_mean": 31.956875633332125,
+      "fps_p50": 34.56356585085543,
+      "steady_proc_cpu_cores": 0.9679194914672298,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.101527899998473,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9720388668909582,
+      "sys_cpu_mean": 21.012598347403262,
+      "sys_cpu_p95": 28.571199897554102,
+      "sys_cpu_samples": 15,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_sides_3",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "pair_spin2_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 26.8320000031963,
+        "p95": 39.77310000045691,
+        "mean": 28.956512080502755
+      },
+      "rec_ms": {
+        "p50": 25.420300000405405,
+        "p95": 38.54199999914272,
+        "mean": 27.762035570342185
+      },
+      "pre_ms": {
+        "p50": 0.12569999671541154,
+        "p95": 0.17645999905653295,
+        "mean": 0.12924563746755605
+      },
+      "fps_mean": 34.53454605374687,
+      "fps_p50": 37.26893261333025,
+      "steady_proc_cpu_cores": 0.9741865118057843,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.543359600000258,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9714670105346362,
+      "sys_cpu_mean": 13.027505530254773,
+      "sys_cpu_p95": 16.508048844852816,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin2_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin2_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 25.192799999786075,
+        "p95": 37.09199999721022,
+        "mean": 27.33128322147758
+      },
+      "rec_ms": {
+        "p50": 23.962000006577,
+        "p95": 35.742160002700984,
+        "mean": 26.144727517033445
+      },
+      "pre_ms": {
+        "p50": 0.12460000289138407,
+        "p95": 0.15209999837679788,
+        "mean": 0.127234898893172
+      },
+      "fps_mean": 36.58811011164583,
+      "fps_p50": 39.69388079167427,
+      "steady_proc_cpu_cores": 1.035944096075644,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.18406849999883,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0265770711959668,
+      "sys_cpu_mean": 13.793170512304659,
+      "sys_cpu_p95": 20.219885277246654,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin2_1",
+      "intra": 2,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": true,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin2_2",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 25.282900001911912,
+        "p95": 37.67590000643395,
+        "mean": 27.33200201342795
+      },
+      "rec_ms": {
+        "p50": 24.130400001013186,
+        "p95": 36.18921999732265,
+        "mean": 26.14648120813564
+      },
+      "pre_ms": {
+        "p50": 0.12570000399136916,
+        "p95": 0.14715999859618023,
+        "mean": 0.12749597324166234
+      },
+      "fps_mean": 36.58714789749794,
+      "fps_p50": 39.55242475840901,
+      "steady_proc_cpu_cores": 1.0202710564355533,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.174597600002016,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0039761672484566,
+      "sys_cpu_mean": 14.472697878070637,
+      "sys_cpu_p95": 21.381616692333242,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin2_2",
+      "intra": 2,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": true,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin2_3",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 25.953000003937632,
+        "p95": 37.39888000418432,
+        "mean": 27.721799328870876
+      },
+      "rec_ms": {
+        "p50": 24.69060000294121,
+        "p95": 36.11413999897195,
+        "mean": 26.548162416200274
+      },
+      "pre_ms": {
+        "p50": 0.12630000128410757,
+        "p95": 0.15790000034030527,
+        "mean": 0.1288738254369424
+      },
+      "fps_mean": 36.072694565628346,
+      "fps_p50": 38.531190993267764,
+      "steady_proc_cpu_cores": 0.9945141204253478,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.246250999996846,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9940485086706402,
+      "sys_cpu_mean": 13.385576724318119,
+      "sys_cpu_p95": 18.92612524461839,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin2_3",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin3_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 26.347300001361873,
+        "p95": 38.38396000210196,
+        "mean": 28.14444295302949
+      },
+      "rec_ms": {
+        "p50": 24.92530000017723,
+        "p95": 37.0673400015221,
+        "mean": 26.960525503100815
+      },
+      "pre_ms": {
+        "p50": 0.11660000018309802,
+        "p95": 0.14914000348653644,
+        "mean": 0.12136711439175606
+      },
+      "fps_mean": 35.530992802696744,
+      "fps_p50": 37.95455321601495,
+      "steady_proc_cpu_cores": 0.9862375746609917,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.278139500005636,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9875463365320812,
+      "sys_cpu_mean": 16.37459014080328,
+      "sys_cpu_p95": 26.01233988717598,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin3_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin3_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 24.78039999550674,
+        "p95": 36.81633999804035,
+        "mean": 26.829648993281577
+      },
+      "rec_ms": {
+        "p50": 23.624599998584017,
+        "p95": 35.46688000060385,
+        "mean": 25.662214094038504
+      },
+      "pre_ms": {
+        "p50": 0.12489999789977446,
+        "p95": 0.14689999807160348,
+        "mean": 0.12624899311000543
+      },
+      "fps_mean": 37.2721983895656,
+      "fps_p50": 40.35447370427124,
+      "steady_proc_cpu_cores": 1.062734295658864,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.084129099996062,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0476764179811637,
+      "sys_cpu_mean": 14.363094282208824,
+      "sys_cpu_p95": 21.122848980134208,
+      "sys_cpu_samples": 13,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin3_1",
+      "intra": 3,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": true,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin3_2",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 24.629100000311155,
+        "p95": 36.62612000043737,
+        "mean": 26.693242953005388
+      },
+      "rec_ms": {
+        "p50": 23.36959999956889,
+        "p95": 35.21805999916978,
+        "mean": 25.538272483127063
+      },
+      "pre_ms": {
+        "p50": 0.12310000602155924,
+        "p95": 0.1453000004403293,
+        "mean": 0.12541409411378543
+      },
+      "fps_mean": 37.46266430648922,
+      "fps_p50": 40.60237686262861,
+      "steady_proc_cpu_cores": 1.0640647568810457,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.0208103000040865,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0482230234871488,
+      "sys_cpu_mean": 14.226569665840303,
+      "sys_cpu_p95": 19.666037120470868,
+      "sys_cpu_samples": 13,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin3_2",
+      "intra": 3,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": true,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin3_3",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 26.816999998118263,
+        "p95": 41.550799999095034,
+        "mean": 29.396626174470626
+      },
+      "rec_ms": {
+        "p50": 25.618699997721706,
+        "p95": 40.36901999643305,
+        "mean": 28.18684496600595
+      },
+      "pre_ms": {
+        "p50": 0.12789999891538173,
+        "p95": 0.1633000007132068,
+        "mean": 0.13087315433314883
+      },
+      "fps_mean": 34.01750915445004,
+      "fps_p50": 37.2897788742279,
+      "steady_proc_cpu_cores": 0.994529566507312,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.510026899995864,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9945037613652373,
+      "sys_cpu_mean": 19.03118120423821,
+      "sys_cpu_p95": 29.19466270315488,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin3_3",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin4_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 26.27809999830788,
+        "p95": 38.132419997418765,
+        "mean": 28.465673825531674
+      },
+      "rec_ms": {
+        "p50": 25.00960000179475,
+        "p95": 36.43754000222543,
+        "mean": 27.273254362339287
+      },
+      "pre_ms": {
+        "p50": 0.12170000263722613,
+        "p95": 0.14675999555038288,
+        "mean": 0.12376577176947472
+      },
+      "fps_mean": 35.13003086205082,
+      "fps_p50": 38.05450165972398,
+      "steady_proc_cpu_cores": 1.0011762661081476,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.3835080999997444,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0009638914055305,
+      "sys_cpu_mean": 16.47258622742817,
+      "sys_cpu_p95": 26.001490372123904,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin4_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin4_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 24.471800003084354,
+        "p95": 36.15894000249682,
+        "mean": 26.53606510064846
+      },
+      "rec_ms": {
+        "p50": 23.235699998622295,
+        "p95": 34.92401999683352,
+        "mean": 25.375516107677008
+      },
+      "pre_ms": {
+        "p50": 0.12710000009974465,
+        "p95": 0.14667999930679798,
+        "mean": 0.12925167783083794
+      },
+      "fps_mean": 37.68456235719602,
+      "fps_p50": 40.86336108802634,
+      "steady_proc_cpu_cores": 1.039463321817723,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.006361400002788,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0459244937032628,
+      "sys_cpu_mean": 13.466552594064865,
+      "sys_cpu_p95": 20.220963712424812,
+      "sys_cpu_samples": 13,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin4_1",
+      "intra": 4,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": true,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin4_2",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 25.222899996151682,
+        "p95": 37.678059998143,
+        "mean": 26.86678657717237
+      },
+      "rec_ms": {
+        "p50": 24.014199996599928,
+        "p95": 36.19244000001345,
+        "mean": 25.688524161523674
+      },
+      "pre_ms": {
+        "p50": 0.12619999324670061,
+        "p95": 0.15472000231966376,
+        "mean": 0.12843624148408464
+      },
+      "fps_mean": 37.22067755023817,
+      "fps_p50": 39.64651170771689,
+      "steady_proc_cpu_cores": 1.1350552841131767,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.083440499998687,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0896893959935754,
+      "sys_cpu_mean": 18.603915831348502,
+      "sys_cpu_p95": 31.289079845692715,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin4_2",
+      "intra": 4,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": true,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "pair_spin4_3",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 25.834699998085853,
+        "p95": 39.209420001134276,
+        "mean": 27.80920872484309
+      },
+      "rec_ms": {
+        "p50": 24.614699999801815,
+        "p95": 37.86866000154987,
+        "mean": 26.648510738425177
+      },
+      "pre_ms": {
+        "p50": 0.12659999629249796,
+        "p95": 0.1454600045690313,
+        "mean": 0.1263053689387177
+      },
+      "fps_mean": 35.95931153217818,
+      "fps_p50": 38.70762966375039,
+      "steady_proc_cpu_cores": 0.9985336684365941,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 7.239702300001227,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9949476789948641,
+      "sys_cpu_mean": 12.975474234384071,
+      "sys_cpu_p95": 20.69294674295774,
+      "sys_cpu_samples": 14,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "pair_spin4_3",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "prep2_overlap_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 30.525499998475425,
+        "p95": 44.394260000262875,
+        "mean": 32.60491879195156
+      },
+      "rec_ms": {
+        "p50": 28.99990000150865,
+        "p95": 42.74769999901764,
+        "mean": 31.165543624331576
+      },
+      "pre_ms": {
+        "p50": 0.09770000178832561,
+        "p95": 0.176600000122562,
+        "mean": 0.10061140962088819
+      },
+      "fps_mean": 30.670219005325272,
+      "fps_p50": 32.75949616058523,
+      "steady_proc_cpu_cores": 1.0520019729202328,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.320258200001263,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0591618418763329,
+      "sys_cpu_mean": 22.80775938008368,
+      "sys_cpu_p95": 30.145992219609226,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "prep2_overlap_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": "overlap",
+      "video_start": null,
+      "frames": 900,
+      "product": false,
+      "source_root": "<work>\\wt_live_par"
+    }
+  },
+  {
+    "name": "prep2_overlap_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 30.002699997567106,
+        "p95": 43.76304000179516,
+        "mean": 32.13710671140548
+      },
+      "rec_ms": {
+        "p50": 28.473400001530536,
+        "p95": 42.07784000027459,
+        "mean": 30.739608054190338
+      },
+      "pre_ms": {
+        "p50": 0.06800000119255856,
+        "p95": 0.1808800021535716,
+        "mean": 0.09072080538561256
+      },
+      "fps_mean": 31.116677956734023,
+      "fps_p50": 33.33033360601176,
+      "steady_proc_cpu_cores": 1.1255959192756022,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.180526899996039,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.1001736330705492,
+      "sys_cpu_mean": 23.362448210956313,
+      "sys_cpu_p95": 28.97404139305816,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "prep2_overlap_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": "overlap",
+      "video_start": null,
+      "frames": 900,
+      "product": false,
+      "source_root": "<work>\\wt_live_par"
+    }
+  },
+  {
+    "name": "prep2_reuse_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 32.165600001462735,
+        "p95": 46.87427999742795,
+        "mean": 34.49442080537915
+      },
+      "rec_ms": {
+        "p50": 27.914199999941047,
+        "p95": 42.30295999877853,
+        "mean": 30.36348053674923
+      },
+      "pre_ms": {
+        "p50": 0.12060000153724104,
+        "p95": 0.15948000072967258,
+        "mean": 0.12477248312902306
+      },
+      "fps_mean": 28.990195418618462,
+      "fps_p50": 31.08911383448544,
+      "steady_proc_cpu_cores": 0.9630205191733017,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.859783600004448,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9682093138251925,
+      "sys_cpu_mean": 21.553925327812998,
+      "sys_cpu_p95": 29.554606856123357,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "prep2_reuse_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": "reuse",
+      "video_start": null,
+      "frames": 900,
+      "product": false,
+      "source_root": "<work>\\wt_live_par"
+    }
+  },
+  {
+    "name": "prep2_reuse_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 31.815499998629093,
+        "p95": 45.84735999669646,
+        "mean": 33.86798120804417
+      },
+      "rec_ms": {
+        "p50": 27.727500004402827,
+        "p95": 41.54336000210605,
+        "mean": 29.830894631170747
+      },
+      "pre_ms": {
+        "p50": 0.12100000458303839,
+        "p95": 0.14758000324945897,
+        "mean": 0.12374093951212067
+      },
+      "fps_mean": 29.526412981547434,
+      "fps_p50": 31.43122063280757,
+      "steady_proc_cpu_cores": 0.9887167396935292,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.697138700001233,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9917054674543454,
+      "sys_cpu_mean": 21.572908182585266,
+      "sys_cpu_p95": 28.220453477443606,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "prep2_reuse_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": "reuse",
+      "video_start": null,
+      "frames": 900,
+      "product": false,
+      "source_root": "<work>\\wt_live_par"
+    }
+  },
+  {
+    "name": "prep2_serial_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 32.542900000407826,
+        "p95": 46.40452000166988,
+        "mean": 35.01518791945395
+      },
+      "rec_ms": {
+        "p50": 27.938599996559788,
+        "p95": 41.62456000049132,
+        "mean": 30.38556778517508
+      },
+      "pre_ms": {
+        "p50": 0.12280000373721123,
+        "p95": 0.16585999837843698,
+        "mean": 0.12805704704224877
+      },
+      "fps_mean": 28.559035647625755,
+      "fps_p50": 30.72866892586303,
+      "steady_proc_cpu_cores": 0.9998891174016336,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.676693599998544,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9994446502065552,
+      "sys_cpu_mean": 19.606456204105537,
+      "sys_cpu_p95": 24.240223543434666,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "prep2_serial_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": "serial",
+      "video_start": null,
+      "frames": 900,
+      "product": false,
+      "source_root": "<work>\\wt_live_par"
+    }
+  },
+  {
+    "name": "prep2_serial_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 33.484499996120576,
+        "p95": 47.589839999272954,
+        "mean": 35.7253751677954
+      },
+      "rec_ms": {
+        "p50": 28.643699995882344,
+        "p95": 42.36637999856612,
+        "mean": 30.955635570810056
+      },
+      "pre_ms": {
+        "p50": 0.12900000001536682,
+        "p95": 0.174160000460688,
+        "mean": 0.1336442948386992
+      },
+      "fps_mean": 27.991308567179132,
+      "fps_p50": 29.86456420480692,
+      "steady_proc_cpu_cores": 0.9959632114140817,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.972191700006078,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.997874911655525,
+      "sys_cpu_mean": 24.688951376600382,
+      "sys_cpu_p95": 32.1526143603283,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "prep2_serial_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": "serial",
+      "video_start": null,
+      "frames": 900,
+      "product": false,
+      "source_root": "<work>\\wt_live_par"
+    }
+  },
+  {
+    "name": "prep_overlap_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 30.48020000278484,
+        "p95": 44.11334000469651,
+        "mean": 32.68915167788978
+      },
+      "rec_ms": {
+        "p50": 28.891300004033837,
+        "p95": 42.51444000110496,
+        "mean": 31.264434899029638
+      },
+      "pre_ms": {
+        "p50": 0.09889999637380242,
+        "p95": 0.16878000169526783,
+        "mean": 0.10073422837139875
+      },
+      "fps_mean": 30.591188472975208,
+      "fps_p50": 32.80818367033794,
+      "steady_proc_cpu_cores": 1.1006560373413623,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.411492500003078,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.086682892482714,
+      "sys_cpu_mean": 24.98465428949677,
+      "sys_cpu_p95": 31.19889598067966,
+      "sys_cpu_samples": 16,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "prep_overlap_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": "overlap",
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "prep_reuse_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 32.22819999791682,
+        "p95": 46.21548000432085,
+        "mean": 34.331928187933975
+      },
+      "rec_ms": {
+        "p50": 27.956100006122142,
+        "p95": 41.69486000027973,
+        "mean": 30.245805368993132
+      },
+      "pre_ms": {
+        "p50": 0.12200000492157415,
+        "p95": 0.15569999814033508,
+        "mean": 0.12547181218576572
+      },
+      "fps_mean": 29.12740567689559,
+      "fps_p50": 31.028726396902044,
+      "steady_proc_cpu_cores": 0.9802580152803745,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.78519519999827,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9746510811736643,
+      "sys_cpu_mean": 22.5889128351297,
+      "sys_cpu_p95": 28.2768196922163,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "prep_reuse_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": "reuse",
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "prep_serial_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 32.134499997482635,
+        "p95": 45.14748000074178,
+        "mean": 34.096908724787504
+      },
+      "rec_ms": {
+        "p50": 27.46790000674082,
+        "p95": 40.2935800011619,
+        "mean": 29.569222818690527
+      },
+      "pre_ms": {
+        "p50": 0.12229999992996454,
+        "p95": 0.17614000098546967,
+        "mean": 0.12783825494374004
+      },
+      "fps_mean": 29.328171890052538,
+      "fps_p50": 31.11920210609589,
+      "steady_proc_cpu_cores": 0.9743532849710208,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 8.69404940000095,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 0.9722885862598246,
+      "sys_cpu_mean": 17.61202909818188,
+      "sys_cpu_p95": 23.844248630626335,
+      "sys_cpu_samples": 17,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "prep_serial_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": "serial",
+      "video_start": null,
+      "frames": 900,
+      "product": false
+    }
+  },
+  {
+    "name": "sides_0",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 37.22820000257343,
+        "p95": 52.33377999829826,
+        "mean": 38.610868456370305
+      },
+      "rec_ms": {
+        "p50": 35.681200002727564,
+        "p95": 49.90614000271307,
+        "mean": 37.22394026857691
+      },
+      "pre_ms": {
+        "p50": 0.1401999979862012,
+        "p95": 0.17428000282961875,
+        "mean": 0.14362684530151332
+      },
+      "fps_mean": 25.899443342746483,
+      "fps_p50": 26.86135778605665,
+      "steady_proc_cpu_cores": 1.0843782365700907,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.771344400003727,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.077768786861712,
+      "sys_cpu_mean": 27.649771207271904,
+      "sys_cpu_p95": 35.81993006993006,
+      "sys_cpu_samples": 19,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "sides_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "sides": true,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "sides_1",
+    "summary": {
+      "n": 149,
+      "cycle_ms": {
+        "p50": 37.297300004865974,
+        "p95": 52.03150000161257,
+        "mean": 39.569309395980156
+      },
+      "rec_ms": {
+        "p50": 35.94290000182809,
+        "p95": 50.684960000216954,
+        "mean": 38.16974966452987
+      },
+      "pre_ms": {
+        "p50": 0.14099999680183828,
+        "p95": 0.18139999883715058,
+        "mean": 0.1446020133338631
+      },
+      "fps_mean": 25.272111524432873,
+      "fps_p50": 26.811592256531586,
+      "steady_proc_cpu_cores": 1.134516700178875,
+      "rec_p50_by_200": [],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 9.966812899998331,
+      "rows": 210,
+      "frames_loaded": 210,
+      "proc_cpu_cores": 1.0926888173050608,
+      "sys_cpu_mean": 27.963564378869556,
+      "sys_cpu_p95": 34.89680082559338,
+      "sys_cpu_samples": 19,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "sides_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "sides": true,
+      "cv": 1,
+      "prepare": null
+    }
+  },
+  {
+    "name": "video_0",
+    "summary": {
+      "n": 839,
+      "cycle_ms": {
+        "p50": 33.126499998616055,
+        "p95": 45.16639999928884,
+        "mean": 34.356605601903894
+      },
+      "rec_ms": {
+        "p50": 30.17309999995632,
+        "p95": 42.15028000326129,
+        "mean": 31.44330786659844
+      },
+      "pre_ms": {
+        "p50": 0.14940000255592167,
+        "p95": 0.1899500035506206,
+        "mean": 0.15362979744413105
+      },
+      "fps_mean": 29.106484254794495,
+      "fps_p50": 30.18731227391296,
+      "steady_proc_cpu_cores": 0.9920662609327691,
+      "rec_p50_by_200": [
+        29.948250001325505,
+        30.67094999641995,
+        28.865100000984967,
+        31.389499999932013
+      ],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 32.74942920000467,
+      "rows": 900,
+      "frames_loaded": 900,
+      "proc_cpu_cores": 0.9880897405074586,
+      "sys_cpu_mean": 26.059851644908665,
+      "sys_cpu_p95": 35.59881349647756,
+      "sys_cpu_samples": 64,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par\\logs\\live_parallel\\baseline_m",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "video_0",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": 650.0,
+      "frames": 900,
+      "product": false,
+      "source_root": "<work>\\wt_live_par\\logs\\live_parallel\\baseline_m"
+    }
+  },
+  {
+    "name": "video_1",
+    "summary": {
+      "n": 839,
+      "cycle_ms": {
+        "p50": 32.920400000875816,
+        "p95": 45.811890003096764,
+        "mean": 34.23925303933902
+      },
+      "rec_ms": {
+        "p50": 29.995299999427516,
+        "p95": 42.60226999904261,
+        "mean": 31.256853754390256
+      },
+      "pre_ms": {
+        "p50": 0.15110000094864517,
+        "p95": 0.21808000092278226,
+        "mean": 0.15908116811054734
+      },
+      "fps_mean": 29.20624462370879,
+      "fps_p50": 30.37630162371648,
+      "steady_proc_cpu_cores": 1.0328636319684692,
+      "rec_p50_by_200": [
+        29.564349999418482,
+        30.16035000109696,
+        29.298999997990904,
+        31.63325000059558
+      ],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 31.95818099999451,
+      "rows": 900,
+      "frames_loaded": 900,
+      "proc_cpu_cores": 1.0291770047865256,
+      "sys_cpu_mean": 26.460834707976147,
+      "sys_cpu_p95": 32.74490327380952,
+      "sys_cpu_samples": 62,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "video_1",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": 650.0,
+      "frames": 900,
+      "product": true,
+      "source_root": "<work>\\wt_live_par"
+    }
+  },
+  {
+    "name": "video_2",
+    "summary": {
+      "n": 839,
+      "cycle_ms": {
+        "p50": 32.51250000175787,
+        "p95": 44.986869997956084,
+        "mean": 33.67069594756172
+      },
+      "rec_ms": {
+        "p50": 29.596000000310596,
+        "p95": 41.922610000619876,
+        "mean": 30.7282886769371
+      },
+      "pre_ms": {
+        "p50": 0.14799999917158857,
+        "p95": 0.21126999999978574,
+        "mean": 0.15588700851289272
+      },
+      "fps_mean": 29.699415823105834,
+      "fps_p50": 30.757400997952555,
+      "steady_proc_cpu_cores": 1.0187989016830286,
+      "rec_p50_by_200": [
+        28.997550001804484,
+        30.5377500008035,
+        28.329000000667293,
+        30.614600000262726
+      ],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=1",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 31.63274320000346,
+      "rows": 900,
+      "frames_loaded": 900,
+      "proc_cpu_cores": 1.0190192736745156,
+      "sys_cpu_mean": 23.569752800698065,
+      "sys_cpu_p95": 34.52574022838547,
+      "sys_cpu_samples": 62,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "video_2",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": 650.0,
+      "frames": 900,
+      "product": true,
+      "source_root": "<work>\\wt_live_par"
+    }
+  },
+  {
+    "name": "video_3",
+    "summary": {
+      "n": 839,
+      "cycle_ms": {
+        "p50": 35.32390000327723,
+        "p95": 48.164250001718756,
+        "mean": 36.52276674612854
+      },
+      "rec_ms": {
+        "p50": 32.30819999589585,
+        "p95": 45.32675000227755,
+        "mean": 33.49458021439768
+      },
+      "pre_ms": {
+        "p50": 0.15250000433297828,
+        "p95": 0.2077300021483097,
+        "mean": 0.15826245519371163
+      },
+      "fps_mean": 27.380181982133138,
+      "fps_p50": 28.30944487746889,
+      "steady_proc_cpu_cores": 0.9829313576972144,
+      "rec_p50_by_200": [
+        31.30934999717283,
+        33.6472999988473,
+        31.471499998588115,
+        32.820849995914614
+      ],
+      "stages_ms": {},
+      "tag": "",
+      "layer": "core",
+      "rec_config_off": "",
+      "env": [
+        "PUYO_CNN_BACKEND=onnx",
+        "PUYO_LIVE_CPU_THREADS=1",
+        "PUYO_LIVE_ONNX_PARALLEL=0",
+        "PUYO_PERFORMANCE_CORES=1",
+        "PUYO_B3_SCORE_MATMUL=1",
+        "PUYO_B3_WARNING_PARALLEL=1",
+        "PUYO_B3_WARNING_WORKERS=4",
+        "PUYO_B3_SKIP_ICON_READING=1",
+        "PUYO_B3_LEDGER_MODE=1",
+        "PUYO_B3_LEDGER_LANDING=1",
+        "PUYO_B3_SHARE_SCORE_READ=1"
+      ],
+      "device": {
+        "name": "OBS Virtual Camera",
+        "index": 4,
+        "verification_only": true,
+        "relaxed_verify": true,
+        "verify_fail_streak": 3,
+        "fast_first_judgment": true,
+        "color_correction": "601to709"
+      },
+      "verifier": "real",
+      "wall_sec": 33.85269320000225,
+      "rows": 900,
+      "frames_loaded": 900,
+      "proc_cpu_cores": 0.9845043879698702,
+      "sys_cpu_mean": 25.009822883345635,
+      "sys_cpu_p95": 33.12833582990358,
+      "sys_cpu_samples": 66,
+      "runtime": {
+        "affinity": [
+          256,
+          257,
+          258,
+          259,
+          260,
+          261,
+          262,
+          263,
+          264,
+          265,
+          266,
+          267
+        ],
+        "torch_threads": 1,
+        "opencv_threads": 1
+      },
+      "python": "3.12.3",
+      "app": "<work>\\wt_live_par\\logs\\live_parallel\\baseline_m",
+      "cache_stats": {}
+    },
+    "candidate": {
+      "tag": "video_3",
+      "intra": 1,
+      "inter": 1,
+      "parallel": false,
+      "no_spin": false,
+      "idle": false,
+      "cpu_sets": 0,
+      "sides": false,
+      "cv": 1,
+      "prepare": null,
+      "video_start": 650.0,
+      "frames": 900,
+      "product": false,
+      "source_root": "<work>\\wt_live_par\\logs\\live_parallel\\baseline_m"
+    }
+  }
+]

@@ -9,10 +9,42 @@ edition = "2021"
 name = "puyo_core"
 crate-type = ["cdylib"]
 
+[features]
+ama-cli = []
+ama-profile = []
+ama-profile-detail = ["ama-profile"]
+ama-reuse-identical-queues = []
+ama-bmi2 = []
+ama-fast-chain = []
+ama-fast-avx2 = ["ama-fast-chain"]
+ama-fast-connected = ["ama-fast-chain"]
+ama-fast-gravity = ["ama-fast-chain", "ama-bmi2"]
+b3-fast-prefilter = []
+b3-fast-chain = ["ama-fast-chain"]
+compact-chain-summary = []
+
+[[bin]]
+name = "ama_cli"
+path = "src/ama_cli.rs"
+required-features = ["ama-cli"]
+test = false
+bench = false
+
+[[bin]]
+name = "ama_profile"
+path = "src/ama_profile.rs"
+required-features = ["ama-cli"]
+test = false
+bench = false
+
 [dependencies]
+ama_reference = { path = "../ama_reference" }
 # extension-module: Python 側の libpython にリンクしない (maturin 標準構成)
 pyo3 = { version = "0.22", features = ["extension-module"] }
 rayon = "1.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
 # HSV セル分類 (2026-08-20 追加): 盤面 ROI を numpy 配列のまま借用して
 # ゼロコピーで受け取るために使う。pyo3 と同じメジャー版を選ぶ必要がある
 # (pyo3-ffi が links="python" を宣言するため、異版が混在すると解決不能)。

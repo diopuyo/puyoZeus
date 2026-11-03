@@ -5,7 +5,7 @@
 #   v97 53 秒 TSUMO_FALL 詰まり問題への救済策。
 #   cycle 30 (bg_fp HybridClassifier 連携) は撤去済 → cycle 29 状態 + B 軸
 #   model: cnn_phase_i_hsv_seed.pt (= cycle_19 baseline と同条件)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 PYTHONPATH=. ./venv/bin/python -m scripts.multi_video_cycle \
     --cycle 31 --parallel 3 \
     --cnn-model models/cnn_phase_i_hsv_seed.pt \

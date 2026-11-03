@@ -1,0 +1,58 @@
+name: 不具合の報告
+description: puyoZeus Live の動作について報告する
+title: "[不具合] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ゲーム映像・切り出し画像・ログ全文はそのまま投稿しないでください。
+        ログの必要な行だけを抜き出し、ユーザー名、個人のパス、メール、配信キー、トークンを除いてください。
+        このフォームは公開されます。
+  - type: input
+    id: version
+    attributes:
+      label: puyoZeus の版と ZIP の名前
+      placeholder: "例: 0.6.0 / puyoZeus-0.6.0-windows-x64.zip"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Windows の版・ビルド・CPU・メモリ
+      description: Windows の設定で確認できる範囲で記載してください。ユーザー名は不要です。
+    validations:
+      required: true
+  - type: input
+    id: obs
+    attributes:
+      label: OBS の版
+      description: 使用していなければ「未使用」と記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: 入力の方法と映像条件
+      description: 仮想カメラ / キャプチャ機器、入力番号、解像度、フレームレート、色空間、設定を変更した点。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 再現手順・期待した動作・実際の動作
+      description: 起動からの順序、起きる頻度（試した回数のうち何回）、いつから起きたか。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: エラー文・匿名化したログの必要部分
+      description: 展開先のログから発生時刻付近の行だけを選んでください。場所が分からなければ、その旨だけで構いません。画像や秘密は貼らないでください。
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 投稿内容の確認
+      options:
+        - label: ゲーム画像、個人情報、配信キー、トークンを含んでいないことを確認しました。
+          required: true

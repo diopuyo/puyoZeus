@@ -20,6 +20,7 @@ from src.board import (
     BOARD_COLS,
     COLOR_EMPTY,
     COLOR_OJAMA,
+    COLOR_UNKNOWN,
     HIDDEN_ROWS,
     VISIBLE_ROWS,
 )
@@ -45,6 +46,13 @@ from src.patch_classifier import (
 # cycle 10 (2026-05-15, revert): 0.55 → 0.70 (= cycle 5 baseline 復元)。
 DEFAULT_CNN_OVERRIDE_PROB: float = 0.70
 
+# bg_fp 距離の soft prior (cycle 34)。cycle 37 で BOOST_MAX=0 に撤回済み。
+# classify_batch の従来経路と一括経路 (2026-10-24) が同じ値を参照するよう
+# モジュール定数にしてある (片方だけ変えて出力が食い違うのを防ぐ)。
+BG_DIST_BOOST_MAX: float = 0.0
+BG_DIST_BOOST_SCALE: float = 50.0
+BG_DIST_MAX_RELEVANT: float = 150.0
+
 
 class HybridClassifier:
     """HSV ColorClassifier + CnnPatchClassifier + UiMaskMatcher を組み合わせる分類器。
@@ -58,6 +66,9 @@ class HybridClassifier:
     # 案 1a (UNKNOWN 補完) と組み合わさり「過去誤色が長期維持」 する複合副作用
     # により認識精度悪化. v15 状態に戻すため閾値を 0 に.
     LOW_CONFIDENCE_UNKNOWN_THRESHOLD: float = 0.0
+
+    # classify_batch の一括経路 (2026-10-24、既定 OFF)。クラス属性なので __init__ 不要。
+    _live_board_vectorized: bool = False
 
     def __init__(
         self,
@@ -209,12 +220,18 @@ class HybridClassifier:
         if not bgr_patches:
             return []
         n = len(bgr_patches)
+        # 一括経路 (2026-10-24、既定 OFF): 後段のマスごとのループを一括にする。
+        # 対応外 (soft prior 有効・距離が非有限など) は None が返り従来経路へ進む。
+        if self._live_board_vectorized:
+            fast = self._classify_batch_vectorized(
+                bgr_patches, bg_distances, cell_positions,
+            )
+            if fast is not None:
+                return fast
         # cycle 37 (2026-05-20): soft prior 撤回 (BOOST_MAX=0)。
         # cycle 34-36 全 boost 強度で bg_dominant 悪化判明 → 撤回。
         # tier 1 < 25.0 (image_reader.py) のみで bg 対策。
-        BG_DIST_BOOST_MAX: float = 0.0
-        BG_DIST_BOOST_SCALE: float = 50.0
-        BG_DIST_MAX_RELEVANT: float = 150.0
+        # (定数はモジュール先頭 BG_DIST_BOOST_* を参照する。値は従来のローカル定数と同一。)
         # UI mask の事前判定 (バッチ化不可、cell ごと)
         # 案B: ui_mask_cells + cell_positions が両方揃った時のみセル限定を有効化。
         # 長さ不一致は呼出元の不整合 (バグ) の疑いがあるため安全側 (全セル判定) に倒す。
@@ -284,6 +301,114 @@ class HybridClassifier:
         return out2
 
 
+    def set_live_board_vectorized(self, enable: bool) -> None:
+        """盤面読取の一括経路を切り替える (既定 OFF、出力は変わらない)。
+
+        自身の classify_batch・HSV 分類器の classify_batch・CNN の前処理に伝える。
+        """
+        self._live_board_vectorized = bool(enable)
+        for part in (self._hsv, self._cnn):
+            setter = getattr(part, "set_live_board_vectorized", None)
+            if callable(setter):
+                setter(self._live_board_vectorized)
+
+    def _ui_mask_flags(
+        self, bgr_patches: list[np.ndarray],
+        cell_positions: list[tuple[int, int]] | None,
+    ) -> list[bool]:
+        """classify_batch の UI マスク事前判定 (従来と同じ条件・同じ is_ui 呼出)。"""
+        n = len(bgr_patches)
+        restrict_cells = (
+            self._ui_mask_cells is not None
+            and cell_positions is not None
+            and len(cell_positions) == n
+        )
+        flags = [False] * n
+        if self._ui_matcher is None:
+            return flags
+        for i, p in enumerate(bgr_patches):
+            if restrict_cells and cell_positions[i] not in self._ui_mask_cells:
+                continue
+            if p.size > 0 and self._ui_matcher.is_ui(p):
+                flags[i] = True
+        return flags
+
+    def _classify_batch_vectorized(
+        self, bgr_patches: list[np.ndarray],
+        bg_distances: list[float | None] | None,
+        cell_positions: list[tuple[int, int]] | None,
+    ) -> list[int] | None:
+        """classify_batch の後段を一括で行う。対応外なら None (従来経路へ)。
+
+        従来の「セルごとに argmax → 確信度比較 → 低確信度だけ HSV 分類」を、
+        argmax・比較は配列で、HSV 分類は低確信度セルをまとめた 1 回で行う。
+        各セルの分岐 (UI → CNN 高確信 → HSV 一致 → UNKNOWN 閾値 → HSV) と
+        比較の型 (確信度は float64 へ上げてから override と比較) は従来と同じ。
+        """
+        from src.live_board_vectorized import STATS, classify_patches
+        if BG_DIST_BOOST_MAX != 0.0 or not self._distances_are_inert(bg_distances):
+            STATS["hybrid_fallback"] += 1
+            return None
+        ui_mask = self._ui_mask_flags(bgr_patches, cell_positions)
+        if self._cnn is None:
+            live = [i for i, flagged in enumerate(ui_mask) if not flagged]
+            colors = classify_patches(self._hsv, [bgr_patches[i] for i in live])
+            out = [COLOR_EMPTY] * len(bgr_patches)
+            for i, color in zip(live, colors):
+                out[i] = color
+            return out
+        probs = self._cnn.predict_proba_batch(bgr_patches)
+        if getattr(probs, "ndim", 0) != 2 or probs.shape[0] != len(bgr_patches):
+            STATS["hybrid_fallback"] += 1
+            return None
+        STATS["hybrid_vectorized_calls"] += 1
+        STATS["hybrid_ui_flagged"] += sum(ui_mask)
+        return self._merge_cnn_and_hsv(bgr_patches, probs, ui_mask)
+
+    @staticmethod
+    def _distances_are_inert(bg_distances: list[float | None] | None) -> bool:
+        """soft prior の加算が値を変えない (有限かつ非負の距離だけ) ことの確認。"""
+        if bg_distances is None:
+            return True
+        return all(d is None or (np.isfinite(d) and d >= 0.0) for d in bg_distances)
+
+    def _merge_cnn_and_hsv(
+        self, bgr_patches: list[np.ndarray], probs: np.ndarray, ui_mask: list[bool],
+    ) -> list[int]:
+        """CNN の確率と HSV 分類を従来のセル単位の分岐と同じ規則で統合する。"""
+        from src.live_board_vectorized import classify_patches
+        probs_eff = probs
+        if self._mask_ojama_logit:
+            ojama_idx = COLOR_TO_CLASS_INDEX.get(COLOR_OJAMA)
+            if ojama_idx is not None:
+                probs_eff = probs.copy()
+                probs_eff[:, ojama_idx] = -1e9
+        n = len(bgr_patches)
+        best = probs_eff.argmax(axis=1)
+        confidence = probs_eff[np.arange(n), best].astype(np.float64)
+        cnn_colors = [CLASS_INDEX_TO_COLOR[int(i)] for i in best]
+        high = confidence >= self._cnn_override_prob
+        out = [COLOR_EMPTY] * n
+        low: list[int] = []
+        for i in range(n):
+            if ui_mask[i]:
+                continue
+            if high[i]:
+                out[i] = cnn_colors[i]
+            else:
+                low.append(i)
+        from src.live_board_vectorized import STATS
+        STATS["hybrid_low_confidence_cells"] += len(low)
+        hsv_colors = classify_patches(self._hsv, [bgr_patches[i] for i in low])
+        for i, hsv_color in zip(low, hsv_colors):
+            if cnn_colors[i] == hsv_color:
+                out[i] = cnn_colors[i]
+            elif confidence[i] < self.LOW_CONFIDENCE_UNKNOWN_THRESHOLD:
+                out[i] = COLOR_UNKNOWN
+            else:
+                out[i] = hsv_color
+        return out
+
     def set_cnn_override_prob(self, prob: float) -> None:
         """CNN override 閾値を更新 (低解像度時 HSV 信頼用).
 
@@ -312,6 +437,17 @@ class HybridClassifier:
         # HSV grid (cell ごとに HSV-only 判定)
         h, w = frame.shape[:2]
         hsv_grid = np.zeros((VISIBLE_ROWS, BOARD_COLS), dtype=np.int32)
+        if self._live_board_vectorized:
+            # 一括経路 (2026-10-24、既定 OFF): 72 セルを 1 回の分類にまとめる。
+            # 矩形・クランプ・size==0 の扱いは下の従来ループと同じ。
+            from src.live_board_vectorized import (
+                cell_rect_table, classify_patches, slice_patches,
+            )
+            table = cell_rect_table(region, w, h)
+            colors = classify_patches(self._hsv, slice_patches(frame, table))
+            for (row, col), color in zip(table.positions, colors):
+                hsv_grid[row - HIDDEN_ROWS, col] = color
+            return proba_grid, hsv_grid
         for vrow in range(VISIBLE_ROWS):
             row = vrow + HIDDEN_ROWS
             for col in range(BOARD_COLS):

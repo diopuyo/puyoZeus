@@ -4,7 +4,7 @@
 #   - extract_hsv_seed_dataset.py で動画から直接 STABLE × HSV-only 信頼 cell を抽出
 #   - empty/ojama 追加 → CReST 学習 (cycle_23 と同じ args)
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 LOG=logs/cycle24v2_pipeline.log
 exec > >(tee -a "$LOG") 2>&1
 echo "=== START $(date) ==="

@@ -4,7 +4,7 @@
 # 全フレーム処理のレンダ表示ではcol1にラベルが付いており食い違う。
 # 開始時刻を揃え間引きの有無のみを変えて、どちらが正しいかを決める。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 OUT=data/indicators_v2/sampling_ab_2026-07-30
 LOG=logs/ab_sampling_c56_2026-07-30.log
 log() { echo "[ab-c56] $(date) $*" >> "$LOG"; }

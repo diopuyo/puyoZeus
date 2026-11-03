@@ -70,6 +70,7 @@ def compute_region_stats(
 def compute_frame_diff(
     prev_frame: np.ndarray, cur_frame: np.ndarray,
     region: tuple[int, int, int, int] | None = None,
+    fast: bool = False,
 ) -> float:
     """2 フレーム間の平均絶対差 (0-255)。region 指定で特定領域のみ。"""
     if prev_frame is None or cur_frame is None:
@@ -87,6 +88,9 @@ def compute_frame_diff(
         y2 = max(y1 + 1, min(y + h, H))
         a = prev_frame[y1:y2, x1:x2]
         b = cur_frame[y1:y2, x1:x2]
+    if fast and a.dtype == np.uint8 and b.dtype == np.uint8 and a.size:
+        # uint8 の絶対差は int16 化した差と同じ整数。平均の総和も float64 のまま。
+        return float(np.mean(cv2.absdiff(a, b)))
     return float(np.mean(np.abs(a.astype(np.int16) - b.astype(np.int16))))
 
 
@@ -110,6 +114,7 @@ class AnimationFilter:
         cur_frame: np.ndarray,
         region: tuple[int, int, int, int],
         prev_frame: np.ndarray | None = None,
+        fast: bool = False,
     ) -> AnimationDetectionResult:
         """指定領域でアニメーション中か判定。
 
@@ -129,7 +134,7 @@ class AnimationFilter:
             abs(cur_stats.v_std - prev_stats.v_std)
             if prev_stats is not None else 0.0
         )
-        frame_diff = compute_frame_diff(prev_frame, cur_frame, region)
+        frame_diff = compute_frame_diff(prev_frame, cur_frame, region, fast=fast)
 
         is_anim = False
         reasons: list[str] = []

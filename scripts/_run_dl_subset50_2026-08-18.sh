@@ -3,17 +3,17 @@
 # Cookie は単一ファイルを直接渡し、yt-dlp によるセッション書き戻しを許可する
 # (2026-08-18: コピーを渡すと更新が捨てられ、元Cookieがローテーションで
 #  無効化されて403に戻る事象を実測)。そのため必ず直列で回す。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 mkdir -p logs
 # 148本体と同じ方式: スクリプト自身がログへ追記する (外部リダイレクトだと
 # setsid -f 経由で起動しない事象を実測、2026-08-18)
 exec >> logs/dl_subset50_2026-08-18.log 2>&1
 echo "[dl50] 開始 $(date)"
-SP="/mnt/c/Users/ryouj/AppData/Local/Temp/claude/C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/22abd085-8e57-4d2a-857e-8516be642774/scratchpad"
+SP="<home>/AppData/Local/Temp/claude/C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/22abd085-8e57-4d2a-857e-8516be642774/scratchpad"
 CKM="$SP/yt_cookies_master.txt"
 CK="$SP/yt_cookies_work_dl50.txt"
-NODE=/home/ryouj/.nvm/versions/node/v24.19.0/bin/node
-FF=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
+NODE=<home>/.nvm/versions/node/v24.19.0/bin/node
+FF=<home>/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
 FMT='bv*[vcodec^=avc1][height<=1080]+ba/b[ext=mp4][vcodec^=avc1][height<=1080]/b[height<=1080][vcodec!*=av01]/b[ext=mp4]'
 PROG=logs/dl_subset50_progress.txt
 : > "$PROG"

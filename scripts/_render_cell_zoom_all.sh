@@ -1,7 +1,7 @@
 #!/bin/bash
 # v06+ 残 9 segment の cell_zoom 一括生成 (一時スクリプト).
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 SEGS=(
     v06_m04_445_475
     v06_m05_484_514

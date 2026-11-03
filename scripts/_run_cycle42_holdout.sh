@@ -3,7 +3,7 @@
 # video_30 (= 学習未使用、 light vs あん マスター級) の 5-6.5 分目を 90 秒切り出し
 # 既 default model + cycle 33 設定 (= tier1<20、 boost OFF) で viz 評価
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/holdout_videos
 mkdir -p data/review_videos/cycle42

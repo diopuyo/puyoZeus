@@ -16,7 +16,7 @@
 # OFF版・ON版は既存レビュー動画 (_regen_review_calibon_2026-07-29.sh) と同じ
 # 主要フラグ一式 + ON版のみ --puyo-to-empty-hsv-guard を追加する。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 export PYTHONPATH=.
 
 LOG=logs/regen_review_hsvguard_2026-07-30.log

@@ -8,7 +8,7 @@
 #   game1開始 score0 = t=465.6s (game0終値27572/6113 -> 465.4s None(遷移) -> 465.6s で0/0)
 #   game2開始 score0 = t=511.8s (game1終値24164/4720 -> 511.4s None(遷移) -> 511.6-511.8s で0/0)
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 OUT_DIR="data/verify/review_video_new_2026-07-25"
 mkdir -p "${OUT_DIR}"
 RAW="${OUT_DIR}/advantage_recog_c34_game1_full_score0to0.mp4"

@@ -1,0 +1,93 @@
+{
+  "input": {
+    "path": "logs/e31/records/review.jsonl.gz",
+    "header": 1,
+    "update": 6848,
+    "terminal_evidence": 6848,
+    "prefire_snapshot": 686,
+    "midchain_board": 460,
+    "static": 666,
+    "static_call": 4105,
+    "display": 5948,
+    "complete": 1
+  },
+  "b16_input": {
+    "path": "logs/live_b16/realtime/inputs.jsonl.gz",
+    "header": 1,
+    "update": 106896,
+    "terminal_evidence": 0,
+    "prefire_snapshot": 0,
+    "midchain_board": 0,
+    "static": 4873,
+    "static_call": 7325,
+    "display": 6198,
+    "complete": 1
+  },
+  "probabilities": {
+    "equal": 6848,
+    "total": 6848,
+    "first_mismatch": null
+  },
+  "display": {
+    "reference_frames": 5948,
+    "candidate_frames": 5948,
+    "compared_frames": 5948,
+    "mismatched_frames": 2979,
+    "first_mismatch": {
+      "index": 2,
+      "column": "display_adv",
+      "t_sec": 2579.116666666667,
+      "reference": "-4.701576096167982",
+      "candidate": "-21.423131846029"
+    },
+    "columns": [
+      "adv_raw_last",
+      "display_adv",
+      "display_p1",
+      "game_idx",
+      "resolved_active",
+      "score1",
+      "score2",
+      "settled_ran",
+      "source",
+      "state1",
+      "state2",
+      "t_sec",
+      "video_id"
+    ]
+  },
+  "benchmark": {
+    "E14": {
+      "count": 6198,
+      "P50_ms": 2.67990049906075,
+      "P95_ms": 412.6208040805065,
+      "update": {
+        "count": 106896,
+        "P50_ms": 0.048574001993983984,
+        "P95_ms": 0.16031175618991256
+      },
+      "calculate": {
+        "count": 6198,
+        "P50_ms": 1.7167350160889328,
+        "P95_ms": 14.44804011262017
+      }
+    },
+    "production": {
+      "count": 6198,
+      "P50_ms": 11.094847461208701,
+      "P95_ms": 466.37653530342493,
+      "update": {
+        "count": 106896,
+        "P50_ms": 0.3977700253017247,
+        "P95_ms": 0.9148774261120707
+      },
+      "calculate": {
+        "count": 6198,
+        "P50_ms": 2.059381571598351,
+        "P95_ms": 44.423884252319056
+      }
+    },
+    "nice": 10,
+    "scope": "保存displayごと、直前までのupdate合計+calculate、R1並走下の相対比較"
+  }
+}

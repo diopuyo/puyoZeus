@@ -18,7 +18,7 @@
 #
 # 出力は data/verify/zenchi_render_slide_exit_guard_v2_2026-08-22/ (新規、
 # v1/旧本番dumpは一切上書きしない)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1

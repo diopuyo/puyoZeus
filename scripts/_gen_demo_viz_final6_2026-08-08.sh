@@ -7,7 +7,7 @@
 # 効果測定 (2026-08-08、dio_vs_ts_m01_clip t=45-75s):
 #   GRAVITY_SETTLE 中の視覚由来 誤 OJAMA_FALL 発火 4 件 -> 0 件、
 #   2P の実 state 遷移 71 -> 62 件 (-12.7%)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/verify/youtube_demo_2026-08-07/dio_vs_ts_m01_clip.mp4

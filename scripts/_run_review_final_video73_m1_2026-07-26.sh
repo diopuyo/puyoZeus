@@ -11,7 +11,7 @@
 # よって v6 (2026-07-25 承認版, scripts/_run_full_game1_c34_v6_2026-07-25.sh) と
 # 同一構成で、4フラグ全てを明示指定する。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 OUT_DIR="data/verify/review_video_final_2026-07-26"
 mkdir -p "${OUT_DIR}"
 RAW="${OUT_DIR}/advantage_recog_video73_match1_full_score0to0.mp4"

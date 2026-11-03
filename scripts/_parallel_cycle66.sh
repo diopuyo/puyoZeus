@@ -2,7 +2,7 @@
 # サイクル66 並列検証パック
 # v91 viz + v89 eval + v91 eval + 多 frame diag を一気に走らせる
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 mkdir -p logs
 
 # 1. v91 viz (= 主検証対象)

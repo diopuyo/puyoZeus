@@ -7,7 +7,7 @@
 # 設計: 候補が見つかった箇所を狙わず、各動画の**固定オフセット**の窓を取る(偏りを避ける)。
 # 間引き以外の条件は完全に同一(開始時刻・長さ・フラグ)。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 OUT=data/indicators_v2/sampling_rate_2026-07-30
 LOG=logs/ab_sampling_rate_2026-07-30.log
 mkdir -p "$OUT"

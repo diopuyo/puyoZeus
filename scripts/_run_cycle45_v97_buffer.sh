@@ -2,7 +2,7 @@
 # cycle 45: video_97 試合 11 を 15 秒バッファ付き再切り出し
 # 既存 v97_match11_96s.mp4 はバッファなし = ユーザー指摘「ぷよ→empty 誤認多数」 の原因疑い
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/holdout_videos
 mkdir -p data/review_videos/cycle45

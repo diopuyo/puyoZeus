@@ -1,0 +1,147 @@
+[
+  {
+    "layer": "boards",
+    "differing_values": 0,
+    "max_abs": 0.0
+  },
+  {
+    "layer": "queues",
+    "differing_values": 0,
+    "max_abs": 0.0
+  },
+  {
+    "layer": "side_encoder.color_features.0#0",
+    "differing_values": 0,
+    "max_abs": 0.0
+  },
+  {
+    "layer": "side_encoder.color_features.1#0",
+    "differing_values": 5536,
+    "max_abs": 4.76837158203125e-07
+  },
+  {
+    "layer": "side_encoder.color_features.2#0",
+    "differing_values": 2726,
+    "max_abs": 4.76837158203125e-07
+  },
+  {
+    "layer": "side_encoder.color_features.3#0",
+    "differing_values": 7447,
+    "max_abs": 2.384185791015625e-07
+  },
+  {
+    "layer": "side_encoder.color_features.4#0",
+    "differing_values": 8185,
+    "max_abs": 9.5367431640625e-07
+  },
+  {
+    "layer": "side_encoder.color_features.5#0",
+    "differing_values": 4313,
+    "max_abs": 9.5367431640625e-07
+  },
+  {
+    "layer": "side_encoder.color_features#0",
+    "differing_values": 4313,
+    "max_abs": 9.5367431640625e-07
+  },
+  {
+    "layer": "side_encoder.context_features.0#0",
+    "differing_values": 0,
+    "max_abs": 0.0
+  },
+  {
+    "layer": "side_encoder.context_features.1#0",
+    "differing_values": 1511,
+    "max_abs": 4.76837158203125e-07
+  },
+  {
+    "layer": "side_encoder.context_features.2#0",
+    "differing_values": 770,
+    "max_abs": 2.384185791015625e-07
+  },
+  {
+    "layer": "side_encoder.context_features#0",
+    "differing_values": 770,
+    "max_abs": 2.384185791015625e-07
+  },
+  {
+    "layer": "side_encoder.projection.0#0",
+    "differing_values": 4343,
+    "max_abs": 2.682209014892578e-07
+  },
+  {
+    "layer": "side_encoder.projection.1#0",
+    "differing_values": 4455,
+    "max_abs": 1.5497207641601562e-06
+  },
+  {
+    "layer": "side_encoder.projection.2#0",
+    "differing_values": 2233,
+    "max_abs": 1.5497207641601562e-06
+  },
+  {
+    "layer": "side_encoder.projection.3#0",
+    "differing_values": 2233,
+    "max_abs": 1.5497207641601562e-06
+  },
+  {
+    "layer": "side_encoder.projection.4#0",
+    "differing_values": 49,
+    "max_abs": 9.5367431640625e-07
+  },
+  {
+    "layer": "side_encoder.projection.5#0",
+    "differing_values": 26,
+    "max_abs": 9.5367431640625e-07
+  },
+  {
+    "layer": "side_encoder.projection#0",
+    "differing_values": 26,
+    "max_abs": 9.5367431640625e-07
+  },
+  {
+    "layer": "side_encoder#0",
+    "differing_values": 26,
+    "max_abs": 9.5367431640625e-07
+  },
+  {
+    "layer": "scorer.0#0",
+    "differing_values": 54,
+    "max_abs": 7.152557373046875e-07
+  },
+  {
+    "layer": "scorer.1#0",
+    "differing_values": 33,
+    "max_abs": 5.960464477539062e-07
+  },
+  {
+    "layer": "scorer.2#0",
+    "differing_values": 1,
+    "max_abs": 7.152557373046875e-07
+  },
+  {
+    "layer": "scorer#0",
+    "differing_values": 1,
+    "max_abs": 7.152557373046875e-07
+  },
+  {
+    "layer": "scorer.0#1",
+    "differing_values": 52,
+    "max_abs": 7.152557373046875e-07
+  },
+  {
+    "layer": "scorer.1#1",
+    "differing_values": 24,
+    "max_abs": 4.76837158203125e-07
+  },
+  {
+    "layer": "scorer.2#1",
+    "differing_values": 1,
+    "max_abs": 2.682209014892578e-07
+  },
+  {
+    "layer": "scorer#1",
+    "differing_values": 1,
+    "max_abs": 2.682209014892578e-07
+  }
+]

@@ -1,6 +1,6 @@
 #!/bin/bash
 # lockfix 再収集の完了番人: 全 collector 終了まで5分ごとに進捗記録、終了で exit
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 LOG=$ROOT/logs/_monitor_lockfix_r3_2026-08-19.log
 while true; do
   n=$(pgrep -c -f 'collect_lean_1t')

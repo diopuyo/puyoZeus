@@ -1,0 +1,63 @@
+{
+  "bundle": "<work>\\wt_live_par\\logs\\live_parallel\\soak_off\\PuyoLive",
+  "puyo_core_wheel": "puyo_core-0.1.0-cp312-cp312-win_amd64.whl",
+  "onnx_wheels": [
+    "flatbuffers-25.12.19-py2.py3-none-any.whl",
+    "onnxruntime-1.30.0-cp312-cp312-win_amd64.whl",
+    "packaging-26.3-py3-none-any.whl",
+    "protobuf-7.36.2-cp310-abi3-win_amd64.whl"
+  ],
+  "vc_runtime": {
+    "copied": [],
+    "kept": [
+      "vcruntime140.dll",
+      "vcruntime140_1.dll",
+      "msvcp140.dll",
+      "msvcp140_1.dll",
+      "msvcp140_2.dll",
+      "concrt140.dll"
+    ],
+    "missing": []
+  },
+  "files_in_manifest": 889,
+  "license_files": 48,
+  "packages": 31,
+  "bundle_bytes": 849082733,
+  "build_seconds": 11.6,
+  "manifest_checked": 889,
+  "baseline_commit": "dc24ee44",
+  "source": "<work>\\wt_live_par\\logs\\live_parallel\\baseline_m",
+  "settings": {
+    "source": "dshow",
+    "device_name": "OBS Virtual Camera",
+    "device_index": 2,
+    "port": 18843,
+    "output_dir": "<work>\\wt_live_par\\logs\\live_parallel\\camera_off\\output",
+    "dshow_color_correction": "601to709",
+    "b3_judgment": true,
+    "b3_model": "<work>\\wt_live_par\\logs\\live_parallel\\soak_off\\PuyoLive\\app\\models\\b3\\model.joblib",
+    "b3_timing_table": "<work>\\wt_live_par\\logs\\live_parallel\\soak_off\\PuyoLive\\app\\models\\b3\\timing_table.json",
+    "fast_first_judgment": true,
+    "recovery_boundary_coalescing": false,
+    "evaluation_freshness_gate": true,
+    "terminal_display_hold": true,
+    "live_disable_placement_reconcile": true,
+    "b3_score_matmul": true,
+    "b3_warning_parallel": true,
+    "b3_warning_workers": 4,
+    "b3_ledger_mode": true,
+    "b3_ledger_landing": true,
+    "b3_skip_icon_reading": true,
+    "b3_share_score_read": true,
+    "live_async_screen_verify": true,
+    "live_stage_timing": true,
+    "terminal_hold_input_recovery": true,
+    "live_latest_evaluation": false,
+    "live_reference_times_only": true,
+    "live_border_grace": false,
+    "live_near_future_cache": true,
+    "live_exact_connectivity": true,
+    "live_exact_native": true,
+    "live_public_match_number": true
+  }
+}

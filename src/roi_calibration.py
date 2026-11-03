@@ -18,6 +18,7 @@
         ...
 """
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 from dataclasses import dataclass
 
@@ -135,7 +136,7 @@ def detect_board_rois(
             frame, (expected_width, expected_height),
             interpolation=cv2.INTER_AREA,
         )
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(full_image(frame), cv2.COLOR_BGR2GRAY)
     lines = _detect_lines(gray)
     verticals, horizontals = _split_lines(lines if lines is not None else None)
 

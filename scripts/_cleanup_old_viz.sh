@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 古い FIX_A〜FIX_N viz + 360p unknown + 古い compare image を削除
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 echo === before ===
 du -sh data/test_unknown data/evaluation_videos 2>&1

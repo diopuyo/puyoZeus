@@ -1,0 +1,32 @@
+{
+  "config_sha256": "ab86e2236b8b90e002a71e61d757498850d8d91f09ba9ac2f92cd6c363f876b7",
+  "fold_source_sha256": "0482baafb4214018e0307a05cd62f8d3598481fbf4e7250da2d37cf97a1f1662",
+  "folds": {
+    "0": {
+      "games": 607,
+      "groups": 12
+    },
+    "1": {
+      "games": 656,
+      "groups": 13
+    },
+    "2": {
+      "games": 634,
+      "groups": 12
+    },
+    "3": {
+      "games": 631,
+      "groups": 12
+    },
+    "4": {
+      "games": 639,
+      "groups": 10
+    }
+  },
+  "folds_sha256": "3afdf94c929ba2c39e3a4077e64a1a9ad3b2ee456ed39d08c14b071cf89f1bdf",
+  "games": 3167,
+  "groups": 59,
+  "manifest_sha256": "7f1b4e7c8744d45b27859455b83af65d7abce4ce78511c6fdff7322ea9e78af7",
+  "salt": "B3-outer-v1|",
+  "videos": 60
+}

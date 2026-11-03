@@ -2,6 +2,8 @@
 *.py text eol=lf
 *.sh text eol=lf
 tests/g3_isolated_files.txt text eol=lf
+# 配布既定の比較元は24w2原JSONのSHAを改行も含めて検証する。
+tests/fixtures/release_obs_24w2.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 # 凍結検証資産は記録されたblobのバイト列をそのまま保持する。
 data/verify/** -text
 .runtime_snapshots/** -text
@@ -22,3 +24,5 @@ src/next_detector.py text eol=crlf
 src/state_detectors.py text eol=crlf
 # Windows PowerShell 5.1向け通知スクリプトのBOMと原バイト列を保つ。
 scripts/g3_notify_event.ps1 -text
+# Bへ渡す統合パッチはチェックアウト後も適用可能なLFを保持する。
+docs/patches/rt_live_memory_dv2d_20261002.patch text eol=lf

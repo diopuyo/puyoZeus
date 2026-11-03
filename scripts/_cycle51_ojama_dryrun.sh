@@ -2,7 +2,7 @@
 # cycle 51: ojama 採取 dry-run (= 改修 1 OjamaShapeGate 効果検証)
 # v89m7 (= ojama 出現の多い動画) で --include-ojama 付き seed 抽出
 # 朝 OK 判定なら cycle 51 として本格採取に移行
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health cycle51_ojama_dryrun

@@ -1,4 +1,12 @@
 """patch_fp 案 d 朝報告 markdown 生成スクリプト"""
+
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
 import json
 from pathlib import Path
 
@@ -25,7 +33,7 @@ for v in per_video:
 improved.sort(key=lambda x: x[1])
 regressed.sort(key=lambda x: -x[1])
 
-VIZ_BASE = "C:\\Users\\ryouj\\.gemini\\antigravity\\scratch\\puyo_analyzer\\data\\verify"
+VIZ_BASE = _public_dev_text('<repo>\\data\\verify')
 
 lines: list[str] = []
 lines.append("# patch_fp 朝報告 (案 d 永続実装結果)")

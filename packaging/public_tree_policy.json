@@ -1,0 +1,2912 @@
+{
+  "exclude_parts": [
+    "logs",
+    "review_frames",
+    "local_frames"
+  ],
+  "artifact_prefixes": [
+    ".runtime_snapshots/",
+    "data/verify/",
+    "data/per_video_hsv_ranges/",
+    "docs/verification/"
+  ],
+  "retain_artifacts": {
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/scripts/collect_boards_lean.py": {
+      "reason": "固定SHAを照合して原処理のAST/コードを読む試験入力",
+      "references": [
+        "scripts/initial_placement_accounting_shadow_v1.py"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/match_end_detector.py": {
+      "reason": "固定SHAを照合して原処理のAST/コードを読む試験入力",
+      "references": [
+        "scripts/match_start_epoch_shadow_v1.py"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/recognition_pipeline.py": {
+      "reason": "固定SHAを照合して原処理のAST/コードを読む試験入力",
+      "references": [
+        "scripts/initial_placement_accounting_shadow_v1.py"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v12.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v20.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v21.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v29.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v30.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v31.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v33.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v34.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v35.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v36.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v37.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v38.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v40.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v43.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v48.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v50.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v51.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v52.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v54.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v57.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v61.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v64.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v65.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v66.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v70.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v73.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v74.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v75.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v77.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v78.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v79.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v81.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v84.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v86.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v89.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v91.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v92.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v93.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v95.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v97.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/_merged_default.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt",
+        "scripts/measure_chain_corrected_cells.py",
+        "scripts/measure_stable_cell_acc.py",
+        "scripts/visualize_recognition.py",
+        "tests/test_measure_stable_cell_acc.py"
+      ]
+    },
+    "data/per_video_hsv_ranges/v12.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v20.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v21.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v29.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v30.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt",
+        "tests/test_visualize_recognition_inject.py"
+      ]
+    },
+    "data/per_video_hsv_ranges/v31.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v33.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v34.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v35.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v36.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v37.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v38.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v40.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v43.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v48.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v50.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v51.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v52.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v54.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v57.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v61.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v64.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v65.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v66.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v70.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v73.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v74.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v75.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v77.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v78.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v79.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v81.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v84.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v86.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v89.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v91.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v92.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v93.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v95.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/per_video_hsv_ranges/v97.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt"
+      ]
+    },
+    "data/verify/g2_arrival_ack_candidate_2026-09-12_v1/arrival_mode.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_second_terminal_arrival_2026-09-14_v3/session_selection.py"
+      ]
+    },
+    "data/verify/g2_atomic_journal_capture_2026-09-09_v1/observer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_atomic_journal_runtime_2026-09-09_v1/live_cli.py",
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/journal_witness.py",
+        "data/verify/g2_normal_completion_transaction_2026-09-09_v1/live_provider.py",
+        "data/verify/g2_normal_m1_candidate_2026-09-13_v1/session_fixture.py",
+        "data/verify/g2_palette_finish_proof_2026-09-09_v1/adapter.py",
+        "tests/test_g3_palette_reset_hold.py",
+        "tests/test_g3_video39_early_clock.py"
+      ]
+    },
+    "data/verify/g2_atomic_journal_runtime_2026-09-09_v1/live_cli.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_fifo_palette_composition_2026-09-09_v1/adapter.py",
+        "data/verify/g2_palette_veto_runtime_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_basis_cascade_candidate_2026-09-11_v1/mode.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/test_second_physical.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/check_saved_inputs.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/journal_context.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_basis.py",
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/journal_witness.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/live_binding.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/live_binding_v2.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/live_binding_v3.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/live_session.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/m1_connection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/probe_observer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/probe_targeted.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/reflection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/reflection_v3.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/runtime_loader.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/second_basis.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/second_observation.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/second_physical.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/second_retirement.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/second_tracking.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/sidecar.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_initial_reflection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_journal_context.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_journal_witness.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_live_binding.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_live_binding_v2.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_live_binding_v3.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_live_session_hook.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_m1_connection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_reflection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_runtime_loader.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_second_basis.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_second_observation.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_second_physical.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_second_physical_lifetime.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_second_retirement.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_second_tracking.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_sidecar.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_trained_connection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_trained_sidecar.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/test_v44_counterexamples.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/trained_connection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/trained_sidecar.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_live_publication_2026-09-11_v1/verify_saved_context.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_belief_publication_runtime_2026-09-11_v1/run_v6.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_selector.py"
+      ]
+    },
+    "data/verify/g2_bounded_publication_runtime_2026-09-09_v1/analyze_metadata.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_palette_finish_proof_2026-09-09_v1/adapter.py"
+      ]
+    },
+    "data/verify/g2_bounded_publication_runtime_2026-09-09_v1/live_cli.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_t2_bounded_runtime_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_bounded_publication_runtime_2026-09-09_v1/resource_guard.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_history_publication_probe_runtime_2026-09-10_v13/common.py",
+        "scripts/g3_first_pass.py"
+      ]
+    },
+    "data/verify/g2_collector_continuous_guard_2026-09-11_v1/continuous_guard.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/probe_targeted.py"
+      ]
+    },
+    "data/verify/g2_collector_metadata_bounded_2026-09-09_v1/CONTRACT.md": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_collector_metadata_bounded_2026-09-09_v1/bounded.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_bounded_publication_runtime_2026-09-09_v1/live_cli.py",
+        "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_collector_continuous.py",
+        "scripts/g3_metadata_scope.py",
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_collector_metadata_bounded_2026-09-09_v1/run_cpu.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_collector_metadata_bounded_2026-09-09_v1/test_bounded.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_collector_metadata_capture_2026-09-09_v1/observer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_history_prediction_diagnosis_2026-09-13_v1/observer_window_candidate.py",
+        "data/verify/g2_palette_finish_proof_2026-09-09_v1/adapter.py",
+        "scripts/g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_conditional_finalizer_fusion_2026-09-10_v1/fusion.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_postcommit_finish.py",
+        "tests/test_g3_postcommit_finish.py"
+      ]
+    },
+    "data/verify/g2_conditional_finalizer_fusion_2026-09-10_v1/live_connection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_postcommit_finish.py",
+        "tests/test_g3_postcommit_finish.py"
+      ]
+    },
+    "data/verify/g2_conditional_finalizer_world_2026-09-10_v1/world_api.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_postcommit_finish.py"
+      ]
+    },
+    "data/verify/g2_current_scope_capture_2026-09-09_v1/observer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_provisional_context_capture_2026-09-09_v1/observer.py"
+      ]
+    },
+    "data/verify/g2_directional_next_provider_2026-09-09_v2/dependencies.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_next_features_fast.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/collector_connection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/collector_connection_v2.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/collector_continuous.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/desync_signal.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/entry_boundary.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/entry_boundary_v2.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/entry_boundary_v3.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/entry_continuation.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/entry_continuation_v2.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/extension.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/metadata_tail.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/observer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/saved_signal.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_clock.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_collector_clone.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_collector_continuous.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_entry_boundary.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_entry_exception.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_entry_v2.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_extension.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_observer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_signal.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_metadata_scope.py"
+      ]
+    },
+    "data/verify/g2_empty_tail_finalizer_2026-09-10_v1/empty_world.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_postcommit_finish.py"
+      ]
+    },
+    "data/verify/g2_event_completion_basis_2026-09-09_v1/contact_images.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_next_motion_observables_2026-09-09_v1/observables.py"
+      ]
+    },
+    "data/verify/g2_event_completion_basis_2026-09-09_v1/event_images.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_next_motion_observables_2026-09-09_v1/observables.py"
+      ]
+    },
+    "data/verify/g2_event_completion_basis_2026-09-09_v1/exact_contact_images.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_next_motion_observables_2026-09-09_v1/observables.py"
+      ]
+    },
+    "data/verify/g2_event_completion_basis_2026-09-09_v1/motion_boundary_images.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_next_motion_observables_2026-09-09_v1/observables.py"
+      ]
+    },
+    "data/verify/g2_event_completion_basis_2026-09-09_v1/same_pair_end_images.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_next_motion_observables_2026-09-09_v1/observables.py"
+      ]
+    },
+    "data/verify/g2_event_completion_basis_2026-09-09_v1/same_pair_journal.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_next_motion_observables_2026-09-09_v1/observables.py"
+      ]
+    },
+    "data/verify/g2_event_completion_basis_2026-09-09_v1/same_pair_lookup.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_next_motion_observables_2026-09-09_v1/observables.py"
+      ]
+    },
+    "data/verify/g2_fifo_palette_composition_2026-09-09_v1/adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_history_prediction_diagnosis_2026-09-13_v1/observer_window_candidate.py"
+      ]
+    },
+    "data/verify/g2_finisher_receipt_repair_2026-09-08_v1/adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_finisher_torch_version_2026-09-08_v1/adapter.py",
+        "data/verify/g2_publication_downstream_finisher_2026-09-09_v1/adapter.py"
+      ]
+    },
+    "data/verify/g2_finisher_torch_version_2026-09-08_v1/adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_publication_downstream_finisher_2026-09-09_v1/adapter.py"
+      ]
+    },
+    "data/verify/g2_firing_transform_independent_2026-09-10_v1/test_transform.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_current_exit_binding.py"
+      ]
+    },
+    "data/verify/g2_floating_publication_runtime_2026-09-09_v1/live_cli.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_bounded_publication_runtime_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_floating_single_runtime_2026-09-09_v1/live_cli.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_floating_publication_runtime_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_full_observation_scope_2026-09-09_v1/live_cli.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_history_prediction_diagnosis_2026-09-13_v1/observer_window_candidate.py"
+      ]
+    },
+    "data/verify/g2_full_observation_scope_2026-09-09_v1/scope.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_history_prediction_diagnosis_2026-09-13_v1/observer_window_candidate.py"
+      ]
+    },
+    "data/verify/g2_generation_publication_split_2026-09-09_v1/current_connection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_provisional_context_capture_2026-09-09_v1/observer.py"
+      ]
+    },
+    "data/verify/g2_hidden_basis_initialization_2026-09-11_v1/hidden_basis_gate.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/second_basis.py",
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/test_second_basis.py",
+        "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_create.py",
+        "data/verify/g2_normal_m1_candidate_2026-09-13_v1/second_basis.py"
+      ]
+    },
+    "data/verify/g2_hidden_current_candidate_2026-09-10_v1/conditional_current.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_prediction_funnel.py",
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_probability_capture_2026-09-08_v1/observer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_full_observation_scope_2026-09-09_v1/scope.py",
+        "data/verify/g2_provisional_context_capture_2026-09-09_v1/observer.py"
+      ]
+    },
+    "data/verify/g2_hidden_repeat_integration_2026-09-10_v1/hidden_bundle.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_extension.py"
+      ]
+    },
+    "data/verify/g2_hidden_tail_candidate_2026-09-10_v1/prefix_provenance.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_tail_candidate_2026-09-10_v1/run_tail.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_tail_candidate_2026-09-10_v1/tail_connection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_tail_candidate_2026-09-10_v1/tail_history.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_tail_candidate_2026-09-10_v1/tail_witness.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_tail_candidate_2026-09-10_v1/test_tail_votes.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_two_hand_candidate_2026-09-10_v1/path_support.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_two_hand_candidate_2026-09-10_v1/prefix_connection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_two_hand_candidate_2026-09-10_v1/prefix_history.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_two_hand_candidate_2026-09-10_v1/prefix_inputs.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_two_hand_candidate_2026-09-10_v1/prefix_witness.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_two_hand_candidate_2026-09-10_v1/preflight_initial.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_two_hand_candidate_2026-09-10_v1/run_prefix.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_empty_tail_desync_trigger_2026-09-11_v1/test_collector_clone.py",
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_two_hand_candidate_2026-09-10_v1/test_path_support.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_two_hand_candidate_2026-09-10_v1/test_prefix_witness.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_hidden_two_hand_candidate_2026-09-10_v1/test_single_wait.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_history_baseline_adoption_2026-09-10_v4/witness.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_prediction_funnel.py",
+        "tests/test_g3_prediction_funnel.py"
+      ]
+    },
+    "data/verify/g2_history_prediction_diagnosis_2026-09-13_v1/observer_window_candidate.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_observer_scope.py"
+      ]
+    },
+    "data/verify/g2_history_publication_consumer_2026-09-09_v2/adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_postcommit_entry.py",
+        "tests/test_g3_postcommit_rows.py"
+      ]
+    },
+    "data/verify/g2_history_publication_probe_runtime_2026-09-10_v11/goals.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_postcommit_finish.py",
+        "tests/test_g3_postcommit_finish.py"
+      ]
+    },
+    "data/verify/g2_history_publication_probe_runtime_2026-09-10_v13/closure.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_closure_diagnostic.py"
+      ]
+    },
+    "data/verify/g2_history_publication_probe_runtime_2026-09-10_v13/common.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py"
+      ]
+    },
+    "data/verify/g2_history_publication_probe_runtime_2026-09-10_v13/session.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_postcommit_finish.py"
+      ]
+    },
+    "data/verify/g2_hsv_correction_witness_2026-09-08_v1/observer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_atomic_journal_capture_2026-09-09_v1/observer.py",
+        "data/verify/g2_full_observation_scope_2026-09-09_v1/scope.py",
+        "data/verify/g2_hidden_probability_capture_2026-09-08_v1/observer.py"
+      ]
+    },
+    "data/verify/g2_joint_collector_runtime_2026-09-12_v1/verify_joint_saved.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_create.py"
+      ]
+    },
+    "data/verify/g2_legacy_m1_compatibility_2026-09-14_v1/compatibility.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_legacy_m1_window.py"
+      ]
+    },
+    "data/verify/g2_live_probability_context_2026-09-12_v1/probability_boundary.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_postcommit_finish.py",
+        "tests/test_g3_postcommit_rows.py"
+      ]
+    },
+    "data/verify/g2_live_probability_context_2026-09-12_v1/start_qualification.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_start_qualification_effect.py"
+      ]
+    },
+    "data/verify/g2_live_probability_context_2026-09-12_v1/whole_collector_capture.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video39_candidate_prepare.py"
+      ]
+    },
+    "data/verify/g2_live_probability_context_2026-09-12_v1/whole_session_driver.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_full_lifecycle.py"
+      ]
+    },
+    "data/verify/g2_m1_completion_candidate_2026-09-12_v1/evaluation_flags.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_a40_reset_entry.py"
+      ]
+    },
+    "data/verify/g2_m1_completion_candidate_2026-09-12_v1/runtime_patch.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_m1_loader_lifetime_2026-09-13_v1/late_loader.py"
+      ]
+    },
+    "data/verify/g2_m1_completion_candidate_2026-09-12_v1/schedule_saved.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_create.py"
+      ]
+    },
+    "data/verify/g2_m1_completion_candidate_2026-09-12_v1/second_mode_binding.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_second_pending_prefix_2026-09-14_v3/selection.py",
+        "data/verify/g2_second_terminal_arrival_2026-09-14_v3/session_selection.py"
+      ]
+    },
+    "data/verify/g2_m1_completion_candidate_2026-09-12_v1/second_pending_replay.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_second_prefix_runtime_2026-09-14_v40/postrun.py"
+      ]
+    },
+    "data/verify/g2_m1_loader_lifetime_2026-09-13_v1/late_loader.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_a40_reset_entry.py"
+      ]
+    },
+    "data/verify/g2_m1_paced_runtime_2026-09-13_v12/supervise.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_first_pass.py"
+      ]
+    },
+    "data/verify/g2_m1_second_runtime_2026-09-13_v21/review_m1.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_second_prefix_runtime_2026-09-14_v40/review_m1.py"
+      ]
+    },
+    "data/verify/g2_model_process_bridge_2026-09-11_v1/pure_contract.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_capture.py",
+        "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_full_lifecycle.py",
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_next_motion_observables_2026-09-09_v1/observables.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_directional_next_provider_2026-09-09_v2/dependencies.py",
+        "data/verify/g2_history_publication_probe_runtime_2026-09-10_v13/common.py",
+        "scripts/g3_next_features_fast.py",
+        "scripts/g3_video39_candidate_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_completion_transaction_2026-09-09_v1/live_provider.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video39_candidate_scope.py",
+        "tests/test_g3_video39_candidate_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_create.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_driver.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_eligibility.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_finalizer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_loader.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_owner.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_saved.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_selector.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_session.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/normal_settings.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/second_basis.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/second_basis_boundary.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/second_observation.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/second_physical.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/second_retirement.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/second_tracking.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/session_fixture.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_basis.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_boundary.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_capture.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_driver.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_full_lifecycle.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_graph.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_owner.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_reflection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_selector.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_session.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_normal_m1_candidate_2026-09-13_v1/test_normal_tracking.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_normal_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_owned_loader_connection_2026-09-12_v1/owned_adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_g3_observer_scope.py"
+      ]
+    },
+    "data/verify/g2_palette_evidence_veto_2026-09-09_v1/adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_palette_finish_proof_2026-09-09_v1/adapter.py",
+        "data/verify/g2_palette_veto_runtime_2026-09-09_v1/live_cli.py",
+        "tests/test_g3_palette_reset_hold.py"
+      ]
+    },
+    "data/verify/g2_palette_finish_proof_2026-09-09_v1/adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_fifo_palette_composition_2026-09-09_v1/adapter.py",
+        "data/verify/g2_palette_finish_runtime_2026-09-09_v1/live_cli.py",
+        "scripts/g3_video39_candidate_scope.py",
+        "tests/test_g3_video39_candidate_scope.py"
+      ]
+    },
+    "data/verify/g2_palette_finish_runtime_2026-09-09_v1/live_cli.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_fifo_palette_composition_2026-09-09_v1/adapter.py"
+      ]
+    },
+    "data/verify/g2_palette_veto_runtime_2026-09-09_v1/live_cli.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_fifo_palette_composition_2026-09-09_v1/adapter.py",
+        "data/verify/g2_palette_finish_runtime_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_pending_fresh_current_release_2026-09-09_v1/adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_bounded_publication_runtime_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_private_suffix_fusion_2026-09-10_v1/samecall.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_private_suffix_live_adapter_2026-09-10_v1/live_finalizer.py"
+      ]
+    },
+    "data/verify/g2_private_suffix_live_adapter_2026-09-10_v1/live_finalizer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_postcommit_finish.py"
+      ]
+    },
+    "data/verify/g2_private_suffix_world_2026-09-10_v1/world.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_empty_tail_finalizer_2026-09-10_v1/empty_world.py",
+        "tests/test_g3_postcommit_finish.py"
+      ]
+    },
+    "data/verify/g2_provisional_context_capture_2026-09-09_v1/binding.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/check_saved_inputs.py",
+        "data/verify/g2_model_process_bridge_2026-09-11_v1/pure_contract.py",
+        "data/verify/g2_pending_fresh_current_release_2026-09-09_v1/adapter.py",
+        "data/verify/g2_publication_consumer_runtime_2026-09-09_v1/runtime_adapter.py"
+      ]
+    },
+    "data/verify/g2_provisional_context_capture_2026-09-09_v1/live_cli.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_full_observation_scope_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_provisional_context_capture_2026-09-09_v1/observer.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/probe_observer.py",
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/probe_targeted.py",
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/verify_saved_context.py",
+        "data/verify/g2_history_prediction_diagnosis_2026-09-13_v1/observer_window_candidate.py",
+        "scripts/g3_context_entry.py"
+      ]
+    },
+    "data/verify/g2_provisional_context_capture_2026-09-09_v1/saved_context.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_publication_consumer_runtime_2026-09-09_v1/runtime_adapter.py"
+      ]
+    },
+    "data/verify/g2_publication_collector_finish_2026-09-09_v1/finish.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_floating_publication_runtime_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_publication_collector_finish_2026-09-09_v1/proof.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_palette_finish_proof_2026-09-09_v1/adapter.py",
+        "data/verify/g2_publication_downstream_finisher_2026-09-09_v1/adapter.py"
+      ]
+    },
+    "data/verify/g2_publication_consumer_runtime_2026-09-09_v1/runtime_adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_floating_publication_runtime_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_publication_downstream_finisher_2026-09-09_v1/adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_bounded_publication_runtime_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_repeated_firing_runtime_candidate_2026-09-10_v1/constructor_v1/hook.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_reset_entry.py"
+      ]
+    },
+    "data/verify/g2_reset_inflight_quarantine_2026-09-11_v1/inflight_loader.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/test_runtime_loader.py"
+      ]
+    },
+    "data/verify/g2_reset_settled_basis_gate_2026-09-11_v1/basis_registry_connection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_belief_live_publication_2026-09-11_v1/test_runtime_loader.py"
+      ]
+    },
+    "data/verify/g2_second_origin_postrun_2026-09-13_v1/settled_notice.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_second_terminal_arrival_2026-09-14_v3/session_selection.py"
+      ]
+    },
+    "data/verify/g2_second_pending_prefix_2026-09-14_v3/selection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_second_terminal_arrival_2026-09-14_v3/session_selection.py"
+      ]
+    },
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/early_probability_capture.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py",
+        "tests/test_g3_reset_scope.py"
+      ]
+    },
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/early_runtime.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py"
+      ]
+    },
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/freeze_target.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py"
+      ]
+    },
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/handoff_gate.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py"
+      ]
+    },
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/owned_adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py"
+      ]
+    },
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/postrun.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py"
+      ]
+    },
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/review_m1.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py"
+      ]
+    },
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/review_resources.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py"
+      ]
+    },
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/run_whole_target.sh": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py"
+      ]
+    },
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/target_entry.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_video38_entry.py"
+      ]
+    },
+    "data/verify/g2_second_terminal_arrival_2026-09-14_v3/session_selection.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_second_prefix_runtime_2026-09-14_v40/owned_adapter.py"
+      ]
+    },
+    "data/verify/g2_split_diagnostic_finisher_2026-09-08_v1/finisher.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_finisher_receipt_repair_2026-09-08_v1/adapter.py",
+        "data/verify/g2_publication_downstream_finisher_2026-09-09_v1/adapter.py"
+      ]
+    },
+    "data/verify/g2_split_runtime_evidence_adapter_2026-09-08_v1/runner.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_publication_collector_finish_2026-09-09_v1/finish.py",
+        "data/verify/g2_publication_downstream_finisher_2026-09-09_v1/adapter.py",
+        "data/verify/g2_split_diagnostic_finisher_2026-09-08_v1/finisher.py"
+      ]
+    },
+    "data/verify/g2_start_client_session_contract_2026-09-12_v1/start_qualification.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_start_qualification_effect.py",
+        "tests/test_g3_start_qualification_effect.py"
+      ]
+    },
+    "data/verify/g2_t2_bounded_runtime_2026-09-09_v1/live_cli.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_atomic_journal_runtime_2026-09-09_v1/live_cli.py",
+        "data/verify/g2_fifo_palette_composition_2026-09-09_v1/adapter.py"
+      ]
+    },
+    "data/verify/g2_t2_fresh_landing_guard_2026-09-09_v1/adapter.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_t2_bounded_runtime_2026-09-09_v1/live_cli.py"
+      ]
+    },
+    "data/verify/g2_trained_context_score_2026-09-09_v1/loader.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "scripts/g3_source_models.py"
+      ]
+    },
+    "data/verify/g2_ui_hsv_runtime_2026-09-12_v9/probe_review_m1_saved.py": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "data/verify/g2_m1_second_runtime_2026-09-13_v21/review_m1.py"
+      ]
+    },
+    "data/verify/match_boundaries_v5/fcXG83vInDY_first_0_900_20260925_v1/matches.tsv": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt",
+        "scripts/collect_e34b.py",
+        "src/match_range_gate.py",
+        "tests/test_match_range_gate.py"
+      ]
+    },
+    "data/verify/match_boundaries_v5/mia8KCjr52g_first_0_900_20260925_v1/matches.tsv": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt",
+        "scripts/collect_e34b.py",
+        "src/match_range_gate.py",
+        "tests/test_match_range_gate.py"
+      ]
+    },
+    "data/verify/match_boundaries_v5/q_7gc4TgFig_first_0_900_20260925_v1/matches.tsv": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt",
+        "scripts/collect_e34b.py",
+        "src/match_range_gate.py",
+        "tests/test_match_range_gate.py"
+      ]
+    },
+    "data/verify/match_boundaries_v5/video_zenchi_c0BQoMJwwQU/matches.tsv": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/bundle_assets.txt",
+        "scripts/collect_e34b.py",
+        "src/match_range_gate.py",
+        "tests/test_match_range_gate.py"
+      ]
+    },
+    "data/verify/seed_quality_cycle50_final.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "tests/test_seed_quality_pure.py"
+      ]
+    },
+    "docs/verification/exch_review_v310/policy_locked.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/build_live_v49f.py",
+        "packaging/diagnose_live_v49f_numeric.py",
+        "scripts/exchange_v310_manifest.py",
+        "scripts/prefire_v44_data.py",
+        "scripts/prefire_v45_data.py",
+        "scripts/prefire_v46_data.py"
+      ]
+    },
+    "docs/verification/live_obs_20261020d/delivery_parity_receipts.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/finish_live_obs_20261020f.py"
+      ]
+    },
+    "docs/verification/prefire_v44/model.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/build_live_v49f.py",
+        "packaging/diagnose_live_v49f_advance.py",
+        "packaging/diagnose_live_v49f_numeric.py",
+        "scripts/prefire_v44_data.py",
+        "scripts/prefire_v46_data.py"
+      ]
+    },
+    "docs/verification/prefire_v48/model.json": {
+      "reason": "試験・組立・実行のコード/資産一覧に読込先または依存として記載",
+      "references": [
+        "packaging/build_live_v49f.py",
+        "packaging/verify_live_v49f_publication.py",
+        "scripts/prefire_v48_inputs.py"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/__init__.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/all_clear_detector.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/background_fingerprint.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/board.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/board_motion.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/board_quality.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/board_state_machine.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/calibration.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/cell_augment.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/chain.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/chain_detector.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/chain_id_resolver.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/drift_detector.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/effect_glow_detector.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/event_accounting_observer_v1.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/event_physical_observer_v1.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/exchange_episode_tracker.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/exchange_ledger.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/fps_normalize.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/hidden_row_inferrer.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/image_reader.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/inference_board.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/match_state.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/match_winner.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/next_detector.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/next_slide_detector.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/ojama_accounting.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/ojama_visual_detector.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/online_hsv_calibrator.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/patch_classifier.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/piece_persistence_guard.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/placement_inferrer.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/probabilistic_board.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/production_config.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/puyo_erasure_monitor.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/score_ocr.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/score_region_calibration.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/score_zero.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/scoring.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/__init__.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/cell_color_fine_tuner.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/cell_color_validator.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/chain_validator.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/cross_validator.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/label_store.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/next_validator.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/online_fine_tuner.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/physical_consistency.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/pseudo_label.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/score_validator.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/self_supervised/topo_filter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/stable_transition_monitor.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/state_detectors.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/telop_detector.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/ui_mask.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    ".runtime_snapshots/event_first30_observed_context_v5_2026-08-30/src/win_panel.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_arrival_ack_runtime_2026-09-12_v10/owned_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_async_projected_evaluation_2026-09-13_v1/journal_pair_reader.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_async_projected_evaluation_2026-09-13_v1/test_journal_pair_reader.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_basis_observation_runtime_2026-09-12_v5/owned_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_collector_metadata_capture_2026-09-09_v1/test_observer.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_after_settlement_next_2026-09-10_v1/bundle.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_constructor_attach_2026-09-10_v1/attach_probe.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_constructor_attach_2026-09-10_v1/run_cpu.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_firing_admission_2026-09-10_v1/run_cpu.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_firing_commit_2026-09-10_v1/run_commit.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_firing_origin_connection_2026-09-10_v1/run_origin.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_firing_settlement_2026-09-10_v1/run_full.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_full_noninterference_2026-09-10_v1/run_repeated.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_live_adapter_2026-09-10_v1/adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_live_adapter_2026-09-10_v2/adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_live_adapter_2026-09-10_v3/adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_shared_runtime_candidate_2026-09-10_v1/candidate.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_conditional_shared_runtime_candidate_2026-09-10_v1/run_shared.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_empty_tail_live_adapter_2026-09-10_v1/adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_empty_tail_reset_live_adapter_2026-09-11_v1/adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_empty_tail_reset_live_adapter_2026-09-11_v1/adapter_v3.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_empty_tail_reset_live_adapter_2026-09-11_v1/adapter_v4.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_empty_tail_reset_live_adapter_2026-09-11_v1/adapter_v5.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_empty_tail_reset_live_adapter_2026-09-11_v1/proof_status.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_exit_next_runtime_2026-09-12_v7/owned_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_firing_hand_connection_2026-09-10_v1/firing_ticket.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_firing_hand_connection_2026-09-10_v1/firing_ticket_v2.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_firing_hand_connection_2026-09-10_v1/firing_ticket_v3.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_firing_hand_connection_2026-09-10_v1/firing_ticket_v4.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_firing_hand_connection_2026-09-10_v1/front_probe.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_firing_policy_2026-09-10_v1/firing_fixed.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_hidden_continuation_candidate_2026-09-10_v1/run_continuation.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_hidden_current_candidate_2026-09-10_v1/run_current.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_hidden_current_lifetime_candidate_2026-09-10_v1/run_lifetime.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_hidden_firing_entry_diagnosis_2026-09-10_v1/fire_inputs.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_hidden_firing_entry_diagnosis_2026-09-10_v1/run_entry.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_hidden_repeat_integration_2026-09-10_v1/run_hidden.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_hidden_retained_integer_candidate_2026-09-10_v1/run_retained.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_history_publication_consumer_2026-09-09_v2/test_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_live_probability_context_2026-09-12_v1/live_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_live_probability_context_2026-09-12_v1/loader.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_live_probability_context_2026-09-12_v1/whole_dependencies.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_live_probability_context_2026-09-12_v1/whole_live_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_m1_completion_runtime_2026-09-12_v11/driver_status.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_m1_completion_runtime_2026-09-12_v11/owned_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_m1_completion_runtime_2026-09-12_v11/thermal_child.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_m1_prefix_runtime_2026-09-13_v20/owned_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_m1_prepare_owner_2026-09-13_v1/owner_binding.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_m1_second_runtime_2026-09-13_v21/owned_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_m1_second_runtime_2026-09-13_v21/target_entry.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_prefix_lane_integration_2026-09-13_v1/prefix_selection.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_private_suffix_live_adapter_2026-09-10_v1/adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_probabilistic_scope_candidate_2026-09-11_v1/belief.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_probabilistic_scope_candidate_2026-09-11_v1/frozen_physics.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_probabilistic_scope_candidate_2026-09-11_v1/joint_evaluation.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_probabilistic_scope_candidate_2026-09-11_v1/registry.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_probabilistic_scope_candidate_2026-09-11_v1/serialization.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_rolling_live_adapter_2026-09-10_v1/adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_session_contract_runtime_2026-09-12_v4/owned_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_settled_basis_actual_mismatch_2026-09-12_v1/basis_local_observation.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_settled_basis_actual_mismatch_2026-09-12_v1/basis_observation_connection.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_tracking_observation_runtime_2026-09-12_v8/owned_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    },
+    "data/verify/g2_ui_hsv_runtime_2026-09-12_v9/owned_adapter.py": {
+      "reason": "PC1 11/3指示。基点試験のopen監視で読み込みを確認したため保持",
+      "references": [
+        "baseline3_linux4_opened.json（公開準備ジョブの記録）"
+      ]
+    }
+  },
+  "preserve_bytes": {
+    "data/verify/g2_second_prefix_runtime_2026-09-14_v40/run_whole_target.sh": {
+      "sha256": "84826a1f6a694c2fa46343c354083958a1afe682481f9c136be190d862f2ffcf",
+      "reason": "保持指定の検証入力。固定SHA・比較条件を変えないため元のbytesを保持"
+    },
+    "docs/verification/live_obs_20261020d/delivery_parity_receipts.json": {
+      "sha256": "224c35ef281cf781bcac395a30efe7305728593c139290bbcaa10803c1420b4d",
+      "reason": "保持指定の検証入力。固定SHA・比較条件を変えないため元のbytesを保持"
+    },
+    "packaging/release_privacy.py": {
+      "sha256": "ef7ca74738d5d64456c6b5a3947c83ac1bd142741a57b69e4210a6f591e4cd9c",
+      "reason": "旧作業フォルダー名を検出・除去する既存の正規表現。削除すると配布の匿名化が変わる"
+    },
+    "scripts/smoke_live_parallel.py": {
+      "sha256": "b145d57462c4ac4e1146b00258aa89ce9d22d4ded46547c227a0cfaee7d4ffee",
+      "reason": "過去の検証用ソースの完全一致検索キー。個別の再試験なしにキーを変えない"
+    },
+    "tests/phase_j/fixtures/x_prefire_public_scenes.json": {
+      "sha256": "69a919399c146cb47503ed3ac53247885de236a04b104ffb2065e7d260eb0c37",
+      "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
+    },
+    "tests/phase_j/test_live_verify_soft_hold.py": {
+      "sha256": "84579e8f3e61e5a54960d3cc803073029dd7c0ecec42c785daa445d1fb237d0c",
+      "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
+    },
+    "tests/phase_j/test_live_x_prefire.py": {
+      "sha256": "6eff7255ef3067757a62fe5b27626f10ed765786d0d989526fcc509af13f29e3",
+      "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
+    },
+    "tests/test_b3_c2_trial.py": {
+      "sha256": "2219068195086e758eec593778272941747a4a3d67f6403694b2147204dc432f",
+      "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
+    },
+    "tests/test_b3_ensemble.py": {
+      "sha256": "08ab2681dabbe6738c1f0a35b79e1e0f880392b3ef01838b5cac1cd856779e46",
+      "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
+    },
+    "tests/test_b3_eval_adapter_sealed.py": {
+      "sha256": "409797fb376f046aa647b19ab25b058ebb5bf068a8b3856de38af920b7d98088",
+      "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
+    },
+    "tests/test_b3_net_ledger.py": {
+      "sha256": "fc04d67b4d952145d2961eb208841957c43d9505b8a258c7fb158d2efa99e033",
+      "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
+    },
+    "tests/test_console_init.py": {
+      "sha256": "1c23d1a5fbecaee98b8aefd26b9e875d79d6af829540dd148c24db0a567483b5",
+      "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
+    },
+    "tests/test_release_privacy.py": {
+      "sha256": "b887e4bbf034e68240c9f492f3ee5a2f6e0db87103affe539df5f90028cc6180",
+      "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
+    }
+  },
+  "json_provenance": {
+    "docs/agent_coordination/G3_VIDEO_VALIDATION_PREREG_2026-09-07.json": [
+      ""
+    ],
+    "docs/agent_coordination/PHASE_J_B4_2026-09-28.json": [
+      ""
+    ],
+    "docs/b3_prereg_fill/environment_pc1.json": [
+      ""
+    ],
+    "docs/b3_prereg_fill/regression18.json": [
+      ""
+    ],
+    "docs/live_parallel_evidence/build_off.json": [
+      ""
+    ],
+    "docs/live_parallel_evidence/build_on.json": [
+      ""
+    ],
+    "docs/live_parallel_evidence/final_matrix.json": [
+      ""
+    ],
+    "docs/live_parallel_evidence/focused.json": [
+      ""
+    ],
+    "docs/live_parallel_evidence/matrix.json": [
+      ""
+    ],
+    "docs/live_parallel_evidence/trials.json": [
+      ""
+    ],
+    "models/exchange_event_v1/M0/manifest.json": [
+      "/input_root"
+    ],
+    "models/exchange_event_v1/manifest.json": [
+      "/training_data/input_sha256"
+    ],
+    "models/exchange_event_v1_r1_hgb/manifest.json": [
+      "/threadpools"
+    ],
+    "models/exchange_event_v2/manifest.json": [
+      "/audit"
+    ]
+  },
+  "json_provenance_reason": {
+    "docs/agent_coordination/G3_VIDEO_VALIDATION_PREREG_2026-09-07.json": "検証手順・実行時の環境・コマンドを説明する保存記録。実行用設定ではない",
+    "docs/agent_coordination/PHASE_J_B4_2026-09-28.json": "検証手順・実行時の環境・コマンドを説明する保存記録。実行用設定ではない",
+    "docs/b3_prereg_fill/environment_pc1.json": "検証手順・実行時の環境・コマンドを説明する保存記録。実行用設定ではない",
+    "docs/b3_prereg_fill/regression18.json": "検証手順・実行時の環境・コマンドを説明する保存記録。実行用設定ではない",
+    "docs/live_parallel_evidence/build_off.json": "検証手順・実行時の環境・コマンドを説明する保存記録。実行用設定ではない",
+    "docs/live_parallel_evidence/build_on.json": "検証手順・実行時の環境・コマンドを説明する保存記録。実行用設定ではない",
+    "docs/live_parallel_evidence/final_matrix.json": "検証手順・実行時の環境・コマンドを説明する保存記録。実行用設定ではない",
+    "docs/live_parallel_evidence/focused.json": "検証手順・実行時の環境・コマンドを説明する保存記録。実行用設定ではない",
+    "docs/live_parallel_evidence/matrix.json": "検証手順・実行時の環境・コマンドを説明する保存記録。実行用設定ではない",
+    "docs/live_parallel_evidence/trials.json": "検証手順・実行時の環境・コマンドを説明する保存記録。実行用設定ではない",
+    "models/exchange_event_v1/M0/manifest.json": "学習入力・監査記録・実行環境の来歴。モデル相対パス、係数、推定器のSHAは変更しない。src/exchange_event_evaluator.py と exchange_event_m0.py の読込キーを確認",
+    "models/exchange_event_v1/manifest.json": "学習入力・監査記録・実行環境の来歴。モデル相対パス、係数、推定器のSHAは変更しない。src/exchange_event_evaluator.py と exchange_event_m0.py の読込キーを確認",
+    "models/exchange_event_v1_r1_hgb/manifest.json": "学習入力・監査記録・実行環境の来歴。モデル相対パス、係数、推定器のSHAは変更しない。src/exchange_event_evaluator.py と exchange_event_m0.py の読込キーを確認",
+    "models/exchange_event_v2/manifest.json": "学習入力・監査記録・実行環境の来歴。モデル相対パス、係数、推定器のSHAは変更しない。src/exchange_event_evaluator.py と exchange_event_m0.py の読込キーを確認"
+  },
+  "exclude_paths": {
+    "docs/index.html": "サイトのソースをsite/へ移動。Pagesにはサイトだけを出す",
+    "docs/site.css": "サイトのソースをsite/へ移動。Pagesにはサイトだけを出す",
+    "docs/.nojekyll": "サイトのソースをsite/へ移動。Pagesにはサイトだけを出す",
+    "packaging/verify_obs_23x_bundle.py": "私たちの情報を含む検査文字列、PC1 が手元で検査",
+    "packaging/verify_obs_23y_bundle.py": "非公開検査台本への依存: packaging/verify_obs_23x_bundle.py",
+    "packaging/verify_obs_24a_bundle.py": "非公開検査台本への依存: packaging/verify_obs_23x_bundle.py",
+    "packaging/verify_obs_24b_bundle.py": "非公開検査台本への依存: packaging/verify_obs_23x_bundle.py",
+    "packaging/verify_obs_24c_bundle.py": "非公開検査台本への依存: packaging/verify_obs_23x_bundle.py",
+    "packaging/verify_obs_24d_bundle.py": "非公開検査台本への依存: packaging/verify_obs_23x_bundle.py",
+    "packaging/verify_obs_24e_bundle.py": "非公開検査台本への依存: packaging/verify_obs_23x_bundle.py",
+    "packaging/verify_obs_24f_bundle.py": "非公開検査台本への依存: packaging/verify_obs_23x_bundle.py",
+    "packaging/verify_obs_24g_bundle.py": "非公開検査台本への依存: packaging/verify_obs_23x_bundle.py",
+    "packaging/verify_obs_24h_bundle.py": "非公開検査台本への依存: packaging/verify_obs_23x_bundle.py",
+    "packaging/verify_obs_24i_bundle.py": "非公開検査台本への依存: packaging/verify_obs_23x_bundle.py",
+    "packaging/obs_23y_arms.py": "非公開検査台本への依存: packaging/verify_obs_23y_bundle.py",
+    "packaging/run_obs_23y_step.ps1": "非公開検査台本への依存: packaging/verify_obs_23y_bundle.py",
+    "packaging/run_obs_24a_step.ps1": "非公開検査台本への依存: packaging/verify_obs_24a_bundle.py",
+    "packaging/run_obs_24b_step.ps1": "非公開検査台本への依存: packaging/verify_obs_24b_bundle.py",
+    "packaging/run_obs_24c_step.ps1": "非公開検査台本への依存: packaging/verify_obs_24c_bundle.py",
+    "packaging/run_obs_24d_step.ps1": "非公開検査台本への依存: packaging/verify_obs_24d_bundle.py",
+    "packaging/run_obs_24e_step.ps1": "非公開検査台本への依存: packaging/verify_obs_24e_bundle.py",
+    "packaging/run_obs_24f_step.ps1": "非公開検査台本への依存: packaging/verify_obs_24f_bundle.py",
+    "packaging/run_obs_24g_step.ps1": "非公開検査台本への依存: packaging/verify_obs_24g_bundle.py",
+    "packaging/run_obs_24h_step.ps1": "非公開検査台本への依存: packaging/verify_obs_24h_bundle.py",
+    "packaging/run_obs_24i_step.ps1": "非公開検査台本への依存: packaging/verify_obs_24i_bundle.py",
+    "packaging/verify_obs_23y_parity.py": "非公開検査台本への依存: packaging/verify_obs_23y_bundle.py",
+    "packaging/verify_obs_24a_parity.py": "非公開検査台本への依存: packaging/verify_obs_24a_bundle.py",
+    "packaging/verify_obs_24b_parity.py": "非公開検査台本への依存: packaging/verify_obs_24b_bundle.py",
+    "packaging/verify_obs_24c_parity.py": "非公開検査台本への依存: packaging/verify_obs_24c_bundle.py",
+    "packaging/verify_obs_24d_parity.py": "非公開検査台本への依存: packaging/verify_obs_24d_bundle.py",
+    "packaging/verify_obs_24e_parity.py": "非公開検査台本への依存: packaging/verify_obs_24e_bundle.py",
+    "packaging/verify_obs_24f_parity.py": "非公開検査台本への依存: packaging/verify_obs_24f_bundle.py",
+    "packaging/verify_obs_24g_parity.py": "非公開検査台本への依存: packaging/verify_obs_24g_bundle.py",
+    "packaging/verify_obs_24h_parity.py": "非公開検査台本への依存: packaging/verify_obs_24h_bundle.py",
+    "packaging/verify_obs_24i_parity.py": "非公開検査台本への依存: packaging/verify_obs_24i_bundle.py",
+    "tests/test_obs_23y.py": "非公開検査台本への依存: packaging/verify_obs_23y_bundle.py",
+    "tests/test_obs_24a.py": "非公開検査台本への依存: packaging/verify_obs_24a_bundle.py",
+    "tests/test_obs_24b.py": "非公開検査台本への依存: packaging/verify_obs_24b_bundle.py",
+    "tests/test_obs_24c.py": "非公開検査台本への依存: packaging/verify_obs_24c_bundle.py",
+    "tests/test_obs_24d.py": "非公開検査台本への依存: packaging/verify_obs_24d_bundle.py",
+    "tests/test_obs_24e.py": "非公開検査台本への依存: packaging/verify_obs_24e_bundle.py",
+    "tests/test_obs_24f.py": "非公開検査台本への依存: packaging/verify_obs_24f_bundle.py",
+    "tests/test_obs_24g.py": "非公開検査台本への依存: packaging/verify_obs_24g_bundle.py",
+    "tests/test_obs_24g_assets.py": "非公開検査台本への依存: packaging/verify_obs_24g_bundle.py",
+    "packaging/build_live_obs_20261023y.py": "非公開検査台本への依存: packaging/obs_23y_arms.py",
+    "packaging/build_live_obs_20261024a.py": "非公開検査台本への依存: packaging/run_obs_24a_step.ps1",
+    "packaging/build_live_obs_20261024b.py": "非公開検査台本への依存: packaging/run_obs_24b_step.ps1",
+    "packaging/build_live_obs_20261025c.py": "非公開検査台本への依存: packaging/run_obs_24c_step.ps1",
+    "packaging/build_live_obs_20261025d.py": "非公開検査台本への依存: packaging/run_obs_24d_step.ps1",
+    "packaging/build_live_obs_20261026e.py": "非公開検査台本への依存: packaging/run_obs_24e_step.ps1",
+    "packaging/build_live_obs_20261026f.py": "非公開検査台本への依存: packaging/run_obs_24f_step.ps1",
+    "packaging/build_live_obs_20261027g.py": "非公開検査台本への依存: packaging/run_obs_24g_step.ps1",
+    "packaging/build_live_obs_20261028h.py": "非公開検査台本への依存: packaging/run_obs_24h_step.ps1",
+    "packaging/build_live_obs_20261028i.py": "非公開検査台本への依存: packaging/run_obs_24i_step.ps1",
+    "packaging/check_obs_23y_run.py": "非公開検査台本への依存: tests/test_obs_23y.py",
+    "packaging/obs_24a_arms.py": "非公開検査台本への依存: packaging/obs_23y_arms.py",
+    "packaging/obs_24b_arms.py": "非公開検査台本への依存: packaging/obs_23y_arms.py",
+    "packaging/obs_24c_arms.py": "非公開検査台本への依存: packaging/obs_23y_arms.py, packaging/run_obs_24b_step.ps1",
+    "packaging/obs_24d_arms.py": "非公開検査台本への依存: packaging/obs_23y_arms.py, packaging/run_obs_24b_step.ps1",
+    "packaging/obs_24e_arms.py": "非公開検査台本への依存: packaging/obs_23y_arms.py, packaging/run_obs_24b_step.ps1",
+    "packaging/obs_24f_arms.py": "非公開検査台本への依存: packaging/obs_23y_arms.py, packaging/run_obs_24b_step.ps1",
+    "packaging/obs_24g_arms.py": "非公開検査台本への依存: packaging/obs_23y_arms.py, packaging/run_obs_24b_step.ps1",
+    "packaging/obs_24h_arms.py": "非公開検査台本への依存: packaging/obs_23y_arms.py, packaging/run_obs_24b_step.ps1",
+    "packaging/obs_24i_arms.py": "非公開検査台本への依存: packaging/obs_23y_arms.py, packaging/run_obs_24b_step.ps1",
+    "packaging/smoke_auto_sequence_23y.py": "非公開検査台本への依存: packaging/obs_23y_arms.py",
+    "packaging/smoke_obs_23y.py": "非公開検査台本への依存: packaging/obs_23y_arms.py",
+    "tests/test_auto_sequence.py": "非公開検査台本への依存: packaging/obs_23y_arms.py, tests/test_obs_23y.py",
+    "packaging/auto_sequence_24c.py": "非公開検査台本への依存: packaging/obs_24c_arms.py",
+    "packaging/auto_sequence_24d.py": "非公開検査台本への依存: packaging/obs_24d_arms.py",
+    "packaging/auto_sequence_24e.py": "非公開検査台本への依存: packaging/obs_24e_arms.py",
+    "packaging/auto_sequence_24f.py": "非公開検査台本への依存: packaging/obs_24f_arms.py",
+    "packaging/auto_sequence_24g.py": "非公開検査台本への依存: packaging/obs_24g_arms.py",
+    "packaging/auto_sequence_24h.py": "非公開検査台本への依存: packaging/obs_24h_arms.py",
+    "packaging/auto_sequence_24i.py": "非公開検査台本への依存: packaging/obs_24i_arms.py",
+    "packaging/check_obs_24c_run.py": "非公開検査台本への依存: packaging/obs_24c_arms.py",
+    "packaging/check_obs_24d_run.py": "非公開検査台本への依存: packaging/obs_24d_arms.py",
+    "packaging/check_obs_24e_run.py": "非公開検査台本への依存: packaging/obs_24e_arms.py",
+    "packaging/check_obs_24f_run.py": "非公開検査台本への依存: packaging/obs_24f_arms.py",
+    "packaging/check_obs_24g_run.py": "非公開検査台本への依存: packaging/obs_24g_arms.py",
+    "packaging/check_obs_24h_run.py": "非公開検査台本への依存: packaging/obs_24h_arms.py",
+    "packaging/check_obs_24i_run.py": "非公開検査台本への依存: packaging/obs_24i_arms.py",
+    "packaging/obs_23y_fullframe.py": "非公開検査台本への依存: packaging/check_obs_23y_run.py",
+    "packaging/probe_manual_stop_23y.py": "非公開検査台本への依存: packaging/smoke_auto_sequence_23y.py",
+    "packaging/smoke_auto_sequence_24a.py": "非公開検査台本への依存: packaging/obs_24a_arms.py",
+    "packaging/smoke_auto_sequence_24b.py": "非公開検査台本への依存: packaging/obs_24b_arms.py",
+    "packaging/smoke_auto_sequence_24c.py": "非公開検査台本への依存: packaging/obs_24c_arms.py",
+    "packaging/smoke_auto_sequence_24d.py": "非公開検査台本への依存: packaging/obs_24d_arms.py",
+    "packaging/smoke_auto_sequence_24e.py": "非公開検査台本への依存: packaging/obs_24e_arms.py",
+    "packaging/smoke_auto_sequence_24f.py": "非公開検査台本への依存: packaging/obs_24f_arms.py",
+    "packaging/smoke_auto_sequence_24g.py": "非公開検査台本への依存: packaging/obs_24g_arms.py",
+    "packaging/smoke_auto_sequence_24h.py": "非公開検査台本への依存: packaging/obs_24h_arms.py",
+    "packaging/smoke_auto_sequence_24i.py": "非公開検査台本への依存: packaging/obs_24i_arms.py",
+    "packaging/smoke_obs_24a.py": "非公開検査台本への依存: packaging/obs_24a_arms.py",
+    "packaging/smoke_obs_24b.py": "非公開検査台本への依存: packaging/obs_24b_arms.py",
+    "packaging/smoke_obs_24c.py": "非公開検査台本への依存: packaging/obs_24c_arms.py",
+    "packaging/smoke_obs_24d.py": "非公開検査台本への依存: packaging/obs_24d_arms.py",
+    "packaging/smoke_obs_24e.py": "非公開検査台本への依存: packaging/obs_24e_arms.py",
+    "packaging/smoke_obs_24f.py": "非公開検査台本への依存: packaging/obs_24f_arms.py",
+    "packaging/smoke_obs_24g.py": "非公開検査台本への依存: packaging/obs_24g_arms.py",
+    "packaging/smoke_obs_24h.py": "非公開検査台本への依存: packaging/obs_24h_arms.py",
+    "packaging/smoke_obs_24i.py": "非公開検査台本への依存: packaging/obs_24i_arms.py",
+    "tests/test_obs_24g_capture_off.py": "非公開検査台本への依存: packaging/build_live_obs_20261027g.py, packaging/obs_24g_arms.py",
+    "packaging/obs_23y_labba.py": "非公開検査台本への依存: packaging/obs_23y_fullframe.py",
+    "tests/test_live_trial_guard_record.py": "非公開検査台本への依存: packaging/check_obs_24c_run.py"
+  }
+}

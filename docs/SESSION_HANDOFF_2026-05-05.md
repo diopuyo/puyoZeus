@@ -198,7 +198,7 @@ W-α (HiddenRowInferrer) を拡張して、可視領域から隠し段への移�
 
 ### 5-1. 環境確認
 ```bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 ls data/training/phase_e_shards/ | wc -l   # 再生成完了なら 75 (v22, v39 除外)
 ls data/training/match_features_phase_e_v01-94.csv  # 最新 csv
 cat data/verify/learned_weights_lgbm_v01-94.json | head -30  # 最新学習結果

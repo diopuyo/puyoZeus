@@ -6,10 +6,10 @@
 # (c96-c144のDL成功分、on_disk基準で動的生成、45本前後想定)。
 #
 # 使い方 (WSL detach で長時間放置前提):
-#   wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \
+#   wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \
 #     setsid -f bash scripts/_run_phase_l_regen_wave2_2026-08-07.sh [MAXPAR=14] < /dev/null"
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 # 1プロセス=1コアを厳守 (matchTemplate 系スレッド競合防止、

@@ -1,7 +1,7 @@
 #!/bin/bash
 # GRAVITY_SETTLE A/B。--gravity-settle-state(案X+warmup自動ON)。baseline=現default。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
 V="v29_match01,v29_match02,v40_match01,v40_match02,v51_match01,v51_match02,v57_match01,v57_match02,v70_match01,v70_match02,v89_match01,v89_match02,v95_match01,v95_match02,v97_match01,v97_match02"
 H="v29_match01,v29_match02,v40_match01,v40_match02,v89_match01,v89_match02"
 OUT="data/verify/stable_cell_acc"; VIZ="data/verify/viz"; LOG="logs/fix_v70_eval"; M="${LOG}/master_gsettle.log"

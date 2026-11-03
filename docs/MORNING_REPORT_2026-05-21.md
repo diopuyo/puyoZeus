@@ -3,10 +3,10 @@
 ## ✅ 朝のレビュー優先順位 (= 4 PNG のみ)
 
 ```
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_diff_v86m17.png   ← 最汚染 (red 64.1%) → 改修効果
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_diff_v52m5.png    ← 次汚染 (red 79.2%)
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_diff_v89m7.png    ← 既レビュー
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_diff_v34m13.png   ← sanity (= 改修で逆悪化していないか)
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_diff_v86m17.png   ← 最汚染 (red 64.1%) → 改修効果
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_diff_v52m5.png    ← 次汚染 (red 79.2%)
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_diff_v89m7.png    ← 既レビュー
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_diff_v34m13.png   ← sanity (= 改修で逆悪化していないか)
 ```
 
 各 PNG: 上段 = 改修前 / 下段 = 改修後 (= cycle 50)。 4 動画レビューで OK 判定なら **cycle 55 (= 凍結明け再学習) 解禁条件 H1 達成**。
@@ -64,9 +64,9 @@ C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle5
 ### 2-1. 改修済 seed 22 動画 PNG (= 朝までに完了見込み)
 
 ```
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_v89m7.png
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_v95m3.png
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_v29m22.png
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_v89m7.png
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_v95m3.png
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50_v29m22.png
 ... (= 全 22 動画分)
 ```
 
@@ -78,8 +78,8 @@ C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle5
 ### 2-2. S1 cross_color_purity audit 結果 (= 自動 metric)
 
 ```
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\verify\seed_quality_phase_l_baseline.json  ← 改修前 (= 97.35%)
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\verify\seed_quality_cycle50.json           ← 改修後 (= 朝までに完了)
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\verify\seed_quality_phase_l_baseline.json  ← 改修前 (= 97.35%)
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\verify\seed_quality_cycle50.json           ← 改修後 (= 朝までに完了)
 ```
 
 baseline (= 改修前) 値:

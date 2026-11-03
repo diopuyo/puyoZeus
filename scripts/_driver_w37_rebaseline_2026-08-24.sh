@@ -7,7 +7,7 @@
 # 主指標 acc は未除外のまま残すので、新旧を同じ JSON 内で併記できる
 # (feedback_paired_comparison_fixed_population_2026-08-20)。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 PY="./venv/bin/python"
 OUT=data/verify/w37_rebaseline_2026-08-24
 mkdir -p "$OUT"

@@ -6,7 +6,7 @@
 set -u
 CONFIG="${1:?構成名 (tguard/thr954/full) を指定}"
 MAXPAR="${2:-8}"
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1

@@ -1,0 +1,870 @@
+{
+  "early": {
+    "differences": {
+      "p2.confirmed_board": {
+        "count": 40,
+        "first": 5173
+      }
+    },
+    "green_trace": [],
+    "focused": {},
+    "note": "prob_boardはelのpackがreprで保存しており、アドレス差を実体差に数えない。",
+    "probability_diff": {
+      "count": 4,
+      "first": [
+        5173
+      ]
+    },
+    "update_only": {
+      "off": [],
+      "on": []
+    },
+    "guard_replay": {
+      "v2_saved_output_mismatches": 0,
+      "outside": 0,
+      "outside_cells": 388080,
+      "green_first": [],
+      "purple_first": [],
+      "phantom_nonempty": 0,
+      "phantom_frames": 0
+    }
+  },
+  "game36": {
+    "differences": {
+      "p1.confirmed_board": {
+        "count": 59,
+        "first": 67396
+      },
+      "p2.confirmed_board": {
+        "count": 192,
+        "first": 66012
+      },
+      "p2.estimated_board": {
+        "count": 127,
+        "first": 66037
+      },
+      "p2.chain_event": {
+        "count": 137,
+        "first": 66037
+      }
+    },
+    "green_trace": [
+      {
+        "frame": 70765,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": [
+          3,
+          4
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70766,
+        "signals": {
+          "formula": false,
+          "next_moved": true,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": null,
+        "dnext": null,
+        "landing": null
+      },
+      {
+        "frame": 70767,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": [
+          3,
+          4
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70768,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": [
+          3,
+          4
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70769,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": [
+          3,
+          4
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70770,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": [
+          3,
+          4
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70771,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": [
+          4,
+          1
+        ],
+        "dnext": [
+          5,
+          4
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70772,
+        "signals": {
+          "formula": false,
+          "next_moved": true,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": null,
+        "dnext": null,
+        "landing": null
+      },
+      {
+        "frame": 70773,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          1,
+          2
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70774,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70775,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 0,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70776,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70777,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 3,
+        "state": "TSUMO_FALL",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70778,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 0,
+        "raw": 3,
+        "state": "TSUMO_FALL",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70779,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": {
+          "falling_pair_old": [
+            4,
+            1
+          ],
+          "falling_pair_new": [
+            4,
+            1
+          ],
+          "source": "next_queue_2"
+        }
+      },
+      {
+        "frame": 70780,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70781,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70782,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70783,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70784,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70785,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70786,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70787,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70788,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70789,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70790,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70791,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70792,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70793,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70794,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70795,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70796,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70797,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70798,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70799,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": false
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "STABLE",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70800,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": true
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "OJAMA_FALL",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      },
+      {
+        "frame": 70801,
+        "signals": {
+          "formula": false,
+          "next_moved": false,
+          "ojama_falling": true
+        },
+        "before": 3,
+        "raw": 3,
+        "state": "OJAMA_FALL",
+        "next": [
+          2,
+          5
+        ],
+        "dnext": [
+          2,
+          5
+        ],
+        "landing": null
+      }
+    ],
+    "focused": {
+      "70721": {
+        "off": {
+          "side_changes": {
+            "p1": [],
+            "p2": []
+          },
+          "latest_prediction": {
+            "frame": 70721,
+            "raw_probability": 0.31690366235243717
+          }
+        },
+        "on": {
+          "side_changes": {
+            "p1": [],
+            "p2": []
+          },
+          "latest_prediction": {
+            "frame": 70721,
+            "raw_probability": 0.876589149125017
+          }
+        }
+      },
+      "70734": {
+        "off": {
+          "side_changes": {
+            "p1": [],
+            "p2": []
+          },
+          "latest_prediction": {
+            "frame": 70721,
+            "raw_probability": 0.31690366235243717
+          }
+        },
+        "on": {
+          "side_changes": {
+            "p1": [],
+            "p2": []
+          },
+          "latest_prediction": {
+            "frame": 70721,
+            "raw_probability": 0.876589149125017
+          }
+        }
+      }
+    },
+    "note": "prob_boardはelのpackがreprで保存しており、アドレス差を実体差に数えない。",
+    "probability_diff": {
+      "count": 155,
+      "first": [
+        66019
+      ]
+    },
+    "update_only": {
+      "off": [
+        70808
+      ],
+      "on": [
+        66012,
+        69827,
+        70763,
+        70800,
+        70816
+      ]
+    },
+    "guard_replay": {
+      "v2_saved_output_mismatches": 0,
+      "outside": 0,
+      "outside_cells": 808500,
+      "green_first": [
+        70779
+      ],
+      "purple_first": [
+        68708
+      ],
+      "phantom_nonempty": 0,
+      "phantom_frames": 67
+    }
+  }
+}

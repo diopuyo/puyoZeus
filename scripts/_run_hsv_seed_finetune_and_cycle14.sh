@@ -2,7 +2,7 @@
 # HSV-seed fine-tune → cycle_14 検証 → 集計 を sequential 実行する。
 # 完了後ログを `logs/hsv_seed_pipeline.log` にまとめる。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 LOG=logs/hsv_seed_pipeline.log
 exec > >(tee -a "$LOG") 2>&1

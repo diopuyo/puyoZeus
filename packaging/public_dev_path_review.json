@@ -1,0 +1,2067 @@
+[
+  {
+    "path": "docs/b3_prereg_fill/fill_inventory.py",
+    "line": 20,
+    "old_sha256": "7f08ef5ff4592c33ccecf6fb54fba0063b08c509f9c8f12c31649eabc90f54bf",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "docs/b3_prereg_fill/fill_inventory.py",
+    "line": 21,
+    "old_sha256": "241fc530867d7023829587aac6353e85a6eabd8f280cf10cdff8d44cd061680f",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "docs/live_integ_evidence/effect_check.py",
+    "line": 3,
+    "old_sha256": "db7a8929fb3ec835aa9ba0514a39fee48a8fa2a84df26639b2e1569b35a918c4",
+    "template": "<work>\\wt_live_integ",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "docs/live_integ_evidence/effect_check.py",
+    "line": 3,
+    "old_sha256": "5c8d3295e05325831ed0cc02dc11b3aae4ee7a48bcdacdfcb46703b93b9970ba",
+    "template": "<work>\\wt_live_integ\\scripts",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "docs/live_integ_evidence/effect_check.py",
+    "line": 4,
+    "old_sha256": "7a77bfb8c3bf5609c287d8d671e3eb07b7b6121121401d05477576e0b9ba4362",
+    "template": "<work>\\assets\\baseline_b\\app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "native/puyo_core/ama_zig_link.py",
+    "line": 19,
+    "old_sha256": "e09bd26eafdbdbae599fa175670dca02c3514449d5b2d3ee1d236e85f44acf15",
+    "template": "<home>/zigvenv/bin/python",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/auto_sequence.py",
+    "line": 707,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/auto_sequence_24a.py",
+    "line": 738,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/auto_sequence_24b.py",
+    "line": 738,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/auto_sequence_24c.py",
+    "line": 746,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/auto_sequence_24d.py",
+    "line": 754,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/auto_sequence_24e.py",
+    "line": 756,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/auto_sequence_24f.py",
+    "line": 756,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/auto_sequence_24g.py",
+    "line": 757,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/auto_sequence_24h.py",
+    "line": 759,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/auto_sequence_24i.py",
+    "line": 759,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_ama_mingw.py",
+    "line": 11,
+    "old_sha256": "0e3838172f1c4f6f318dbe5287adeca5dc0c52ff141aeee855854cf3e9ad5180",
+    "template": "<home>/obs_20261020_toolchain/usr/bin/x86_64-w64-mingw32-g++-posix",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_ama_mingw.py",
+    "line": 10,
+    "old_sha256": "80901eaf65df9cc537a2efc824a9b57344f4e4af88d1de6804163c2c4e6df047",
+    "template": "<work>/build_20261020a_stage",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_ama_mingw.py",
+    "line": 38,
+    "old_sha256": "e0cf103a11d6f1ce2203520358a0b4be96d5f848e965cb357e3837c9e36c058a",
+    "template": "-I<home>/obs_20261020_toolchain/glog-install/include",
+    "reason": "開発用ツールの引数・生成案内/コマンド。文字列の構文と明示引数は保持して場所を解決"
+  },
+  {
+    "path": "packaging/build_ama_mingw.py",
+    "line": 46,
+    "old_sha256": "52b36d59361354f9a3e957ef93dc9816365f3b5d8d0e7dd6fbea445307074157",
+    "template": "<home>/obs_20261020_toolchain/glog-install/lib/libglog.a",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_ama_mingw.py",
+    "line": 49,
+    "old_sha256": "4e17c0fd479c570b8f9e54f3f4bbfe748bbb80b36022c856cbb4745dfc3f9a18",
+    "template": "<home>/obs_20261020_toolchain/usr/bin:",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_ama_windows.py",
+    "line": 15,
+    "old_sha256": "ea4fc5eac967a77fa19b426817373cba1f91780910f907de81f63b954f2cd8d9",
+    "template": "<work>/ama_reference_profile_20261016/puyoai-private-main",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_ama_windows.py",
+    "line": 16,
+    "old_sha256": "c5eca57ad0b5606ead60aec621df91e3deddcee9600e2016005c1bd6c3d13cd0",
+    "template": "<work>/wt_ama_plain",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_bundle.py",
+    "line": 47,
+    "old_sha256": "d69f5eb9f7a556c6b2b9d773c25b0ed99ea41a6ab94f578c3d2461ec8717b041",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261020.py",
+    "line": 16,
+    "old_sha256": "3f66e682a6cb50fd63a57c9191683b7e0a673f18939b69bf53438a85f551b95b",
+    "template": "<work>/build_20261019a_stage/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261020.py",
+    "line": 18,
+    "old_sha256": "05cb89dcc045f7e90d242f9556650a2e627b37933fb8aeb1551c8262bfa8fece",
+    "template": "<work>/assets",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261020b.py",
+    "line": 28,
+    "old_sha256": "ebbe7bc2be857a76480e0da83998319ccff3cabb05503b46d8203a07237a12a2",
+    "template": "<work>/build_20261020c_validation/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261020b.py",
+    "line": 163,
+    "old_sha256": "0fef4799498e88dd7d08010f0bfe9a025cc7316e60e0f820c9079f4fc4b054d8",
+    "template": "<work>/build_20261020a_stage/zip_smoke_copy_fast/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261020d.py",
+    "line": 15,
+    "old_sha256": "30a98a8f94ea31af1f9e5ddbc9ae49e5e6d4962316cde4ff9d328e631a516a27",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261020f.py",
+    "line": 37,
+    "old_sha256": "11483caede542ae89325a874f227e51ea8a8fdbeee58cfd0cc5549adeb55100c",
+    "template": "\nf版のPC1起動: 既存の<work>\\build_20261019a_stage\\PuyoLive\\pythonを読取りだけで再利用します。\nC:へ本体・キャッシュ・記録を新規作成せず、旧実行系のファイルも変更しません。\n起動ごとに全実行系を照合します。ソース・DLL・EXEは完全一致が必須です。\npycだけは保存ヘッダーとコード内ファイル名を除き、命令・定数・行情報を全て比較します。\n相違があれば起動を中止します。実際のアプリ・モデルは今回のD:配布本体だけを使います。\n既存実行系が無い場",
+    "reason": "開発用ツールの引数・生成案内/コマンド。文字列の構文と明示引数は保持して場所を解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261021a.py",
+    "line": 20,
+    "old_sha256": "30a98a8f94ea31af1f9e5ddbc9ae49e5e6d4962316cde4ff9d328e631a516a27",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261021b.py",
+    "line": 20,
+    "old_sha256": "30a98a8f94ea31af1f9e5ddbc9ae49e5e6d4962316cde4ff9d328e631a516a27",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261023x.py",
+    "line": 117,
+    "old_sha256": "f463cfb72a1f46c64e9448e8f9432d435ee83ddc18c9b2fcb671fa5e66a6a93b",
+    "template": "OBS 本人試験専用 {BUILD} — 配布禁止\npuyoai-private 由来の ama を含みます。user 本人の試験専用です。第三者へ渡さないでください。\nこの入口が起動する検収済み本体: {BUNDLE}\n本体は {ZIP} を展開したもので、全ファイルが ZIP と一致することを確認済みです。展開し直す必要はありません。\n\n今回の試験の目的\n  撃った連鎖の火力 X を v4.9f の枠へ早く出す仕組み (段1) と、撃つ直前の暫定 X の 1 行 (段3) を、\n  実際の ",
+    "reason": "開発用ツールの引数・生成案内/コマンド。文字列の構文と明示引数は保持して場所を解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261025d.py",
+    "line": 33,
+    "old_sha256": "7ed0673c2117ef58efb525d57eeec7328f99768426f2164b2af024d40635aa59",
+    "template": "<work>/b3_c2_model_20261025/large_seed1003.joblib",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261026e.py",
+    "line": 33,
+    "old_sha256": "7ed0673c2117ef58efb525d57eeec7328f99768426f2164b2af024d40635aa59",
+    "template": "<work>/b3_c2_model_20261025/large_seed1003.joblib",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261026f.py",
+    "line": 33,
+    "old_sha256": "7ed0673c2117ef58efb525d57eeec7328f99768426f2164b2af024d40635aa59",
+    "template": "<work>/b3_c2_model_20261025/large_seed1003.joblib",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261027g.py",
+    "line": 33,
+    "old_sha256": "7ed0673c2117ef58efb525d57eeec7328f99768426f2164b2af024d40635aa59",
+    "template": "<work>/b3_c2_model_20261025/large_seed1003.joblib",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261028h.py",
+    "line": 34,
+    "old_sha256": "7ed0673c2117ef58efb525d57eeec7328f99768426f2164b2af024d40635aa59",
+    "template": "<work>/b3_c2_model_20261025/large_seed1003.joblib",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261028h.py",
+    "line": 286,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261028i.py",
+    "line": 34,
+    "old_sha256": "7ed0673c2117ef58efb525d57eeec7328f99768426f2164b2af024d40635aa59",
+    "template": "<work>/b3_c2_model_20261025/large_seed1003.joblib",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_obs_20261028i.py",
+    "line": 286,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_v49f.py",
+    "line": 13,
+    "old_sha256": "bcef5ae0d7b5aa221b77fdcdfeb1ce1abad8423580a4ae2a853f9ba2eb2a5414",
+    "template": "<work>/build_20261017b_stage/smoke_copy/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_v49f.py",
+    "line": 14,
+    "old_sha256": "3f66e682a6cb50fd63a57c9191683b7e0a673f18939b69bf53438a85f551b95b",
+    "template": "<work>/build_20261019a_stage/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_live_v49f.py",
+    "line": 15,
+    "old_sha256": "05cb89dcc045f7e90d242f9556650a2e627b37933fb8aeb1551c8262bfa8fece",
+    "template": "<work>/assets",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_release.py",
+    "line": 28,
+    "old_sha256": "7e07607e727e0f9649ee52cab70ffa7b7bec16d2e800bf652693994f43df6613",
+    "template": "<work>/build_20261101_obs_w2_local/stage/PuyoLive/app/models",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/build_release.py",
+    "line": 30,
+    "old_sha256": "f42328d47aae8f7b28379f6a4a147a35eb318ed2364d03bd7d3cce817c3ce6c5",
+    "template": "<work>/codex_jobs/release_rc_build_20261102/native_remap/puyo_core.pyd",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/diagnose_live_obs_21c.py",
+    "line": 21,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/diagnose_live_obs_21c.py",
+    "line": 27,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/finalize_live_v49f_evidence.py",
+    "line": 11,
+    "old_sha256": "f13af9117502b38ebe18f25746600b3cf3136c87968eb8dcf76e18c144866c0d",
+    "template": "<work>/build_20261019a_stage/verification_r2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/finish_live_obs_20261020e.py",
+    "line": 49,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/finish_live_obs_20261020f.py",
+    "line": 16,
+    "old_sha256": "30a98a8f94ea31af1f9e5ddbc9ae49e5e6d4962316cde4ff9d328e631a516a27",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/finish_live_obs_20261020f.py",
+    "line": 74,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/finish_live_obs_delivery.py",
+    "line": 87,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/import_live_obs_sources.py",
+    "line": 10,
+    "old_sha256": "c5eca57ad0b5606ead60aec621df91e3deddcee9600e2016005c1bd6c3d13cd0",
+    "template": "<work>/wt_ama_plain",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/import_live_obs_sources.py",
+    "line": 11,
+    "old_sha256": "f406f47ae6408eaf78be926c560125fa44dc0928973db1dc25597d30797db59f",
+    "template": "<work>/wt_ama_eval",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/live_gate_coef.py",
+    "line": 23,
+    "old_sha256": "30a98a8f94ea31af1f9e5ddbc9ae49e5e6d4962316cde4ff9d328e631a516a27",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/live_gate_coef.py",
+    "line": 24,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/make_live_v49f_launchers.py",
+    "line": 6,
+    "old_sha256": "3f66e682a6cb50fd63a57c9191683b7e0a673f18939b69bf53438a85f551b95b",
+    "template": "<work>/build_20261019a_stage/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/make_live_v49f_launchers.py",
+    "line": 60,
+    "old_sha256": "fa6192cb3daddc895a3c21bcae1b5a0a5159a02288a5488b0b7378cf83a6fbab",
+    "template": "撃ち合い勝率 v4.9f — OBS 試験版 build_20261019a\n\n1. OBS を起動し、1920×1080のゲーム映像を映します。\n   仮想カメラの出力は「ソース」でゲーム映像だけを選び、分析表示を映り込ませないでください。\n2. OBS の「仮想カメラ開始」を押します。\n3. 初回は List_Cameras.cmd を開きます。番号ごとの映像有無と解像度を表示します。\n   続いて候補の番号（前回は3）を入力するとプレビューが開きます。\n   OBSと同じゲーム映像が映る番",
+    "reason": "開発用ツールの引数・生成案内/コマンド。文字列の構文と明示引数は保持して場所を解決"
+  },
+  {
+    "path": "packaging/obs_23y_arms.py",
+    "line": 64,
+    "old_sha256": "5b47599587e022d4a14c267d14590f5345bf9275946fdabd7db9daafe9af8b5d",
+    "template": "<work>\\build_20261019a_stage\\PuyoLive\\python\\python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_23y_arms.py",
+    "line": 143,
+    "old_sha256": "521bd29529c9dbcd6cd79bd1197f126ab7fa49e3ab2a7403adf9de69f1828a7a",
+    "template": "OBS 本人試験専用 (USER_ONLY) {BUILD} (23y) — 配布禁止 (DO NOT DISTRIBUTE)\npuyoai-private 由来の ama を含みます。user 本人の試験専用です。第三者へ渡さないでください。\nこの入口が起動する検収済み本体: {BUNDLE}\n本体は {ZIP} を展開したもので、全ファイルが ZIP と一致することを確認済みです。展開し直す必要はありません。\n\n{CHECKLIST}\n今回の試験の目的\n  3 通りの設定を、同じ OBS・同",
+    "reason": "開発用ツールの引数・生成案内/コマンド。文字列の構文と明示引数は保持して場所を解決"
+  },
+  {
+    "path": "packaging/obs_23y_fullframe.py",
+    "line": 31,
+    "old_sha256": "f27acb71e81adf21767638d53d38123a590633c90632fecd5532abe3d3ef1f84",
+    "template": "<work>/wt_live_obs_23y_base",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_23y_fullframe.py",
+    "line": 32,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_23y_labba.py",
+    "line": 26,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_23y_labba.py",
+    "line": 28,
+    "old_sha256": "9c384d1f7b40a985b79fa95113de5d35a36946ccfbcc3ee87479fea26ca88a9e",
+    "template": "<work>/codex_jobs/exch_review_v3/obs_quiet_suspend.ps1",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_23y_thin.py",
+    "line": 24,
+    "old_sha256": "d280fe6a128c23625e73c29dfed768292cdaddbe0f68a5774a037f95e833915c",
+    "template": "<work>/wt_thin_y",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_23y_thin.py",
+    "line": 25,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24d_arms.py",
+    "line": 48,
+    "old_sha256": "df2937e86d47a4b93df5131c2684435889110b7eb39d021118c26ce38f10336c",
+    "template": "<work>/ama_live_exe_speed_20261025/pinned/ama_reference_o3_cache.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24e_arms.py",
+    "line": 45,
+    "old_sha256": "c39d2c81b828578d1864ebaf7b99956a9bef3fb9e5898f524811a0cca840159e",
+    "template": "<work>/recog_speed_rust_20261025/artifacts/puyo_core_dfbeaa2a/puyo_core.pyd",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24e_arms.py",
+    "line": 52,
+    "old_sha256": "df2937e86d47a4b93df5131c2684435889110b7eb39d021118c26ce38f10336c",
+    "template": "<work>/ama_live_exe_speed_20261025/pinned/ama_reference_o3_cache.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24e_arms.py",
+    "line": 44,
+    "old_sha256": "0c5369dd6740bf5a3223d9be0183c3eecb2beb1638f348db8aaf2a99408ab40a",
+    "template": "<work>/b3_ensemble_20261025/models",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24f_arms.py",
+    "line": 45,
+    "old_sha256": "c39d2c81b828578d1864ebaf7b99956a9bef3fb9e5898f524811a0cca840159e",
+    "template": "<work>/recog_speed_rust_20261025/artifacts/puyo_core_dfbeaa2a/puyo_core.pyd",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24f_arms.py",
+    "line": 52,
+    "old_sha256": "df2937e86d47a4b93df5131c2684435889110b7eb39d021118c26ce38f10336c",
+    "template": "<work>/ama_live_exe_speed_20261025/pinned/ama_reference_o3_cache.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24f_arms.py",
+    "line": 44,
+    "old_sha256": "0c5369dd6740bf5a3223d9be0183c3eecb2beb1638f348db8aaf2a99408ab40a",
+    "template": "<work>/b3_ensemble_20261025/models",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24g_arms.py",
+    "line": 52,
+    "old_sha256": "c39d2c81b828578d1864ebaf7b99956a9bef3fb9e5898f524811a0cca840159e",
+    "template": "<work>/recog_speed_rust_20261025/artifacts/puyo_core_dfbeaa2a/puyo_core.pyd",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24g_arms.py",
+    "line": 59,
+    "old_sha256": "df2937e86d47a4b93df5131c2684435889110b7eb39d021118c26ce38f10336c",
+    "template": "<work>/ama_live_exe_speed_20261025/pinned/ama_reference_o3_cache.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24g_arms.py",
+    "line": 51,
+    "old_sha256": "e9cdda3ff99796854ca17b98a06a91ca53377eda63cea0cf664882dd1f9426f7",
+    "template": "<work>/codex_jobs/obs24g_build_20261027/models",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24h_arms.py",
+    "line": 52,
+    "old_sha256": "82546903f08df0faf838d58e550993d84665f4057c05d7047004775a179cdf53",
+    "template": "<work>/live_retr_20261028/native_build_1/puyo_core.pyd",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24h_arms.py",
+    "line": 59,
+    "old_sha256": "df2937e86d47a4b93df5131c2684435889110b7eb39d021118c26ce38f10336c",
+    "template": "<work>/ama_live_exe_speed_20261025/pinned/ama_reference_o3_cache.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24h_arms.py",
+    "line": 51,
+    "old_sha256": "e9cdda3ff99796854ca17b98a06a91ca53377eda63cea0cf664882dd1f9426f7",
+    "template": "<work>/codex_jobs/obs24g_build_20261027/models",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24h_assets.py",
+    "line": 7,
+    "old_sha256": "3717f4fe7880d2dcaea1cb3bf9fe97a4f19519cbfcd43141fdcfa63c46d9490d",
+    "template": "<work>/codex_jobs/live_24h_20261027",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24i_arms.py",
+    "line": 67,
+    "old_sha256": "82546903f08df0faf838d58e550993d84665f4057c05d7047004775a179cdf53",
+    "template": "<work>/live_retr_20261028/native_build_1/puyo_core.pyd",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24i_arms.py",
+    "line": 74,
+    "old_sha256": "df2937e86d47a4b93df5131c2684435889110b7eb39d021118c26ce38f10336c",
+    "template": "<work>/ama_live_exe_speed_20261025/pinned/ama_reference_o3_cache.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24i_arms.py",
+    "line": 66,
+    "old_sha256": "e9cdda3ff99796854ca17b98a06a91ca53377eda63cea0cf664882dd1f9426f7",
+    "template": "<work>/codex_jobs/obs24g_build_20261027/models",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24i_assets.py",
+    "line": 7,
+    "old_sha256": "3717f4fe7880d2dcaea1cb3bf9fe97a4f19519cbfcd43141fdcfa63c46d9490d",
+    "template": "<work>/codex_jobs/live_24h_20261027",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/obs_24i_assets.py",
+    "line": 8,
+    "old_sha256": "7e3ee4825ca6b07fefdb0f374811e4d819d52d28c63340f43f01770cf22c9c47",
+    "template": "<work>/codex_jobs/live_final_24j_20261028/exsimf2/model_input.json",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/prepare_live_obs_assets.py",
+    "line": 9,
+    "old_sha256": "1dbcecb2fca64417cba2dbaaf75b811fc7a86c086850e6e50d3c77ef0b0563b1",
+    "template": "<work>/build_20261020a_stage",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/prepare_live_obs_assets.py",
+    "line": 37,
+    "old_sha256": "bebd4949e41c4d2d78f9fb228a79366beef6cee00f41797798c0f25b97e19352",
+    "template": "<work>/build_20261019a_stage/PuyoLive/app/models/v49f",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/prepare_live_obs_assets.py",
+    "line": 31,
+    "old_sha256": "8188a1d2e6d03368a79417cca6d2187e79c0055be247c3543a998fca314d5cf7",
+    "template": "<work>/build_20261019a_stage/PuyoLive/app/models/b3/model.joblib",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/prepare_live_obs_assets.py",
+    "line": 34,
+    "old_sha256": "bea67c2496696c8e7a8918e69d9e3d71a04954b5e060c81e5ef3dbfd12712b14",
+    "template": "<work>/wt_ama_plain/docs/verification/ama_plain/model.json",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/prepare_live_obs_assets.py",
+    "line": 36,
+    "old_sha256": "19e698afb8f81bef399b1f2432c9b39d53b02623a8d4404f7861117ca3f9e342",
+    "template": "<work>/wt_ama_eval/logs/ama_eval_v5/seed_table_cache.npz",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/refresh_live_obs_validation.py",
+    "line": 10,
+    "old_sha256": "0fef4799498e88dd7d08010f0bfe9a025cc7316e60e0f820c9079f4fc4b054d8",
+    "template": "<work>/build_20261020a_stage/zip_smoke_copy_fast/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/refresh_live_obs_validation.py",
+    "line": 14,
+    "old_sha256": "1dbcecb2fca64417cba2dbaaf75b811fc7a86c086850e6e50d3c77ef0b0563b1",
+    "template": "<work>/build_20261020a_stage",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/refresh_live_v49f.py",
+    "line": 10,
+    "old_sha256": "3f66e682a6cb50fd63a57c9191683b7e0a673f18939b69bf53438a85f551b95b",
+    "template": "<work>/build_20261019a_stage/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/refresh_live_v49f.py",
+    "line": 12,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/refresh_live_v49f.py",
+    "line": 11,
+    "old_sha256": "87eb95d1cbf127f880008c4727ecbba60c3db3b153919f0f46082803af5a90aa",
+    "template": "<work>/build_20261019a_stage",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/seal_live_v49f.py",
+    "line": 23,
+    "old_sha256": "3f66e682a6cb50fd63a57c9191683b7e0a673f18939b69bf53438a85f551b95b",
+    "template": "<work>/build_20261019a_stage/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/seal_live_v49f.py",
+    "line": 37,
+    "old_sha256": "35499e5eec0dc2dfbe60910159074a3c61c05f1a6ce1cd0b23998258349c0c98",
+    "template": "<work>/build_20261019a_stage/smoke_copy_r2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_23y.py",
+    "line": 36,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_23y.py",
+    "line": 35,
+    "old_sha256": "8c2e2ec109b63fa9cfb7f0f5883c9afc3bbf1bd175e70f533289cf3ea476fbaa",
+    "template": "<work>/review_v418_20261022/source/video30_decode.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_23y.py",
+    "line": 39,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24a.py",
+    "line": 24,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24a.py",
+    "line": 27,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24b.py",
+    "line": 24,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24b.py",
+    "line": 27,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24c.py",
+    "line": 24,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24c.py",
+    "line": 27,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24d.py",
+    "line": 24,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24d.py",
+    "line": 27,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24e.py",
+    "line": 24,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24e.py",
+    "line": 27,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24f.py",
+    "line": 24,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24f.py",
+    "line": 27,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24g.py",
+    "line": 24,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24g.py",
+    "line": 27,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24h.py",
+    "line": 24,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24h.py",
+    "line": 27,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24i.py",
+    "line": 24,
+    "old_sha256": "57fa80fa01beb8f1a1bd4830760ae285e4ddc36d67e20267f8b5a10e0b789f17",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python/python.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_auto_sequence_24i.py",
+    "line": 27,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_live_v49f.py",
+    "line": 13,
+    "old_sha256": "4b2ffad880007ae773f9373cebc0f35d6dea8b2612ed1138793971654f731ac7",
+    "template": "<work>/build_20261019a_stage/smoke_copy_r2/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_live_v49f.py",
+    "line": 14,
+    "old_sha256": "f13af9117502b38ebe18f25746600b3cf3136c87968eb8dcf76e18c144866c0d",
+    "template": "<work>/build_20261019a_stage/verification_r2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/smoke_live_v49f.py",
+    "line": 15,
+    "old_sha256": "fe63cfaafabb2c58eebffb2049a9046d0095fd6578395d5a8459be99b061b015",
+    "template": "<work>/build_20261019a_stage/smoke_game.avi",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/stage_live_obs_verified.py",
+    "line": 14,
+    "old_sha256": "485380cd7df68fcf85ef8c3e97d8b21f9384e413dc820cf79a0d085877172eca",
+    "template": "<work>/build_20261020c_validation",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/stage_live_obs_verified.py",
+    "line": 16,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/summarize_live_v49f_speed.py",
+    "line": 8,
+    "old_sha256": "f13af9117502b38ebe18f25746600b3cf3136c87968eb8dcf76e18c144866c0d",
+    "template": "<work>/build_20261019a_stage/verification_r2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_ama_inputs.py",
+    "line": 16,
+    "old_sha256": "778cc25d0db43bc16ecfd027da6f0a61a4fc9e707f0226b75037a9b56ca55ee9",
+    "template": "<work>/exch_review_render/ama_eval_v7/zenchi_g42/ed/out/inputs.jsonl.gz",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_ama_inputs.py",
+    "line": 30,
+    "old_sha256": "539dd54b9cd691afbd960b2bcb27400e0e43c4ab22fcc524dc5a70aa418f126b",
+    "template": "<work>/wt_ama_eval/logs/ama_eval_v71/inputs_",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_ama_seed.py",
+    "line": 21,
+    "old_sha256": "539dd54b9cd691afbd960b2bcb27400e0e43c4ab22fcc524dc5a70aa418f126b",
+    "template": "<work>/wt_ama_eval/logs/ama_eval_v71/inputs_",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_ama_windows.py",
+    "line": 33,
+    "old_sha256": "bea67c2496696c8e7a8918e69d9e3d71a04954b5e060c81e5ef3dbfd12712b14",
+    "template": "<work>/wt_ama_plain/docs/verification/ama_plain/model.json",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_ama_windows.py",
+    "line": 40,
+    "old_sha256": "539dd54b9cd691afbd960b2bcb27400e0e43c4ab22fcc524dc5a70aa418f126b",
+    "template": "<work>/wt_ama_eval/logs/ama_eval_v71/inputs_",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_ama_windows.py",
+    "line": 41,
+    "old_sha256": "0344d5092939c50d6178ae2526671fb7620ee7a3c028494d2ec29468e2acc5ad",
+    "template": "<work>/wt_ama_plain/logs/ama_plain_v71/evaluations_",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_obs_20261020b.py",
+    "line": 13,
+    "old_sha256": "3f66e682a6cb50fd63a57c9191683b7e0a673f18939b69bf53438a85f551b95b",
+    "template": "<work>/build_20261019a_stage/PuyoLive",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_obs_20261020b.py",
+    "line": 14,
+    "old_sha256": "722e1e8e6dc92950bb10fbc2db3446a1da24dd585551ec572614de42f50b03ed",
+    "template": "<work>/build_20261020a_stage/m3_input",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_obs_20261020b.py",
+    "line": 15,
+    "old_sha256": "09a5aef45c22dba47e442464a3e142cc037ed73cf289c930801381acfa58cf44",
+    "template": "<work>/build_20261020a_stage/m3_offline_r3.jsonl",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_obs_20261020d.py",
+    "line": 16,
+    "old_sha256": "47189f714ba2874d8aae608e993e6ef3da89d76e9ed527d163b9641dbaf3b27e",
+    "template": "<home>/AppData/Local/Python/pythoncore-3.14-64/Lib/site-packages",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_obs_20261020f.py",
+    "line": 13,
+    "old_sha256": "30a98a8f94ea31af1f9e5ddbc9ae49e5e6d4962316cde4ff9d328e631a516a27",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_live_obs_startup.py",
+    "line": 19,
+    "old_sha256": "72bf18d925e1a74b00bd5829be5f95640e35cf498bfaae1995c89f08dd8a53f7",
+    "template": "<work>/build_20261019a_stage/PuyoLive/app/models/b3/timing_table.json",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_obs_23y_bundle.py",
+    "line": 25,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_obs_24a_bundle.py",
+    "line": 16,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_obs_24b_bundle.py",
+    "line": 16,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_obs_24c_bundle.py",
+    "line": 16,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_obs_24d_bundle.py",
+    "line": 21,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_obs_24e_bundle.py",
+    "line": 21,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_obs_24f_bundle.py",
+    "line": 21,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_obs_24g_bundle.py",
+    "line": 21,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_obs_24h_bundle.py",
+    "line": 22,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "packaging/verify_obs_24i_bundle.py",
+    "line": 22,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_audit_firepower_1003_training.py",
+    "line": 14,
+    "old_sha256": "b97235c2d291df6fe8b07cd6bb4b426817ff242349f00486c6415684524dca03",
+    "template": "<repo>/logs/r2_baselines_148_20260926",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_audit_firepower_1003_training.py",
+    "line": 20,
+    "old_sha256": "8104b327a0b8577a9dea7a27d4333f29668191fa99e86e2d3d4e03749e68e7bd",
+    "template": "<repo>/data/verify/labeled_win_full148_2026-08-14/labeled_win_full148.csv",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_audit_static_1003_tables.py",
+    "line": 12,
+    "old_sha256": "bc4e792c88d557fee9b2157f371d288642e45a0c75bd6d0626f0108d4493163c",
+    "template": "<repo>/logs",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_check_score_zero_ncc_cardintro_2026-08-18.py",
+    "line": 36,
+    "old_sha256": "2a52147c2ca289391a4058266df131d06c6f6a5545c0ca54af1df0ee2afbf14d",
+    "template": "<repo>/data/verify/boundary_impl_verify_2026-08-18",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_cohort_auc_breakdown_2026-07-29.py",
+    "line": 14,
+    "old_sha256": "ab70816be2fe8480c0d88d1ec5c9b515846ff01f532df2793c8d2f7945da5ee1",
+    "template": "<repo>/data/verify/win_eval_combined66_2026-07-29/combined66_video_breakdown.log",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_d1_trace.py",
+    "line": 16,
+    "old_sha256": "241fc530867d7023829587aac6353e85a6eabd8f280cf10cdff8d44cd061680f",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_d3_observe.py",
+    "line": 23,
+    "old_sha256": "9d162d89969510804d5fb5225880f084da51bbfe091f0bc6d347924db50012c7",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_diag_c5_extract.py",
+    "line": 14,
+    "old_sha256": "9d162d89969510804d5fb5225880f084da51bbfe091f0bc6d347924db50012c7",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_diag_c_zero_effect_2026-08-04.py",
+    "line": 88,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_diag_general_chain_contamination_2026-08-17.py",
+    "line": 53,
+    "old_sha256": "241fc530867d7023829587aac6353e85a6eabd8f280cf10cdff8d44cd061680f",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_diag_reignition_culprit_2026-08-18.py",
+    "line": 33,
+    "old_sha256": "2a52147c2ca289391a4058266df131d06c6f6a5545c0ca54af1df0ee2afbf14d",
+    "template": "<repo>/data/verify/boundary_impl_verify_2026-08-18",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_diag_set2_falsedeath_batch.py",
+    "line": 12,
+    "old_sha256": "7f08ef5ff4592c33ccecf6fb54fba0063b08c509f9c8f12c31649eabc90f54bf",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_diag_set2_falsedeath_extract.py",
+    "line": 13,
+    "old_sha256": "9d162d89969510804d5fb5225880f084da51bbfe091f0bc6d347924db50012c7",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_diag_snapshot_density_2026-08-06.py",
+    "line": 42,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_dl_first_2026-08-12.py",
+    "line": 32,
+    "old_sha256": "0703a63960db5dfe53ee0cde134b6c445212eee01c7d328c54ae49bf44feee64",
+    "template": "node:<home>/.nvm/versions/node/v20.20.1/bin/node",
+    "reason": "開発用ツールの引数・生成案内/コマンド。文字列の構文と明示引数は保持して場所を解決"
+  },
+  {
+    "path": "scripts/_final_verify_boundary_2026-08-18.py",
+    "line": 34,
+    "old_sha256": "2a52147c2ca289391a4058266df131d06c6f6a5545c0ca54af1df0ee2afbf14d",
+    "template": "<repo>/data/verify/boundary_impl_verify_2026-08-18",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_gen_patch_fp_morning_report.py",
+    "line": 28,
+    "old_sha256": "6772963a7f7f4370b7086fb4deb774024c4ecef556c7b5334751468c2d0c00f7",
+    "template": "<repo>\\data\\verify",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_gen_puyo_profile_morning_report.py",
+    "line": 20,
+    "old_sha256": "6772963a7f7f4370b7086fb4deb774024c4ecef556c7b5334751468c2d0c00f7",
+    "template": "<repo>\\data\\verify",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_measure_burst_afterglow_2026-08-05.py",
+    "line": 68,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_prefetch_dl_failures_2026-08-18.py",
+    "line": 50,
+    "old_sha256": "8b3b57fb254b7109d4b9b2c6ab050b2dfb0db70ad8a73c35af3e950180a11bfa",
+    "template": "<home>/.nvm/versions/node/v24.19.0/bin/node",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_prefetch_dl_failures_2026-08-18.py",
+    "line": 65,
+    "old_sha256": "e4b80a4daca1d669c3ec3f188c9a5763ce34806c527f263138ff752fc027a440",
+    "template": "<work>/scratchpad/yt_cookies_live.txt",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_regen148_orchestrator_2026-08-11.py",
+    "line": 139,
+    "old_sha256": "0703a63960db5dfe53ee0cde134b6c445212eee01c7d328c54ae49bf44feee64",
+    "template": "node:<home>/.nvm/versions/node/v20.20.1/bin/node",
+    "reason": "開発用ツールの引数・生成案内/コマンド。文字列の構文と明示引数は保持して場所を解決"
+  },
+  {
+    "path": "scripts/_regen148_recollect_2026-08-18.py",
+    "line": 62,
+    "old_sha256": "8b3b57fb254b7109d4b9b2c6ab050b2dfb0db70ad8a73c35af3e950180a11bfa",
+    "template": "<home>/.nvm/versions/node/v24.19.0/bin/node",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_regen148_recollect_2026-08-18.py",
+    "line": 73,
+    "old_sha256": "332e383cf48486b3987f4eeed7d4652e9b2c4ea4cc4f78017ac559e1371e2c93",
+    "template": "<work>/scratchpad/yt_cookies_master.txt",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_regen148_w12_recollect_2026-08-16.py",
+    "line": 48,
+    "old_sha256": "8b3b57fb254b7109d4b9b2c6ab050b2dfb0db70ad8a73c35af3e950180a11bfa",
+    "template": "<home>/.nvm/versions/node/v24.19.0/bin/node",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_regen50_newmethod_2026-08-19.py",
+    "line": 33,
+    "old_sha256": "8b3b57fb254b7109d4b9b2c6ab050b2dfb0db70ad8a73c35af3e950180a11bfa",
+    "template": "<home>/.nvm/versions/node/v24.19.0/bin/node",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_regen50_newmethod_2026-08-19.py",
+    "line": 41,
+    "old_sha256": "332e383cf48486b3987f4eeed7d4652e9b2c4ea4cc4f78017ac559e1371e2c93",
+    "template": "<work>/scratchpad/yt_cookies_master.txt",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_regen_model50_2026-08-19.py",
+    "line": 33,
+    "old_sha256": "8b3b57fb254b7109d4b9b2c6ab050b2dfb0db70ad8a73c35af3e950180a11bfa",
+    "template": "<home>/.nvm/versions/node/v24.19.0/bin/node",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_regen_model50_2026-08-19.py",
+    "line": 41,
+    "old_sha256": "332e383cf48486b3987f4eeed7d4652e9b2c4ea4cc4f78017ac559e1371e2c93",
+    "template": "<work>/scratchpad/yt_cookies_master.txt",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_regen_model50v2_2026-08-20.py",
+    "line": 49,
+    "old_sha256": "8b3b57fb254b7109d4b9b2c6ab050b2dfb0db70ad8a73c35af3e950180a11bfa",
+    "template": "<home>/.nvm/versions/node/v24.19.0/bin/node",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_run_eval_8videos.py",
+    "line": 8,
+    "old_sha256": "241fc530867d7023829587aac6353e85a6eabd8f280cf10cdff8d44cd061680f",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_tmp_cv2threads_test.py",
+    "line": 19,
+    "old_sha256": "6b461c661075ec9687e7a91196da1a2f983da246f9faaa622408a3ab127d366a",
+    "template": "<home>/frames/video_33.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_tmp_find_score0_c34.py",
+    "line": 7,
+    "old_sha256": "241fc530867d7023829587aac6353e85a6eabd8f280cf10cdff8d44cd061680f",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_tmp_profile_collect.py",
+    "line": 14,
+    "old_sha256": "6b461c661075ec9687e7a91196da1a2f983da246f9faaa622408a3ab127d366a",
+    "template": "<home>/frames/video_33.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_verify_boundary_multisignal_b1b2_2026-08-18.py",
+    "line": 50,
+    "old_sha256": "2a52147c2ca289391a4058266df131d06c6f6a5545c0ca54af1df0ee2afbf14d",
+    "template": "<repo>/data/verify/boundary_impl_verify_2026-08-18",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_verify_boundary_multisignal_dcategory_2026-08-18.py",
+    "line": 32,
+    "old_sha256": "2a52147c2ca289391a4058266df131d06c6f6a5545c0ca54af1df0ee2afbf14d",
+    "template": "<repo>/data/verify/boundary_impl_verify_2026-08-18",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_verify_boundary_multisignal_scorezero_2026-08-18.py",
+    "line": 33,
+    "old_sha256": "2a52147c2ca289391a4058266df131d06c6f6a5545c0ca54af1df0ee2afbf14d",
+    "template": "<repo>/data/verify/boundary_impl_verify_2026-08-18",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_verify_burst_write_path_2026-08-05.py",
+    "line": 66,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_verify_c19_stale_2026-08-05.py",
+    "line": 62,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_verify_c22_col3_drop_2026-08-06.py",
+    "line": 64,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_verify_c22_reset_trace_2026-08-06.py",
+    "line": 53,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_verify_c29_stage15_bypass_2026-08-05.py",
+    "line": 71,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_verify_chain_count_truth_review_demo_2026-08-13.py",
+    "line": 32,
+    "old_sha256": "2d75e18cfff3cdaa37d1a9e21f3f572c57196b09635fffa6d9e0996b7db000c2",
+    "template": "<work>/scratchpad/chain_truth_verify",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/_verify_persist_inversion_2026-08-05.py",
+    "line": 74,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/audit_exchange_counts_v33.py",
+    "line": 15,
+    "old_sha256": "6ac44c9a01fc9d34472dcdcd6eb34f1be447701eec3c41a99076424a60e085af",
+    "template": "<repo>/models/ui_templates/score_digits",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/audit_live_delta_inputs.py",
+    "line": 13,
+    "old_sha256": "0d73428a3c3e2aee9bea5eaf3fc01feba519677900004546ed90cb933c4e2fb0",
+    "template": "<work>/delta/input_inventory.json",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/b3_ensemble_bench.py",
+    "line": 25,
+    "old_sha256": "d685160a2c06b8063bf13f8159d3d4c2eea297d780118c108bc1e6ed38afbf7e",
+    "template": "<work>/b3_c2_wiring_20261025/m3_rows_video_c106.parquet",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/b3_ensemble_bench.py",
+    "line": 26,
+    "old_sha256": "85b56eac5d596739cb95513cfc4236e32aefb0faf0ccffca5949561e8d09e2fa",
+    "template": "<work>/b3_c2_wiring_20261025/m3_rows_video_c106.parquet",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/b3_ensemble_replay_compare.py",
+    "line": 34,
+    "old_sha256": "83eccd9ef7744da168da07f9f9d3cd42a70576924c31c953ffeda8a5c4b5c8bd",
+    "template": "<work>/obs24d_score_20261025",
+    "reason": "開発用既定値。旧HOMEとの文字列連結を環境変数の絶対ルートに置換"
+  },
+  {
+    "path": "scripts/b3_ensemble_replay_compare.py",
+    "line": 36,
+    "old_sha256": "126c345de0c76639a20424937da00b960d40e2024c385ba80419aea4d8b8d83d",
+    "template": "<work>/b3_ensemble_20261025",
+    "reason": "開発用既定値。旧HOMEとの文字列連結を環境変数の絶対ルートに置換"
+  },
+  {
+    "path": "scripts/b3_ensemble_replay_compare.py",
+    "line": 37,
+    "old_sha256": "5770dccb7f6b2e4c8949601b9b9f8edb5846c66cf4780af0ee1d238512900320",
+    "template": "<work>/b3_c2_model_20261025/large_seed1003.joblib",
+    "reason": "開発用既定値。旧HOMEとの文字列連結を環境変数の絶対ルートに置換"
+  },
+  {
+    "path": "scripts/b3_review_pick_videos.py",
+    "line": 14,
+    "old_sha256": "495b87033998830e568681dc35038ffe4dd6aa351016cc90961ef201335fae32",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/bench_live_delta.py",
+    "line": 99,
+    "old_sha256": "4e20f52dd6c9fb999df847b6abba6a606260ff5d96ed6b29a05f432ee7e5edb0",
+    "template": "<work>/HOLD_FOR_OBS",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/bench_recognition_b20.py",
+    "line": 26,
+    "old_sha256": "ee1f881de9bc50e51ef9bbb34e412ed030682ac6aa68d0c9fadf85a5266bd657",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/build_e8_review_20260927.py",
+    "line": 30,
+    "old_sha256": "a2b6ef1bf5b8c1653379ab12e7aff54a3f60d25fcf4f44d818c0f46231009e37",
+    "template": "<home>/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/build_e8_review_20260927.py",
+    "line": 31,
+    "old_sha256": "44d1a2cc6af0695f64d3c8b4bfcfcf9ed76441908d903b4296f5005f02e46115",
+    "template": "<home>/.codex/plugins/cache/openai-primary-runtime/spreadsheets/26.909.12148/skills/spreadsheets/container_tools/mark_artifact_operation_started.mjs",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/collect_eval_set_20261001.py",
+    "line": 21,
+    "old_sha256": "7f08ef5ff4592c33ccecf6fb54fba0063b08c509f9c8f12c31649eabc90f54bf",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/collect_robust.py",
+    "line": 30,
+    "old_sha256": "2be546b81bfc55b321c344d0c87c6ba7c8991006e1e7cb6d3a820973bc9aabb2",
+    "template": "<home>/.nvm/versions/node/v20.20.1/bin/node",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/compare_live_speed3_candidate.py",
+    "line": 9,
+    "old_sha256": "45b2fc186f2ffa254c2321410649ba8826a17aed8683ffe4aff48fdbbaf40cb0",
+    "template": "<work>/wt_live_speed",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/compare_live_speed3_candidate.py",
+    "line": 13,
+    "old_sha256": "5f07330fdd664f4a54e58035e81931dec7de4e926df855f738d20f36733c5c9c",
+    "template": "<work>/speed3",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/compare_live_speed3_candidate.py",
+    "line": 15,
+    "old_sha256": "48a3815d8070018849a78fe386031707edd743d00de2d167dc7fca9d6146d560",
+    "template": "<work>/fix4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/count_live_speed3_inputs.py",
+    "line": 10,
+    "old_sha256": "ddbbbb4753d273a1963fd5c6b2d016cc7b2d240e93a582f201e87d17d8ac12d0",
+    "template": "<work>/speed3/input_duplicates.json",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/cycle_metrics.py",
+    "line": 73,
+    "old_sha256": "241fc530867d7023829587aac6353e85a6eabd8f280cf10cdff8d44cd061680f",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/cycle_metrics.py",
+    "line": 76,
+    "old_sha256": "d69f5eb9f7a556c6b2b9d773c25b0ed99ea41a6ab94f578c3d2461ec8717b041",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/diagnose_e10c_candidates_20260927.py",
+    "line": 18,
+    "old_sha256": "241fc530867d7023829587aac6353e85a6eabd8f280cf10cdff8d44cd061680f",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/diagnose_live_speed3.py",
+    "line": 13,
+    "old_sha256": "5f07330fdd664f4a54e58035e81931dec7de4e926df855f738d20f36733c5c9c",
+    "template": "<work>/speed3",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/enrich_e16_records_20260928.py",
+    "line": 14,
+    "old_sha256": "9d162d89969510804d5fb5225880f084da51bbfe091f0bc6d347924db50012c7",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/eval_set2_labels_20261001.py",
+    "line": 11,
+    "old_sha256": "7f08ef5ff4592c33ccecf6fb54fba0063b08c509f9c8f12c31649eabc90f54bf",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/eval_set2_prepare_20261001.py",
+    "line": 10,
+    "old_sha256": "5508c87b5a19d7cbedc6454faf9ce25e20d131ab39973f7c03f1e51b89e27259",
+    "template": "<repo>/data",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/eval_set2_regression_20261001.py",
+    "line": 16,
+    "old_sha256": "7f08ef5ff4592c33ccecf6fb54fba0063b08c509f9c8f12c31649eabc90f54bf",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/eval_set_labels_20261001.py",
+    "line": 14,
+    "old_sha256": "632cdb5831635ebe489dc034b4c37444ed86c61600e159a7bc735fecc5fe9949",
+    "template": "<repo>/data/verify/zenchi_two_sets_review_source_2026-08-31/runs/schema=v1/video=video_zenchi_c0BQoMJwwQU/build=build-a2d3d70a5d2ebfb316f4eb993fab9a8ddcf079045917330aea65abfc59feaa24/attempt=zenchi-review-set1-20260831",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/eval_set_labels_20261001.py",
+    "line": 18,
+    "old_sha256": "c25b1ae70ff1cde2bb10b7fea72ae06a0c7700e13bc112e02275d009d7c917ab",
+    "template": "<repo>/logs/review_zenchi_part3/official_games.json",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/eval_set_prefix_check_20261001.py",
+    "line": 15,
+    "old_sha256": "58ad151da2b9081c317875f0ba3fc4ea793904982cb745c032e6451ac0e713d8",
+    "template": "<repo>/logs/pending_expiry/full/records/zenchi",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/exchange_review_v2.py",
+    "line": 13,
+    "old_sha256": "c2e7eccc9253fb2b2c046fa49231be8e980c66fb8cf2f704788ba3ab9ee2a62c",
+    "template": "<work>/exch_review_render",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/exchange_review_v32_data.py",
+    "line": 12,
+    "old_sha256": "c2e7eccc9253fb2b2c046fa49231be8e980c66fb8cf2f704788ba3ab9ee2a62c",
+    "template": "<work>/exch_review_render",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/extract_e28_frames.py",
+    "line": 5,
+    "old_sha256": "9d162d89969510804d5fb5225880f084da51bbfe091f0bc6d347924db50012c7",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/extract_exchange_event_frames.py",
+    "line": 93,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/gfe_phase_stage1_20261002.py",
+    "line": 31,
+    "old_sha256": "7f08ef5ff4592c33ccecf6fb54fba0063b08c509f9c8f12c31649eabc90f54bf",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/gfe_phase_stage2_replay_20261002.py",
+    "line": 17,
+    "old_sha256": "7f08ef5ff4592c33ccecf6fb54fba0063b08c509f9c8f12c31649eabc90f54bf",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/label_e10_records_20260927.py",
+    "line": 58,
+    "old_sha256": "9d162d89969510804d5fb5225880f084da51bbfe091f0bc6d347924db50012c7",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/live_integ_gate.py",
+    "line": 24,
+    "old_sha256": "ed5f265ce10327e19354b3e5587398dc8bcf62a380ed01bf3c865849bdbb14e6",
+    "template": "<work>/speed2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/live_integ_gate.py",
+    "line": 25,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/live_parallel_probe.py",
+    "line": 19,
+    "old_sha256": "632b154a35e35b740ec0f0f84adb07e136e52a5101a05ebd6a57b118c31a918b",
+    "template": "<work>/scratchpad/speed/framesA",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/live_parallel_probe.py",
+    "line": 17,
+    "old_sha256": "7bf78b3298335c728a05d14e12cf95958e3e01e198739b0b12455663b0ab1de6",
+    "template": "<work>/assets/baseline_b/app",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/live_parallel_probe.py",
+    "line": 192,
+    "old_sha256": "ed5f265ce10327e19354b3e5587398dc8bcf62a380ed01bf3c865849bdbb14e6",
+    "template": "<work>/speed2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/live_parallel_probe.py",
+    "line": 44,
+    "old_sha256": "4e20f52dd6c9fb999df847b6abba6a606260ff5d96ed6b29a05f432ee7e5edb0",
+    "template": "<work>/HOLD_FOR_OBS",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/live_x_video30_spec.py",
+    "line": 20,
+    "old_sha256": "d84400a5e6ba6ca61b43aaed6669f252d999d244c00a18f82e6f78a60494530a",
+    "template": "<work>/review_v418_20261022",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/measure_c65_guard.py",
+    "line": 32,
+    "old_sha256": "9d162d89969510804d5fb5225880f084da51bbfe091f0bc6d347924db50012c7",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/measure_live_x_effects.py",
+    "line": 22,
+    "old_sha256": "d8454528a1b9c838104fd40dfc1df85e22381383282d002fd468ea83dd4768ab",
+    "template": "<work>/codex_jobs/exch_review_v3/OBS21C_EXCHANGE_LAG_DIAG_20261021",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/measure_live_x_timing.py",
+    "line": 26,
+    "old_sha256": "c419c9026f7df03218e29c39cd7f625cfefc63c4f61bb8b041fa68b8b0ffc37f",
+    "template": "<work>/prefire_v412_20261022/actual/exchanges.json",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/old/long_improve.py",
+    "line": 66,
+    "old_sha256": "2be546b81bfc55b321c344d0c87c6ba7c8991006e1e7cb6d3a820973bc9aabb2",
+    "template": "<home>/.nvm/versions/node/v20.20.1/bin/node",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/old/long_improve_v2.py",
+    "line": 93,
+    "old_sha256": "2be546b81bfc55b321c344d0c87c6ba7c8991006e1e7cb6d3a820973bc9aabb2",
+    "template": "<home>/.nvm/versions/node/v20.20.1/bin/node",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prefire_v44_data.py",
+    "line": 20,
+    "old_sha256": "255ab38e36e1b5b3ffb2a03d21dfa2cb4581f80a8f22d242ec6c78ef04354588",
+    "template": "<work>/exch_review_render/v4_4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prefire_v45_data.py",
+    "line": 14,
+    "old_sha256": "db10acc94d70a281c030be8122a59190c5b70a667528ead007b7b3bf5704b299",
+    "template": "<work>/exch_review_render/v4_5",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prefire_v45_origins.py",
+    "line": 13,
+    "old_sha256": "c2e7eccc9253fb2b2c046fa49231be8e980c66fb8cf2f704788ba3ab9ee2a62c",
+    "template": "<work>/exch_review_render",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prefire_v46_data.py",
+    "line": 15,
+    "old_sha256": "05c301865aec848eaf1812581159fe34ced8f662fdaa5a8a38cc3bbcd77d00c0",
+    "template": "<work>/exch_review_render/v4_6",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prefire_v48_inputs.py",
+    "line": 15,
+    "old_sha256": "18fdb6a2df8494fe53487997bdeda7e3f69a8c016780c73606ade222c0771731",
+    "template": "<work>/exch_review_render/v4_8",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prefire_v48_inputs.py",
+    "line": 25,
+    "old_sha256": "e80fec40b5622cd40a46773e0f9733d8bbfae7dfb83ec8d1cf5635a4dad798cf",
+    "template": "<work>/wt_prefire/scripts/prefire_v48_hash.ps1",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prefire_v49e_speed_accounting.py",
+    "line": 13,
+    "old_sha256": "c2e7eccc9253fb2b2c046fa49231be8e980c66fb8cf2f704788ba3ab9ee2a62c",
+    "template": "<work>/exch_review_render",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prepare_falsedeath_v2e_live.py",
+    "line": 10,
+    "old_sha256": "d39fb0505cc3ba91972f28b8a751e51296291682a285cd6572253346c0c7f3f6",
+    "template": "<repo>/models/ui_templates",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prepare_image_free_fix.py",
+    "line": 95,
+    "old_sha256": "e9bf1ba910ca3cdc38b86a64a81328645f5ca65c9e0ec0aafbd43e1351dc03e0",
+    "template": "<repo>/venv/bin/python",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prepare_live_delta_soak.py",
+    "line": 11,
+    "old_sha256": "a3572b2a2d6f521679162d8c1832e3d8e8b87e332478e674ba93fc487998052c",
+    "template": "<work>/delta",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prepare_live_delta_soak.py",
+    "line": 12,
+    "old_sha256": "05cb89dcc045f7e90d242f9556650a2e627b37933fb8aeb1551c8262bfa8fece",
+    "template": "<work>/assets",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prepare_live_delta_soak.py",
+    "line": 36,
+    "old_sha256": "4979f50be8f30f8143c06811fe818226f7cf6ab39c4a89cad969a811d285d0db",
+    "template": "<work>/native_fallback/build.json",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prepare_live_parallel_soak.py",
+    "line": 14,
+    "old_sha256": "05cb89dcc045f7e90d242f9556650a2e627b37933fb8aeb1551c8262bfa8fece",
+    "template": "<work>/assets",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/prepare_live_parallel_soak.py",
+    "line": 56,
+    "old_sha256": "b236a606f2de42e34ca917b88cb166977d422134603c59888e4947dec6e6ff00",
+    "template": "<work>/coalesce2/build.json",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/probe_e16_video_20260928.py",
+    "line": 10,
+    "old_sha256": "9d162d89969510804d5fb5225880f084da51bbfe091f0bc6d347924db50012c7",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/profile_live_b18c.py",
+    "line": 19,
+    "old_sha256": "9d162d89969510804d5fb5225880f084da51bbfe091f0bc6d347924db50012c7",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/pytest_belownormal_live.py",
+    "line": 7,
+    "old_sha256": "60471488fc7253cf75e3aa98540827d8cdb9b3faddbe31fa3a5c7080fe163659",
+    "template": "<home>\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\site-packages",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/render_debug_panel_screens.py",
+    "line": 21,
+    "old_sha256": "060cd90cd55730ef485b7ec1ab43a83528967d92698d67945ca97449252315f4",
+    "template": "<work>/debugpanel2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/render_e20_audit_frames_20260928.py",
+    "line": 8,
+    "old_sha256": "9d162d89969510804d5fb5225880f084da51bbfe091f0bc6d347924db50012c7",
+    "template": "<repo>/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/replay_eval_set_rejudge_20261001.py",
+    "line": 16,
+    "old_sha256": "e94fd2bf6f438dc4f66c88b2d14eeea6700a5a168741876c2f2c7dbbadfd4851",
+    "template": "<repo>/logs/pending_expiry/full/records",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/replay_live_speed3.py",
+    "line": 15,
+    "old_sha256": "45b2fc186f2ffa254c2321410649ba8826a17aed8683ffe4aff48fdbbaf40cb0",
+    "template": "<work>/wt_live_speed",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/replay_live_speed3.py",
+    "line": 16,
+    "old_sha256": "5f07330fdd664f4a54e58035e81931dec7de4e926df855f738d20f36733c5c9c",
+    "template": "<work>/speed3",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/replay_live_speed3.py",
+    "line": 18,
+    "old_sha256": "48a3815d8070018849a78fe386031707edd743d00de2d167dc7fca9d6146d560",
+    "template": "<work>/fix4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/replay_live_speed3_candidate.py",
+    "line": 12,
+    "old_sha256": "45b2fc186f2ffa254c2321410649ba8826a17aed8683ffe4aff48fdbbaf40cb0",
+    "template": "<work>/wt_live_speed",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/replay_live_speed3_candidate.py",
+    "line": 15,
+    "old_sha256": "48a3815d8070018849a78fe386031707edd743d00de2d167dc7fca9d6146d560",
+    "template": "<work>/fix4",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/replay_live_speed3_candidate.py",
+    "line": 14,
+    "old_sha256": "5f07330fdd664f4a54e58035e81931dec7de4e926df855f738d20f36733c5c9c",
+    "template": "<work>/speed3",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/report_live_parallel.py",
+    "line": 104,
+    "old_sha256": "8c4c9f1e40f57afe7113318adedc1fd74106231a0b5a66d215b27a4841bb8cba",
+    "template": "<work>/LIVE_PAR.md",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/report_live_parallel_soak.py",
+    "line": 49,
+    "old_sha256": "8c4c9f1e40f57afe7113318adedc1fd74106231a0b5a66d215b27a4841bb8cba",
+    "template": "<work>/LIVE_PAR.md",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/run_live_delta_soak.py",
+    "line": 14,
+    "old_sha256": "a3572b2a2d6f521679162d8c1832e3d8e8b87e332478e674ba93fc487998052c",
+    "template": "<work>/delta",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/run_live_fast_video30.py",
+    "line": 32,
+    "old_sha256": "86bfe26371c841188bd5b7107280014e83eafe39aefda5dbf43be6b8969694d0",
+    "template": "<work>/live_fast_20261023/replay",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/run_live_parallel_soak.py",
+    "line": 16,
+    "old_sha256": "f36a462ed74a3acada793e3d99563a6de5f0ef7fa0f885fcda01448166b3cf24",
+    "template": "<work>/queue",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/run_live_parallel_soak.py",
+    "line": 56,
+    "old_sha256": "4e20f52dd6c9fb999df847b6abba6a606260ff5d96ed6b29a05f432ee7e5edb0",
+    "template": "<work>/HOLD_FOR_OBS",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/run_live_x_replay.py",
+    "line": 27,
+    "old_sha256": "30a98a8f94ea31af1f9e5ddbc9ae49e5e6d4962316cde4ff9d328e631a516a27",
+    "template": "<work>/build_20261019a_stage/PuyoLive/python",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/run_live_x_replay.py",
+    "line": 32,
+    "old_sha256": "de5eaff7ba03329847faa4af56d2e8eabe365759648d82def707bb2f662a8ba3",
+    "template": "<work>/media_tmp/b2_cv_20261020/cv2",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/run_switch_smoothing.py",
+    "line": 25,
+    "old_sha256": "7f08ef5ff4592c33ccecf6fb54fba0063b08c509f9c8f12c31649eabc90f54bf",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/scan_telop_prefilter_b21.py",
+    "line": 24,
+    "old_sha256": "b4aef97061fea2595143c7a540a0db3fcf2c59634c2c0d79e26b0ea0210a7964",
+    "template": "<repo>/data/frames/",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/scan_terminal_prefilter_b20.py",
+    "line": 22,
+    "old_sha256": "b4aef97061fea2595143c7a540a0db3fcf2c59634c2c0d79e26b0ea0210a7964",
+    "template": "<repo>/data/frames/",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/smoke_live_parallel.py",
+    "line": 8,
+    "old_sha256": "a71fd25ebbf84ad5466d71d63d763263e798b90ed1ccb0c83bba3e35f530dc07",
+    "template": "<work>/coalesce2/smoke_m.py",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/study_effect_signature_2026-08-03.py",
+    "line": 75,
+    "old_sha256": "bd65f2c21b709780e5dcfaa3baa763cba8a3bf07e81927763b726013a526000d",
+    "template": "<home>/frames",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/summarize_live_delta.py",
+    "line": 9,
+    "old_sha256": "a3572b2a2d6f521679162d8c1832e3d8e8b87e332478e674ba93fc487998052c",
+    "template": "<work>/delta",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/summarize_live_delta_soak.py",
+    "line": 15,
+    "old_sha256": "a3572b2a2d6f521679162d8c1832e3d8e8b87e332478e674ba93fc487998052c",
+    "template": "<work>/delta",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/summarize_live_speed3.py",
+    "line": 10,
+    "old_sha256": "5f07330fdd664f4a54e58035e81931dec7de4e926df855f738d20f36733c5c9c",
+    "template": "<work>/speed3",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/summarize_live_speed3.py",
+    "line": 11,
+    "old_sha256": "b68efacd1266011dbfeded9222dba87207bd1489456c430b38e1db6854abe1a2",
+    "template": "<work>/fix4/reference_replay_pair",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/train_exchange_event_models_20260926.py",
+    "line": 29,
+    "old_sha256": "241fc530867d7023829587aac6353e85a6eabd8f280cf10cdff8d44cd061680f",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/train_exchange_event_models_20260926.py",
+    "line": 30,
+    "old_sha256": "f69e5a4f00feb5f99b88cb6a3e1bab05be8f39e47f5a6878daf96d72992f4212",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/verify_b3_net_ledger_diag.py",
+    "line": 23,
+    "old_sha256": "58eb52d38fd19e75d4903a321972ef1d8b62bb9b48567487f6a2a7ab83702fe8",
+    "template": "<work>/ledger_chain_diag_20261025",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/verify_b3_net_ledger_diag.py",
+    "line": 24,
+    "old_sha256": "ebb64cd8635aaee40ddb7d7c0131c157a7b358c7d84ccb6e1069270e02719e26",
+    "template": "<work>/ledger_chain_diag_20261025",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/verify_integration_memory_patch_20261002.py",
+    "line": 15,
+    "old_sha256": "689bf8e3f5e80e0390f190b8fa6809f5196915d1da57a4759ef06f5d9fbc2dbe",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/verify_integration_r1s_dv2d_20261002.py",
+    "line": 24,
+    "old_sha256": "7f08ef5ff4592c33ccecf6fb54fba0063b08c509f9c8f12c31649eabc90f54bf",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/verify_live_b18b.py",
+    "line": 17,
+    "old_sha256": "7f08ef5ff4592c33ccecf6fb54fba0063b08c509f9c8f12c31649eabc90f54bf",
+    "template": "<repo>",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/verify_live_parallel.py",
+    "line": 60,
+    "old_sha256": "5d674a2a9adeb84e9d94340a035065357331c3658e31b245feb808600e1d985e",
+    "template": "; os.chdir('<work>/assets/baseline_b/app'); import pytest; raise SystemExit(pytest.main(",
+    "reason": "開発用ツールの引数・生成案内/コマンド。文字列の構文と明示引数は保持して場所を解決"
+  },
+  {
+    "path": "scripts/verify_live_parallel.py",
+    "line": 59,
+    "old_sha256": "c302713ba95ce0dde11ac7b5676c560b6f33318c302e2e9286b27ab4dd73a679",
+    "template": "<work>/assets/devsite",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/verify_live_switch_smoothing.py",
+    "line": 24,
+    "old_sha256": "e94fd2bf6f438dc4f66c88b2d14eeea6700a5a168741876c2f2c7dbbadfd4851",
+    "template": "<repo>/logs/pending_expiry/full/records",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/verify_live_v49f_replay.py",
+    "line": 19,
+    "old_sha256": "738421d280b63417e99d96432c14456da5f1dda373cfeb1ed86c831dbad566b1",
+    "template": "<work>/prefire_v49f_20261019/full_fast_clean1",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/verify_recog_speed_py.py",
+    "line": 37,
+    "old_sha256": "daebf76feb691544ce05ae6cdb526ff4a95144b30751fe6fe693703ba2586628",
+    "template": "<work>/recog_speed_py_20261025",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  },
+  {
+    "path": "scripts/verify_recog_speed_py.py",
+    "line": 50,
+    "old_sha256": "4e20f52dd6c9fb999df847b6abba6a606260ff5d96ed6b29a05f432ee7e5edb0",
+    "template": "<work>/HOLD_FOR_OBS",
+    "reason": "開発用の入力/出力既定値。環境変数またはリポジトリ相対へ解決"
+  }
+]

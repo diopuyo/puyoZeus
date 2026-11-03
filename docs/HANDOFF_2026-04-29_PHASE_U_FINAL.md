@@ -110,22 +110,22 @@ RED_GREEN_DIFF_FOR_RED: 80
 
 ```bash
 # 1. 引継ぎ確認
-cat /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/docs/HANDOFF_2026-04-29_PHASE_U_FINAL.md
+cat <home>/.gemini/antigravity/scratch/puyo_analyzer/docs/HANDOFF_2026-04-29_PHASE_U_FINAL.md
 
 # 2. 全テスト走行 (約 3 分)
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q --ignore=tests/test_video_processor.py"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q --ignore=tests/test_video_processor.py"
 
 # 3. 最新 CNN v6 評価
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_u_eval_classifiers"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_u_eval_classifiers"
 
 # 4. 動画レンダ (1 試合のみテスト)
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_u_render \\
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_u_render \\
     data/verify/review_videos/clip_v01_m34.mp4 \\
     data/verify/review_videos/phase_u_v01_m34.mp4 \\
     --interval 0.2 --max-seconds 15"
 
 # 5. バッチ 3 シート確認
-ls "C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\verify\phase_u_batch3\"
+ls "<home>\.gemini\antigravity\scratch\puyo_analyzer\data\verify\phase_u_batch3\"
 ```
 
 ## 設計判断

@@ -25,8 +25,10 @@
     is_empty_grid = fp.classify_empty(frame, region)
 """
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import Iterable
 
@@ -182,10 +184,12 @@ def _compute_ncc_prepared(
         float: NCC 値 (-1.0〜1.0)。均一パッチは PATCH_NCC_UNIFORM_FALLBACK。
     """
     a_flat = a.ravel().astype(np.float64)
-    if a_flat.std() < PATCH_NCC_STD_MIN or b_std < PATCH_NCC_STD_MIN:
+    a_c = a_flat - a_flat.mean()
+    # stdとNCCで同じ平均引きを二度行わない。分散の総和・除算順はnp.stdと同じ。
+    a_std = float(np.sqrt(np.mean(a_c * a_c)))
+    if a_std < PATCH_NCC_STD_MIN or b_std < PATCH_NCC_STD_MIN:
         # 均一パッチは背景との相関不定 → 背景と同一とみなして高値返却
         return PATCH_NCC_UNIFORM_FALLBACK
-    a_c = a_flat - a_flat.mean()
     denom = float(np.sqrt(float(np.dot(a_c, a_c)) * b_selfdot))
     if denom == 0.0:
         return PATCH_NCC_UNIFORM_FALLBACK
@@ -253,6 +257,11 @@ class CellPatchFingerprint:
         tuple[int, ...],
         tuple[np.ndarray, bool, np.ndarray, float, np.ndarray, float],
     ] = field(default_factory=dict, repr=False, compare=False)
+
+    @cached_property
+    def v_median(self) -> float:
+        """読取専用の背景パッチのV中央値を一度だけ計算する。"""
+        return float(np.median(self.patch_hsv[:, :, 2]))
 
     def _as_bg_for(
         self, target_shape: tuple[int, ...],
@@ -349,7 +358,7 @@ class BackgroundFingerprint:
                 for _ in range(VISIBLE_ROWS)
             )
             return cls(cells=empty)
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hsv = cv2.cvtColor(full_image(frame), cv2.COLOR_BGR2HSV)
         cell_w = region_w / BOARD_COLS
         cell_h = region_h / VISIBLE_ROWS
         rows: list[list[CellFingerprint]] = []
@@ -471,7 +480,7 @@ class PatchBackgroundFingerprint:
                 for _ in range(VISIBLE_ROWS)
             )
             return cls(patch_cells=empty_patch, median_cells=empty_med)
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hsv = cv2.cvtColor(full_image(frame), cv2.COLOR_BGR2HSV)
         patch_rows: list[list[CellPatchFingerprint]] = []
         med_rows: list[list[CellFingerprint]] = []
         for r in range(VISIBLE_ROWS):
@@ -559,7 +568,7 @@ def capture_robust_fingerprint(
     for f_idx, frame in enumerate(frames):
         if frame is None or frame.ndim != 3:
             continue
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hsv = cv2.cvtColor(full_image(frame), cv2.COLOR_BGR2HSV)
         for r in range(VISIBLE_ROWS):
             for c in range(BOARD_COLS):
                 cx = int(region_x + (c + 0.5) * cell_w)
@@ -637,7 +646,7 @@ def capture_patch_robust_fingerprint(
     for f_idx, frame in enumerate(frames):
         if frame is None or frame.ndim != 3:
             continue
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hsv = cv2.cvtColor(full_image(frame), cv2.COLOR_BGR2HSV)
         for r in range(VISIBLE_ROWS):
             for c in range(BOARD_COLS):
                 p = _extract_cell_patch_hsv(

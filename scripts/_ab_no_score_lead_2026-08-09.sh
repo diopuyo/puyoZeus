@@ -4,7 +4,7 @@
 # 送った時点で意味を失う。評価は予告おじゃま+フィールド状況で見るのが正しい」
 # を受けた検証。 t=29 (1P優位の盤面が2P有利表示になる) と、
 # 「同時連鎖なのに一方へ寄り続ける」症状が消えるかを見る。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/verify/youtube_demo_2026-08-07/dio_vs_ts_m01_clip.mp4

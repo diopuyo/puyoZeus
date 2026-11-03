@@ -1,6 +1,6 @@
 #!/bin/bash
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 mkdir -p data/verify/relphase_winpanel_2026-07-30

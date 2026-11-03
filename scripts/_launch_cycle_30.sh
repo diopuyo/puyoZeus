@@ -6,7 +6,7 @@
 #   の根本対策。
 #   model: cnn_phase_i_hsv_seed.pt (= cycle_19 baseline と同条件)
 #   cycle 29 と比較して背景誤認削減を確認
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 PYTHONPATH=. ./venv/bin/python -m scripts.multi_video_cycle \
     --cycle 30 --parallel 3 \
     --cnn-model models/cnn_phase_i_hsv_seed.pt \

@@ -21,6 +21,14 @@ enable_match_end_persist_override / enable_post_match_lockdown_latch の
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import json
 import sys
 from dataclasses import asdict, dataclass
@@ -47,8 +55,7 @@ EXTENDED_WINDOW_SEC: float = 120.0
 
 # メインツリー絶対パスへ出力 (worktree は使い捨てのため)。
 OUT_DIR: Path = Path(
-    "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
-    "/data/verify/boundary_impl_verify_2026-08-18"
+    _public_dev_text('<repo>/data/verify/boundary_impl_verify_2026-08-18')
 )
 
 

@@ -3,7 +3,7 @@
 # 先行研究 puyogg がシンプル MLP で機能している = CNN 主軸が overkill の可能性
 # ユーザー目視で v97m11/v70m2 NG だった反省、 HSV 信用度上げる
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle40
 mkdir -p logs/board_logs

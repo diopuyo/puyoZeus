@@ -75,6 +75,9 @@ def load_default_templates(
     Returns:
         ``{digit: BGR ndarray (50x40)}`` の dict。1 枚も無ければ空 dict。
     """
+    from src.image_free_ui import enabled, LearnedTemplates
+    if enabled():
+        return LearnedTemplates('score_digits')
     templates: dict[int, np.ndarray] = {}
     if not template_dir.is_dir():
         return templates
@@ -140,6 +143,9 @@ def _normalize_template_set(
     templates: dict[int, np.ndarray],
 ) -> dict[int, np.ndarray]:
     """テンプレを (DIGIT_HEIGHT, DIGIT_WIDTH) gray に揃える."""
+    from src.image_free_ui import LearnedTemplates
+    if isinstance(templates, LearnedTemplates):
+        return templates
     out: dict[int, np.ndarray] = {}
     for label, tpl in templates.items():
         if tpl is None:
@@ -172,6 +178,11 @@ def classify_digit_cell(
     Returns:
         ``(label or None, best_ncc)``.
     """
+    from src.image_free_ui import LearnedTemplates
+    if isinstance(templates_gray, LearnedTemplates):
+        from src.image_free_digit import ImageFreeScoreOcr
+        return ImageFreeScoreOcr(min_confidence=min_confidence,
+                                 margin_min=margin_min)._classify_digit(cell)
     if not templates_gray:
         return None, 0.0
     gray = _to_gray(cell)

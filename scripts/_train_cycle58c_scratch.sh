@@ -11,7 +11,7 @@
 #   - epoch 15、 lr 1e-3、 class_balance、 augment、 arch large
 #
 # 期待: ojama 完璧維持 + 5 色精度 改善 (= データ 6 倍効果)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p logs
 

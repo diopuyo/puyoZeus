@@ -1,7 +1,7 @@
 #!/bin/bash
 # YouTubeデモ用本番2本: ウォームアップクリップ (試合1〜7、370秒) の認識可視化
 #   A: 通常版 (全状態オーバーレイ)  B: STABLE時のみ表示版
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/verify/youtube_demo_2026-08-07/dio_vs_ts_warmup_clip.mp4

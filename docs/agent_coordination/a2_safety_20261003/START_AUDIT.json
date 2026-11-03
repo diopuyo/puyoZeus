@@ -1,0 +1,1791 @@
+{
+ "rows": [
+  {
+   "record": "q_7gc4TgFig",
+   "game": 5,
+   "t_sec": 350.43333333333334,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 350.43333333333334,
+    "previous_game": 4,
+    "previous_nonzero_scores": [
+     {
+      "score": 28350,
+      "t_sec": 350.4
+     },
+     {
+      "score": 6475,
+      "t_sec": 350.4
+     }
+    ],
+    "zero_observed_secs": [
+     350.43333333333334,
+     350.43333333333334
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "q_7gc4TgFig",
+   "game": 6,
+   "t_sec": 402.2,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 402.2,
+    "previous_game": 5,
+    "previous_nonzero_scores": [
+     {
+      "score": 77893,
+      "t_sec": 402.1666666666667
+     },
+     {
+      "score": 807,
+      "t_sec": 402.1666666666667
+     }
+    ],
+    "zero_observed_secs": [
+     402.2,
+     402.2
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "q_7gc4TgFig",
+   "game": 9,
+   "t_sec": 589.8666666666667,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 589.8666666666667,
+    "previous_game": 8,
+    "previous_nonzero_scores": [
+     {
+      "score": 113733,
+      "t_sec": 589.8333333333334
+     },
+     {
+      "score": 4943,
+      "t_sec": 589.8333333333334
+     }
+    ],
+    "zero_observed_secs": [
+     589.8666666666667,
+     589.8666666666667
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "q_7gc4TgFig",
+   "game": 13,
+   "t_sec": 792.9,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 792.9,
+    "previous_game": 12,
+    "previous_nonzero_scores": [
+     {
+      "score": 1874,
+      "t_sec": 792.8666666666667
+     },
+     {
+      "score": 399,
+      "t_sec": 792.8666666666667
+     }
+    ],
+    "zero_observed_secs": [
+     792.9,
+     792.9
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "fcXG83vInDY",
+   "game": 4,
+   "t_sec": 375.8666666666667,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 375.8666666666667,
+    "previous_game": 3,
+    "previous_nonzero_scores": [
+     {
+      "score": 46616,
+      "t_sec": 375.8333333333333
+     },
+     {
+      "score": 14805,
+      "t_sec": 375.8333333333333
+     }
+    ],
+    "zero_observed_secs": [
+     375.8666666666667,
+     375.8666666666667
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "fcXG83vInDY",
+   "game": 5,
+   "t_sec": 443.6666666666667,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 443.6666666666667,
+    "previous_game": 4,
+    "previous_nonzero_scores": [
+     {
+      "score": 54267,
+      "t_sec": 443.6333333333333
+     },
+     {
+      "score": 45692,
+      "t_sec": 443.6333333333333
+     }
+    ],
+    "zero_observed_secs": [
+     443.6666666666667,
+     443.6666666666667
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "fcXG83vInDY",
+   "game": 6,
+   "t_sec": 542.3,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 542.3,
+    "previous_game": 5,
+    "previous_nonzero_scores": [
+     {
+      "score": 103900,
+      "t_sec": 542.2666666666667
+     },
+     {
+      "score": 49259,
+      "t_sec": 542.2666666666667
+     }
+    ],
+    "zero_observed_secs": [
+     542.3,
+     542.3
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "fcXG83vInDY",
+   "game": 8,
+   "t_sec": 680.9666666666667,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 680.9666666666667,
+    "previous_game": 7,
+    "previous_nonzero_scores": [
+     {
+      "score": 7135,
+      "t_sec": 680.9333333333333
+     },
+     {
+      "score": 3588,
+      "t_sec": 680.9333333333333
+     }
+    ],
+    "zero_observed_secs": [
+     680.9666666666667,
+     680.9666666666667
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "fcXG83vInDY",
+   "game": 9,
+   "t_sec": 735.3333333333334,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 735.3333333333334,
+    "previous_game": 8,
+    "previous_nonzero_scores": [
+     {
+      "score": 13202,
+      "t_sec": 735.3
+     },
+     {
+      "score": 11999,
+      "t_sec": 735.3
+     }
+    ],
+    "zero_observed_secs": [
+     735.3333333333334,
+     735.3333333333334
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "mia8KCjr52g",
+   "game": 2,
+   "t_sec": 182.36666666666667,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 182.36666666666667,
+    "previous_game": 1,
+    "previous_nonzero_scores": [
+     {
+      "score": 24984,
+      "t_sec": 182.33333333333334
+     },
+     {
+      "score": 10839,
+      "t_sec": 182.33333333333334
+     }
+    ],
+    "zero_observed_secs": [
+     182.36666666666667,
+     182.36666666666667
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "mia8KCjr52g",
+   "game": 5,
+   "t_sec": 425.6333333333333,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 425.6333333333333,
+    "previous_game": 4,
+    "previous_nonzero_scores": [
+     {
+      "score": 54487,
+      "t_sec": 425.6
+     },
+     {
+      "score": 47370,
+      "t_sec": 425.6
+     }
+    ],
+    "zero_observed_secs": [
+     425.6333333333333,
+     425.6333333333333
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "mia8KCjr52g",
+   "game": 6,
+   "t_sec": 575.5333333333333,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 575.5333333333333,
+    "previous_game": 5,
+    "previous_nonzero_scores": [
+     {
+      "score": 150214,
+      "t_sec": 575.5
+     },
+     {
+      "score": 141416,
+      "t_sec": 575.5
+     }
+    ],
+    "zero_observed_secs": [
+     575.5333333333333,
+     575.5333333333333
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "mia8KCjr52g",
+   "game": 7,
+   "t_sec": 618.9,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 618.9,
+    "previous_game": 6,
+    "previous_nonzero_scores": [
+     {
+      "score": 3021,
+      "t_sec": 618.8666666666667
+     },
+     {
+      "score": 744,
+      "t_sec": 618.8666666666667
+     }
+    ],
+    "zero_observed_secs": [
+     618.9,
+     618.9
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "mia8KCjr52g",
+   "game": 11,
+   "t_sec": 866.2,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 866.2,
+    "previous_game": 10,
+    "previous_nonzero_scores": [
+     {
+      "score": 60887,
+      "t_sec": 866.1666666666666
+     },
+     {
+      "score": 34286,
+      "t_sec": 866.1666666666666
+     }
+    ],
+    "zero_observed_secs": [
+     866.2,
+     866.2
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "c1",
+   "game": 2,
+   "t_sec": 136.13333333333333,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 136.13333333333333,
+    "previous_game": 1,
+    "previous_nonzero_scores": [
+     {
+      "score": 4102,
+      "t_sec": 136.1
+     },
+     {
+      "score": 1104,
+      "t_sec": 136.1
+     }
+    ],
+    "zero_observed_secs": [
+     136.13333333333333,
+     136.13333333333333
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "c1",
+   "game": 3,
+   "t_sec": 227.6,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 227.6,
+    "previous_game": 2,
+    "previous_nonzero_scores": [
+     {
+      "score": 72256,
+      "t_sec": 227.56666666666666
+     },
+     {
+      "score": 68536,
+      "t_sec": 227.56666666666666
+     }
+    ],
+    "zero_observed_secs": [
+     227.6,
+     227.6
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "c1",
+   "game": 4,
+   "t_sec": 273.23333333333335,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 273.23333333333335,
+    "previous_game": 3,
+    "previous_nonzero_scores": [
+     {
+      "score": 8565,
+      "t_sec": 273.2
+     },
+     {
+      "score": 804,
+      "t_sec": 273.2
+     }
+    ],
+    "zero_observed_secs": [
+     273.23333333333335,
+     273.23333333333335
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "c1",
+   "game": 5,
+   "t_sec": 331.1,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 331.1,
+    "previous_game": 4,
+    "previous_nonzero_scores": [
+     {
+      "score": 34982,
+      "t_sec": 331.06666666666666
+     },
+     {
+      "score": 24587,
+      "t_sec": 331.06666666666666
+     }
+    ],
+    "zero_observed_secs": [
+     331.1,
+     331.1
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "c1",
+   "game": 6,
+   "t_sec": 411.6333333333333,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 411.6333333333333,
+    "previous_game": 5,
+    "previous_nonzero_scores": [
+     {
+      "score": 56494,
+      "t_sec": 411.6
+     },
+     {
+      "score": 13606,
+      "t_sec": 411.6
+     }
+    ],
+    "zero_observed_secs": [
+     411.6333333333333,
+     411.6333333333333
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "c5",
+   "game": 5,
+   "t_sec": 1978.2,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 1978.2,
+    "previous_game": 4,
+    "previous_nonzero_scores": [
+     {
+      "score": 41638,
+      "t_sec": 1978.1666666666667
+     },
+     {
+      "score": 18527,
+      "t_sec": 1978.1666666666667
+     }
+    ],
+    "zero_observed_secs": [
+     1978.2,
+     1978.2
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "c5",
+   "game": 7,
+   "t_sec": 2120.266666666667,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 2120.266666666667,
+    "previous_game": 6,
+    "previous_nonzero_scores": [
+     {
+      "score": 36365,
+      "t_sec": 2120.233333333333
+     },
+     {
+      "score": 6977,
+      "t_sec": 2120.233333333333
+     }
+    ],
+    "zero_observed_secs": [
+     2120.266666666667,
+     2120.266666666667
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s0",
+   "game": 1,
+   "t_sec": 3412.2,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 3412.2,
+    "previous_game": 0,
+    "previous_nonzero_scores": [
+     {
+      "score": 95963,
+      "t_sec": 3412.1666666666665
+     },
+     {
+      "score": 768,
+      "t_sec": 3412.1666666666665
+     }
+    ],
+    "zero_observed_secs": [
+     3412.2,
+     3412.2
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s1",
+   "game": 3,
+   "t_sec": 3744.7,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 3744.7,
+    "previous_game": 2,
+    "previous_nonzero_scores": [
+     {
+      "score": 116682,
+      "t_sec": 3744.6666666666665
+     },
+     {
+      "score": 112200,
+      "t_sec": 3744.6666666666665
+     }
+    ],
+    "zero_observed_secs": [
+     3744.7,
+     3744.7
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s1",
+   "game": 4,
+   "t_sec": 3801.8333333333335,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 3801.8333333333335,
+    "previous_game": 3,
+    "previous_nonzero_scores": [
+     {
+      "score": 64647,
+      "t_sec": 3801.8
+     },
+     {
+      "score": 11111,
+      "t_sec": 3801.8
+     }
+    ],
+    "zero_observed_secs": [
+     3801.8333333333335,
+     3801.8333333333335
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s1",
+   "game": 6,
+   "t_sec": 3993.3,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 3993.3,
+    "previous_game": 5,
+    "previous_nonzero_scores": [
+     {
+      "score": 122680,
+      "t_sec": 3993.266666666667
+     },
+     {
+      "score": 113972,
+      "t_sec": 3993.266666666667
+     }
+    ],
+    "zero_observed_secs": [
+     3993.3,
+     3993.3
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s1",
+   "game": 7,
+   "t_sec": 4035.7,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 4035.7,
+    "previous_game": 6,
+    "previous_nonzero_scores": [
+     {
+      "score": 3344,
+      "t_sec": 4035.6666666666665
+     },
+     {
+      "score": 1607,
+      "t_sec": 4035.6666666666665
+     }
+    ],
+    "zero_observed_secs": [
+     4035.7,
+     4035.7
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s2",
+   "game": 2,
+   "t_sec": 4379.5,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 4379.5,
+    "previous_game": 1,
+    "previous_nonzero_scores": [
+     {
+      "score": 128575,
+      "t_sec": 4379.466666666666
+     },
+     {
+      "score": 64704,
+      "t_sec": 4379.466666666666
+     }
+    ],
+    "zero_observed_secs": [
+     4379.5,
+     4379.5
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s2",
+   "game": 6,
+   "t_sec": 4660.3,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 4660.3,
+    "previous_game": 5,
+    "previous_nonzero_scores": [
+     {
+      "score": 14476,
+      "t_sec": 4660.266666666666
+     },
+     {
+      "score": 7737,
+      "t_sec": 4660.266666666666
+     }
+    ],
+    "zero_observed_secs": [
+     4660.3,
+     4660.3
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s2",
+   "game": 8,
+   "t_sec": 4762.5,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 4762.5,
+    "previous_game": 7,
+    "previous_nonzero_scores": [
+     {
+      "score": 2633,
+      "t_sec": 4762.466666666666
+     },
+     {
+      "score": 569,
+      "t_sec": 4762.466666666666
+     }
+    ],
+    "zero_observed_secs": [
+     4762.5,
+     4762.5
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s2",
+   "game": 10,
+   "t_sec": 4866.233333333334,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 4866.233333333334,
+    "previous_game": 9,
+    "previous_nonzero_scores": [
+     {
+      "score": 1404,
+      "t_sec": 4866.2
+     },
+     {
+      "score": 454,
+      "t_sec": 4866.2
+     }
+    ],
+    "zero_observed_secs": [
+     4866.233333333334,
+     4866.233333333334
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s5",
+   "game": 1,
+   "t_sec": 6066.6,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 6066.6,
+    "previous_game": 0,
+    "previous_nonzero_scores": [
+     {
+      "score": 40157,
+      "t_sec": 6066.566666666667
+     },
+     {
+      "score": 23801,
+      "t_sec": 6066.566666666667
+     }
+    ],
+    "zero_observed_secs": [
+     6066.6,
+     6066.6
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s5",
+   "game": 2,
+   "t_sec": 6131.633333333333,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 6131.633333333333,
+    "previous_game": 1,
+    "previous_nonzero_scores": [
+     {
+      "score": 11434,
+      "t_sec": 6131.6
+     },
+     {
+      "score": 8665,
+      "t_sec": 6131.6
+     }
+    ],
+    "zero_observed_secs": [
+     6131.633333333333,
+     6131.633333333333
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s5",
+   "game": 5,
+   "t_sec": 6399.333333333333,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 6399.333333333333,
+    "previous_game": 4,
+    "previous_nonzero_scores": [
+     {
+      "score": 55713,
+      "t_sec": 6399.3
+     },
+     {
+      "score": 51935,
+      "t_sec": 6399.3
+     }
+    ],
+    "zero_observed_secs": [
+     6399.333333333333,
+     6399.333333333333
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s5",
+   "game": 6,
+   "t_sec": 6451.3,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 6451.3,
+    "previous_game": 5,
+    "previous_nonzero_scores": [
+     {
+      "score": 2973,
+      "t_sec": 6451.266666666666
+     },
+     {
+      "score": 2916,
+      "t_sec": 6451.266666666666
+     }
+    ],
+    "zero_observed_secs": [
+     6451.3,
+     6451.3
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  },
+  {
+   "record": "s5",
+   "game": 8,
+   "t_sec": 6562.866666666667,
+   "states": [
+    "MENU",
+    "MENU"
+   ],
+   "side_scores": [
+    0,
+    0
+   ],
+   "displayed_scores": [
+    0,
+    0
+   ],
+   "boundary": {
+    "boundary_sec": 6562.866666666667,
+    "previous_game": 7,
+    "previous_nonzero_scores": [
+     {
+      "score": 2037,
+      "t_sec": 6562.833333333333
+     },
+     {
+      "score": 611,
+      "t_sec": 6562.833333333333
+     }
+    ],
+    "zero_observed_secs": [
+     6562.866666666667,
+     6562.866666666667
+    ],
+    "accepted": true,
+    "menu_only": [
+     true,
+     true
+    ],
+    "start_side_eligible": [
+     true,
+     true
+    ],
+    "stable_counts": [
+     null,
+     null
+    ],
+    "zero_max_sec": 0.733,
+    "timely": true,
+    "boards_ok": true
+   }
+  }
+ ],
+ "accepted_games": 35,
+ "both_raw_zero": 35
+}

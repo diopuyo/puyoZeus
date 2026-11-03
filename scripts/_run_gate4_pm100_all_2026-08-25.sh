@@ -18,13 +18,13 @@
 #
 # 使い方 (実行判断は呼び出し側=親エージェント/userに委ねる。コマンド例のみ):
 #   MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash -c \
-#     "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \
+#     "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \
 #      setsid -f bash scripts/_run_gate4_pm100_all_2026-08-25.sh 1 \
 #      > logs/gate4_pregate_pm100_2026-08-25/all.log 2>&1 < /dev/null"
 #   (引数1個: 区間内並列度。既定1、上限3)
 #
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 PARALLEL="${1:-1}"
 if [ "$PARALLEL" -gt 3 ] 2>/dev/null; then

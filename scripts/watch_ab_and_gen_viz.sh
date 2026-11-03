@@ -5,7 +5,7 @@
 # 朝のユーザー起床時に比較動画が揃っている状態を目指す。
 #
 # 起動方法 (CLAUDE.md プロセス管理ルール):
-#   wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \
+#   wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \
 #     setsid -f bash scripts/watch_ab_and_gen_viz.sh < /dev/null"
 #
 # ログ: logs/watcher.log
@@ -289,7 +289,7 @@ except Exception as e:
 
     echo "## watcher ログ"
     echo ""
-    echo "\`C:\\Users\\ryouj\\.gemini\\antigravity\\scratch\\puyo_analyzer\\logs\\watcher.log\`"
+    echo "\`<home>\\.gemini\\antigravity\\scratch\\puyo_analyzer\\logs\\watcher.log\`"
 } > "${REPORT}"
 
 _log "[watcher] 朝報告 -> ${REPORT}"

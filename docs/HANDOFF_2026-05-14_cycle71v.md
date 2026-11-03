@@ -26,14 +26,14 @@ UNKNOWN (label 10) 1,081 を除外して訓練 → 30,095 samples (train 27,086 
 ## v20 viz レビュー対象
 
 既知動画 (= 過剰適合チェック):
-- `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v50_match1_75s_viz_finetuned_v20.mp4`
-- `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v91_match1_75s_viz_finetuned_v20.mp4`
-- `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v89_match1_75s_viz_finetuned_v20.mp4`
+- `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v50_match1_75s_viz_finetuned_v20.mp4`
+- `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v91_match1_75s_viz_finetuned_v20.mp4`
+- `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v89_match1_75s_viz_finetuned_v20.mp4`
 
 学習データ動画自身 (= ホールド検証):
-- `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v29_match2_viz_v20.mp4`
-- `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v40_match7_viz_v20.mp4`
-- `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v57_match2_viz_v20.mp4`
+- `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v29_match2_viz_v20.mp4`
+- `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v40_match7_viz_v20.mp4`
+- `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v57_match2_viz_v20.mp4`
 
 ## v19 (前回 4 動画 Large) 残課題 - v20 で要確認
 
@@ -77,7 +77,7 @@ UNKNOWN (label 10) 1,081 を除外して訓練 → 30,095 samples (train 27,086 
 - `start_labeling_v29.bat` / `v40.bat` / `v57.bat` (2026-05-14 追加)
 
 ### 訓練・viz コマンド
-- 訓練: `wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_i_fine_tune --component cell_color --video-ids test_v50,v50_match1,v89_match1,v91_match1,v29_match2,v40_match7,v57_match2 --cell-arch large --cell-save-to models/cnn_phase_b_large_v2.pt --epochs 15 --lr 1e-3 --augment --class-balance"`
+- 訓練: `wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_i_fine_tune --component cell_color --video-ids test_v50,v50_match1,v89_match1,v91_match1,v29_match2,v40_match7,v57_match2 --cell-arch large --cell-save-to models/cnn_phase_b_large_v2.pt --epochs 15 --lr 1e-3 --augment --class-balance"`
 - viz: `PYTHONPATH=. ./venv/bin/python -m scripts.visualize_recognition --video <input.mp4> --output <output.mp4> --cnn-model models/cnn_phase_b_large_v2.pt`
 
 ### v2 訓練ログ

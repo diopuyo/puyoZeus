@@ -21,6 +21,7 @@ NEXT 色 2 種類の HSV center 距離で色順序を確定. 回転落下に対�
 (= CNN 差分位置採用) を置き換える.
 """
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 from dataclasses import dataclass
 from typing import Iterable
@@ -400,7 +401,7 @@ def _filter_bg_matched_cells(
         else DEFAULT_EMPTY_HSV_DISTANCE
     )
     h, w = frame_bgr.shape[:2]
-    hsv_full = _cv2.cvtColor(frame_bgr, _cv2.COLOR_BGR2HSV)
+    hsv_full = _cv2.cvtColor(full_image(frame_bgr), _cv2.COLOR_BGR2HSV)
     out: list[tuple[int, int]] = []
     for (r, c) in diff_cells:
         try:
@@ -943,6 +944,7 @@ def apply_persistent_landing_color_guard(
     hsv_classifier: "object",
     frame_bgr: np.ndarray,
     region: "object",
+    falling_puyo_integrity: bool = False,
 ) -> tuple[Board, list[tuple[int, int]]]:
     """W10 根治: 着地セル色を複数フレームにわたり継続監視して補正する.
 
@@ -979,6 +981,9 @@ def apply_persistent_landing_color_guard(
     if hsv_classifier is None or not hasattr(hsv_classifier, "classify"):
         return result, resolved
     for (r, c) in watch_cells:
+        if falling_puyo_integrity and confirmed.get(r, c) not in _VALID_PUYO_COLORS:
+            # 着地色の訂正で空セルを再占有させない。猶予処理による取消を尊重する。
+            continue
         cnn_color = int(cnn_board.get(r, c))
         if cnn_color not in _VALID_PUYO_COLORS:
             continue

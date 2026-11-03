@@ -1,7 +1,7 @@
 #!/bin/bash
 # 多数決窓の部分物差し検証チェーン (2026-08-13):
 # OFF収集完了待ち → ON収集 → 両方の物差し測定 → 結果をログ末尾に出力
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 # OFF側の完了待ち (最大4時間)
 for i in $(seq 1 480); do

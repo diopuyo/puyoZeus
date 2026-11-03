@@ -750,6 +750,13 @@ class CnnPatchClassifier(PatchClassifier):
     # 入力チャンネル数: BGR(3) + HSV(3) = 6
     INPUT_CHANNELS: int = 6
 
+    # バッチ前処理の一括経路 (2026-10-24、既定 OFF)。クラス属性なので __init__ 不要。
+    _live_board_vectorized: bool = False
+
+    def set_live_board_vectorized(self, enable: bool) -> None:
+        """predict_proba_batch の前処理を一括にする (既定 OFF、出力は変わらない)。"""
+        self._live_board_vectorized = bool(enable)
+
     def __init__(self, seed: int = DEFAULT_SEED) -> None:
         if not _torch_available():
             raise ImportError(
@@ -796,10 +803,22 @@ class CnnPatchClassifier(PatchClassifier):
     # 推論
     # ============================
 
+    def _forward(self, batch: "Any") -> "Any":
+        """畳み込み本体の logits。既定は torch (従来どおり)。環境変数 PUYO_CNN_BACKEND=onnx のときだけ
+        重みの内容ハッシュで引いた ONNX Runtime (CPU) に切り替える (src/cnn_onnx.py。対応 ONNX が無ければ例外)。"""
+        from src import cnn_onnx
+        if not cnn_onnx.backend_requested():
+            return self._model(batch)
+        digest = getattr(self, "_onnx_digest", None)
+        if digest is None:
+            digest = self._onnx_digest = cnn_onnx.state_digest(self._model.state_dict())
+        logits = cnn_onnx.run_logits(cnn_onnx.session_for(digest), batch.detach().cpu().numpy())
+        return self._torch.from_numpy(logits)
+
     def classify(self, bgr_patch: np.ndarray) -> int:
         tensor = self._patch_to_tensor(bgr_patch).to(self._device)
         with self._torch.no_grad():
-            logits = self._model(tensor)
+            logits = self._forward(tensor)
         idx = int(self._torch.argmax(logits, dim=1).item())
         return CLASS_INDEX_TO_COLOR[idx]
 
@@ -807,7 +826,7 @@ class CnnPatchClassifier(PatchClassifier):
         """各クラスの確率を返す (NUM_CLASSES,)。TTA / アンサンブル用。"""
         tensor = self._patch_to_tensor(bgr_patch).to(self._device)
         with self._torch.no_grad():
-            logits = self._model(tensor)
+            logits = self._forward(tensor)
             probs = self._torch.nn.functional.softmax(logits, dim=1)
         return probs[0].cpu().numpy()
 
@@ -822,13 +841,32 @@ class CnnPatchClassifier(PatchClassifier):
         Returns:
             shape=(N, NUM_CLASSES) の確率配列。
         """
+        cache = getattr(self, '_live_delta_cache', None)
+        if cache is not None:
+            return cache.predict(bgr_patches, self._predict_proba_batch_uncached)
+        return self._predict_proba_batch_uncached(bgr_patches)
+
+    def _predict_proba_batch_uncached(self, bgr_patches: list[np.ndarray]) -> np.ndarray:
+        """従来の前処理・推論・softmaxを順序も含めて維持する。"""
         if not bgr_patches:
             return np.zeros((0, NUM_CLASSES), dtype=np.float32)
         torch = self._torch
-        tensors = [self._patch_to_tensor(p)[0] for p in bgr_patches]
-        batch = torch.stack(tensors).to(self._device)
+        if self._live_board_vectorized:
+            # 一括経路 (2026-10-24、既定 OFF): 前処理を全パッチ分まとめて行う。
+            # 下の従来の stack と同じ値・同じ形 (N, 6, H, W) float32 になる。
+            from src.live_board_vectorized import preprocess_patches
+            mask = (
+                _get_circle_mask(PATCH_RESIZE_H, PATCH_RESIZE_W)
+                if USE_CIRCLE_MASK else None
+            )
+            batch = torch.from_numpy(preprocess_patches(
+                bgr_patches, PATCH_RESIZE_H, PATCH_RESIZE_W, mask,
+            )).to(self._device)
+        else:
+            tensors = [self._patch_to_tensor(p)[0] for p in bgr_patches]
+            batch = torch.stack(tensors).to(self._device)
         with torch.no_grad():
-            logits = self._model(batch)
+            logits = self._forward(batch)
             probs = torch.nn.functional.softmax(logits, dim=1)
         return probs.cpu().numpy()
 

@@ -9,7 +9,7 @@
 # 並列数14は過去実績の最適値 (memory: project_collect_indicators_v2_perf_2026-07-20,
 # cv2.setNumThreads(1)ラッパー×14並列)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 
 OUT_DIR="data/verify/labeled_win_c20_2026-07-26"

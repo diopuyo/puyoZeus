@@ -2,7 +2,7 @@
 # 大連鎖前後の有利不利表示を、 早期発火反応の有無で比較する。
 # 1P は t=53.97 に 9 連鎖、 2P は t=56.47 に 7 連鎖を撃つ。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 DEMO=data/verify/youtube_demo_2026-08-07
 OUT="$DEMO/adv_reversal_check"

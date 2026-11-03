@@ -2,7 +2,7 @@
 # video_c96 (5.5時間・3シリーズ連結) を series_segments.tsv に従い 3 本へ切り出す。
 # 再エンコードなし (-c copy) なので実時間は数分。出力は $HOME/frames/video_c96s{1,2,3}.mp4。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 SRC="$HOME/frames/_hold_video_c96.mp4"
 TSV="$ROOT/data/verify/c96_split_2026-08-08/series_segments.tsv"
 FFMPEG=$("$ROOT/venv/bin/python" -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())")

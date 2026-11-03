@@ -5,7 +5,7 @@
 # 5 色精度が崩壊 (= +62% 悪化)。 重みを全 1 倍に戻して 5 色精度回復期待。
 # trade-off: ojama 学習弱まる (= 7K/174K = 4% の比率で学習) ため、 認識率の
 # 自然な低下は予想されるが、 cycle 58 のような「5 色 → OJAMA flip 多発」 は防げる。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p logs
 

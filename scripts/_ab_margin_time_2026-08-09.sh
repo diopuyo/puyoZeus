@@ -5,7 +5,7 @@
 # 実際に認識を回して OJAMA_FALL の発火回数がどれだけ増えるかを確認する。
 # 見逃しが多かった動画から選ぶ (c84=145件, c138=116件, c27=104件)。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1

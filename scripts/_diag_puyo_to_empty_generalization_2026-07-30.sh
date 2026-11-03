@@ -1,6 +1,6 @@
 #!/bin/bash
 set -x
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 OUTDIR="data/verify/placement_confirm_frames_generalization_2026-07-30"
 mkdir -p "$OUTDIR"
 export PYTHONPATH=.

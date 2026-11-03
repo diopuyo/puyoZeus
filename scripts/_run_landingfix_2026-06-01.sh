@@ -3,7 +3,7 @@
 # 比較基準 = corruption_chainexit_2026-06-01.json (landing-color-fix なし、他同条件)。
 # viz は診断フィールド(falling_pair old/new)込みで仮説裏取り + 着地直後誤認の目視。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}"
 
 VIDEOS="v29_match01,v29_match02,v40_match01,v40_match02,v51_match01,v51_match02,v57_match01,v57_match02,v70_match01,v70_match02,v89_match01,v89_match02,v95_match01,v95_match02,v97_match01,v97_match02"

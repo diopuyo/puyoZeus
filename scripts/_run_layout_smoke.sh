@@ -1,9 +1,9 @@
 #!/bin/bash
 # 上部パネルレイアウト改修のスモーク検証(1クリップ)。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 PYTHONPATH=. nice -n 10 ./venv/bin/python -m scripts.visualize_advantage_overlay \
-    --video /home/ryouj/frames/video_30.mp4 \
+    --video <home>/frames/video_30.mp4 \
     --out /tmp/layout_smoke.mp4 \
     --start-sec 2860 --end-sec 2872 --warmup-sec 16 \
     --exclude-video video_30

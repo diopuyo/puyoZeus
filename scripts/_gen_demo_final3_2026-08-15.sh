@@ -1,7 +1,7 @@
 #!/bin/bash
 # 最終デモ (2026-08-15): 指摘13 (--resolved-live-defender) 込みの全修正フラグON。
 # 区間・他フラグは _gen_demo_fixed_2026-08-13.sh と同一 (差分=指摘13フラグのみ)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/frames/review_demo_2026-08-12.mp4

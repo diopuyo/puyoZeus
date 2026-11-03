@@ -1,0 +1,13 @@
+# ライブ経路 (scripts/run_live_pipeline_20260928 の import 閉包) が実際に必要とする依存だけ。
+# 版は開発 venv (WSL, Python 3.12.3) と同一に固定する。
+# 学習済 joblib は scikit-learn 1.8.0 で保存されているため、版違いは pickle 互換警告/不一致の原因になる。
+# torch は CPU 版 (download.pytorch.org/whl/cpu)。CUDA 版 (約 2.7GB の nvidia-* 同梱) は配布しない。
+numpy==2.4.4
+opencv-python-headless==4.13.0.92
+torch==2.5.1
+scikit-learn==1.8.0
+scipy==1.17.1
+joblib==1.5.3
+pandas==3.0.2
+pillow==12.2.0
+jsonschema==4.26.0

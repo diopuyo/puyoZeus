@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.puyo-analyzer.invalid/schemas/puyo-overlay-health-v1.json",
+  "title": "Puyo Analyzer Phase J Overlay Health v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "server_status",
+    "session_id",
+    "latest_stream_seq",
+    "latest_snapshot_age_ms",
+    "subscriber_count",
+    "subscriber_limit",
+    "telemetry_health",
+    "bound_host",
+    "bound_port",
+    "started_at_utc",
+    "checked_at_utc",
+    "last_error_code"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "puyo-overlay-health/v1"
+    },
+    "server_status": {
+      "enum": ["starting", "healthy", "degraded"]
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "latest_stream_seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "latest_snapshot_age_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "subscriber_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "subscriber_limit": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "telemetry_health": {
+      "enum": ["healthy", "degraded", "unavailable"]
+    },
+    "bound_host": {
+      "const": "127.0.0.1"
+    },
+    "bound_port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "started_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "checked_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_error_code": {
+      "oneOf": [
+        {
+          "enum": [
+            "telemetry_sink_degraded",
+            "telemetry_sink_unavailable",
+            "practical_worker_fault",
+            "best_action_worker_fault",
+            "snapshot_stale",
+            "internal_health_invariant_failed"
+          ]
+        },
+        {"type": "null"}
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "server_status": {"const": "healthy"}
+        },
+        "required": ["server_status"]
+      },
+      "then": {
+        "properties": {
+          "telemetry_health": {"const": "healthy"},
+          "last_error_code": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "server_status": {"const": "degraded"}
+        },
+        "required": ["server_status"]
+      },
+      "then": {
+        "properties": {
+          "last_error_code": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "telemetry_health": {"enum": ["degraded", "unavailable"]}
+        },
+        "required": ["telemetry_health"]
+      },
+      "then": {
+        "properties": {
+          "server_status": {"const": "degraded"}
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}

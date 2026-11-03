@@ -6,10 +6,10 @@
 # summary_all.md を生成する。
 #
 # 使い方 (setsid -f でdetach起動する想定、CLAUDE.md プロセス管理ルール準拠):
-#   wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \
+#   wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \
 #     setsid -f bash scripts/_run_generalization_audit_2026-07-25.sh > logs/generalization_audit_2026-07-25.log 2>&1 < /dev/null"
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 mkdir -p logs data/verify/generalization_audit_2026-07-25
 
 echo "[gen-audit] 開始 $(date '+%Y-%m-%d %H:%M:%S')"

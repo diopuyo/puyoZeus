@@ -1,0 +1,929 @@
+{
+  "columns": [
+    "ex_y_score_p1",
+    "ex_y_score_p2",
+    "ex_y_generated_p1",
+    "ex_y_generated_p2",
+    "ex_y_sent_p1",
+    "ex_y_sent_p2",
+    "ex_y_pending_p1",
+    "ex_y_pending_p2",
+    "ex_hY_p1",
+    "ex_hY_p2",
+    "ex_z_score_p1",
+    "ex_z_score_p2",
+    "ex_z_generated_p1",
+    "ex_z_generated_p2",
+    "ex_z_sent_p1",
+    "ex_z_sent_p2",
+    "ex_z_pending_p1",
+    "ex_z_pending_p2",
+    "ex_hZ_p1",
+    "ex_hZ_p2",
+    "ex_y_score_nf_p1",
+    "ex_y_score_nf_p2",
+    "ex_y_generated_nf_p1",
+    "ex_y_generated_nf_p2",
+    "ex_y_sent_nf_p1",
+    "ex_y_sent_nf_p2",
+    "ex_y_pending_nf_p1",
+    "ex_y_pending_nf_p2",
+    "ex_hY_nf_p1",
+    "ex_hY_nf_p2",
+    "ex_z_score_nf_p1",
+    "ex_z_score_nf_p2",
+    "ex_z_generated_nf_p1",
+    "ex_z_generated_nf_p2",
+    "ex_z_sent_nf_p1",
+    "ex_z_sent_nf_p2",
+    "ex_z_pending_nf_p1",
+    "ex_z_pending_nf_p2",
+    "ex_hZ_nf_p1",
+    "ex_hZ_nf_p2",
+    "ex_y_power_agree_p1",
+    "ex_y_power_agree_p2",
+    "ex_z_power_agree_p1",
+    "ex_z_power_agree_p2",
+    "ex_direction_agree_p1",
+    "ex_direction_agree_p2",
+    "ex_y_fired_fraction_p1",
+    "ex_y_fired_fraction_p2",
+    "ex_z_fired_fraction_p1",
+    "ex_z_fired_fraction_p2",
+    "ex_search_complete_p1",
+    "ex_search_complete_p2",
+    "ex_search_cutoff_p1",
+    "ex_search_cutoff_p2",
+    "ex_completed_tapes_nf_p1",
+    "ex_completed_tapes_nf_p2",
+    "ex_proof_dead_p1",
+    "ex_proof_dead_p2",
+    "ex_hyp_dead_fraction_p1",
+    "ex_hyp_dead_fraction_p2",
+    "mk_ex_y_p1",
+    "mk_ex_y_p2",
+    "mk_ex_z_p1",
+    "mk_ex_z_p2",
+    "mk_ex_pair_p1",
+    "mk_ex_pair_p2",
+    "mk_ex_proof_p1",
+    "mk_ex_proof_p2",
+    "av_ex_p1",
+    "av_ex_p2"
+  ],
+  "rows": [
+    {
+      "mode": "normal",
+      "input": {
+        "output": {
+          "selection": {
+            "branches": [
+              {
+                "sample": 0,
+                "y_policy": "y",
+                "z_policy": "z",
+                "factual_reply_used": false,
+                "Y": {
+                  "scores": [
+                    100
+                  ],
+                  "moves": 2,
+                  "fire_sec": 1.0
+                },
+                "Z": {
+                  "scores": [
+                    40
+                  ],
+                  "moves": 1,
+                  "fire_sec": null
+                },
+                "accounting": {
+                  "pending": [
+                    3,
+                    5
+                  ],
+                  "projected_dead": [
+                    false,
+                    true
+                  ]
+                },
+                "events": [
+                  {
+                    "t": 1.0,
+                    "kind": 0,
+                    "side": 1,
+                    "source": "Y",
+                    "amount": 7
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 0,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 3
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 1,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 0
+                  }
+                ],
+                "y_surplus": [
+                  {
+                    "sent_surplus": 5
+                  }
+                ],
+                "z_surplus": [
+                  {
+                    "sent_surplus": 1
+                  }
+                ]
+              },
+              {
+                "sample": 1,
+                "y_policy": "y",
+                "z_policy": "z",
+                "factual_reply_used": false,
+                "Y": {
+                  "scores": [
+                    140
+                  ],
+                  "moves": 3,
+                  "fire_sec": 1.0
+                },
+                "Z": {
+                  "scores": [
+                    40
+                  ],
+                  "moves": 1,
+                  "fire_sec": null
+                },
+                "accounting": {
+                  "pending": [
+                    3,
+                    5
+                  ],
+                  "projected_dead": [
+                    false,
+                    true
+                  ]
+                },
+                "events": [
+                  {
+                    "t": 1.0,
+                    "kind": 0,
+                    "side": 1,
+                    "source": "Y",
+                    "amount": 7
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 0,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 3
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 1,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 0
+                  }
+                ],
+                "y_surplus": [
+                  {
+                    "sent_surplus": 5
+                  }
+                ],
+                "z_surplus": [
+                  {
+                    "sent_surplus": 1
+                  }
+                ]
+              }
+            ],
+            "selected_policy": [
+              "y",
+              "z"
+            ]
+          },
+          "receiver": 1,
+          "attacker": 0,
+          "cutoff": false,
+          "complete": true,
+          "completed_tapes": 2
+        },
+        "proof": {
+          "ok": true,
+          "death_sides": []
+        },
+        "observed_scores": null
+      },
+      "expected": {
+        "ex_y_score_p1": NaN,
+        "ex_y_score_p2": 120.0,
+        "ex_y_generated_p1": NaN,
+        "ex_y_generated_p2": 7.0,
+        "ex_y_sent_p1": NaN,
+        "ex_y_sent_p2": 5.0,
+        "ex_y_pending_p1": NaN,
+        "ex_y_pending_p2": 5.0,
+        "ex_hY_p1": NaN,
+        "ex_hY_p2": 2.5,
+        "ex_z_score_p1": 40.0,
+        "ex_z_score_p2": NaN,
+        "ex_z_generated_p1": 3.0,
+        "ex_z_generated_p2": NaN,
+        "ex_z_sent_p1": 1.0,
+        "ex_z_sent_p2": NaN,
+        "ex_z_pending_p1": 3.0,
+        "ex_z_pending_p2": NaN,
+        "ex_hZ_p1": 1.0,
+        "ex_hZ_p2": NaN,
+        "ex_y_score_nf_p1": NaN,
+        "ex_y_score_nf_p2": 0.6151769365206361,
+        "ex_y_generated_nf_p1": NaN,
+        "ex_y_generated_nf_p2": 0.4093838908503587,
+        "ex_y_sent_nf_p1": NaN,
+        "ex_y_sent_nf_p2": 0.3739251689769614,
+        "ex_y_pending_nf_p1": NaN,
+        "ex_y_pending_nf_p2": 0.3739251689769614,
+        "ex_hY_nf_p1": NaN,
+        "ex_hY_nf_p2": 0.29457625025798156,
+        "ex_z_score_nf_p1": 0.5531439939583906,
+        "ex_z_score_nf_p2": NaN,
+        "ex_z_generated_nf_p1": 0.3160513743464193,
+        "ex_z_generated_nf_p2": NaN,
+        "ex_z_sent_nf_p1": 0.18768468914765865,
+        "ex_z_sent_nf_p2": NaN,
+        "ex_z_pending_nf_p1": 0.3160513743464193,
+        "ex_z_pending_nf_p2": NaN,
+        "ex_hZ_nf_p1": 0.18768468914765865,
+        "ex_hZ_nf_p2": NaN,
+        "ex_y_power_agree_p1": 0.7142857142857143,
+        "ex_y_power_agree_p2": 0.7142857142857143,
+        "ex_z_power_agree_p1": 1.0,
+        "ex_z_power_agree_p2": 1.0,
+        "ex_direction_agree_p1": 1.0,
+        "ex_direction_agree_p2": 1.0,
+        "ex_y_fired_fraction_p1": 1.0,
+        "ex_y_fired_fraction_p2": 1.0,
+        "ex_z_fired_fraction_p1": 0.0,
+        "ex_z_fired_fraction_p2": 0.0,
+        "ex_search_complete_p1": 1.0,
+        "ex_search_complete_p2": 1.0,
+        "ex_search_cutoff_p1": 0.0,
+        "ex_search_cutoff_p2": 0.0,
+        "ex_completed_tapes_nf_p1": 1.0,
+        "ex_completed_tapes_nf_p2": 1.0,
+        "ex_proof_dead_p1": 0.0,
+        "ex_proof_dead_p2": 0.0,
+        "ex_hyp_dead_fraction_p1": 0.0,
+        "ex_hyp_dead_fraction_p2": 1.0,
+        "mk_ex_y_p1": 8,
+        "mk_ex_y_p2": 0,
+        "mk_ex_z_p1": 0,
+        "mk_ex_z_p2": 8,
+        "mk_ex_pair_p1": 0,
+        "mk_ex_pair_p2": 0,
+        "mk_ex_proof_p1": 0,
+        "mk_ex_proof_p2": 0,
+        "av_ex_p1": NaN,
+        "av_ex_p2": NaN
+      }
+    },
+    {
+      "mode": "observed",
+      "input": {
+        "output": {
+          "selection": {
+            "branches": [
+              {
+                "sample": 0,
+                "y_policy": "y",
+                "z_policy": "z",
+                "factual_reply_used": true,
+                "Y": {
+                  "scores": [
+                    100
+                  ],
+                  "moves": 2,
+                  "fire_sec": 1.0
+                },
+                "Z": {
+                  "scores": [
+                    40
+                  ],
+                  "moves": 1,
+                  "fire_sec": null
+                },
+                "accounting": {
+                  "pending": [
+                    3,
+                    5
+                  ],
+                  "projected_dead": [
+                    false,
+                    true
+                  ]
+                },
+                "events": [
+                  {
+                    "t": 1.0,
+                    "kind": 0,
+                    "side": 1,
+                    "source": "C1",
+                    "amount": 7
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 0,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 3
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 1,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 0
+                  }
+                ],
+                "y_surplus": [
+                  {
+                    "sent_surplus": 5
+                  }
+                ],
+                "z_surplus": [
+                  {
+                    "sent_surplus": 1
+                  }
+                ]
+              },
+              {
+                "sample": 1,
+                "y_policy": "y",
+                "z_policy": "z",
+                "factual_reply_used": true,
+                "Y": {
+                  "scores": [
+                    140
+                  ],
+                  "moves": 3,
+                  "fire_sec": 1.0
+                },
+                "Z": {
+                  "scores": [
+                    40
+                  ],
+                  "moves": 1,
+                  "fire_sec": null
+                },
+                "accounting": {
+                  "pending": [
+                    3,
+                    5
+                  ],
+                  "projected_dead": [
+                    false,
+                    true
+                  ]
+                },
+                "events": [
+                  {
+                    "t": 1.0,
+                    "kind": 0,
+                    "side": 1,
+                    "source": "C1",
+                    "amount": 7
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 0,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 3
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 1,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 0
+                  }
+                ],
+                "y_surplus": [
+                  {
+                    "sent_surplus": 5
+                  }
+                ],
+                "z_surplus": [
+                  {
+                    "sent_surplus": 1
+                  }
+                ]
+              }
+            ],
+            "selected_policy": [
+              "y",
+              "z"
+            ]
+          },
+          "receiver": 1,
+          "attacker": 0,
+          "cutoff": false,
+          "complete": true,
+          "completed_tapes": 2
+        },
+        "proof": {
+          "ok": true,
+          "death_sides": []
+        },
+        "observed_scores": [
+          320
+        ]
+      },
+      "expected": {
+        "ex_y_score_p1": NaN,
+        "ex_y_score_p2": 320.0,
+        "ex_y_generated_p1": NaN,
+        "ex_y_generated_p2": 7.0,
+        "ex_y_sent_p1": NaN,
+        "ex_y_sent_p2": 5.0,
+        "ex_y_pending_p1": NaN,
+        "ex_y_pending_p2": 5.0,
+        "ex_hY_p1": NaN,
+        "ex_hY_p2": 0.0,
+        "ex_z_score_p1": 40.0,
+        "ex_z_score_p2": NaN,
+        "ex_z_generated_p1": 3.0,
+        "ex_z_generated_p2": NaN,
+        "ex_z_sent_p1": 1.0,
+        "ex_z_sent_p2": NaN,
+        "ex_z_pending_p1": 3.0,
+        "ex_z_pending_p2": NaN,
+        "ex_hZ_p1": 1.0,
+        "ex_hZ_p2": NaN,
+        "ex_y_score_nf_p1": NaN,
+        "ex_y_score_nf_p2": 0.6579809454470265,
+        "ex_y_generated_nf_p1": NaN,
+        "ex_y_generated_nf_p2": 0.4093838908503587,
+        "ex_y_sent_nf_p1": NaN,
+        "ex_y_sent_nf_p2": 0.3739251689769614,
+        "ex_y_pending_nf_p1": NaN,
+        "ex_y_pending_nf_p2": 0.3739251689769614,
+        "ex_hY_nf_p1": NaN,
+        "ex_hY_nf_p2": 0.0,
+        "ex_z_score_nf_p1": 0.5531439939583906,
+        "ex_z_score_nf_p2": NaN,
+        "ex_z_generated_nf_p1": 0.3160513743464193,
+        "ex_z_generated_nf_p2": NaN,
+        "ex_z_sent_nf_p1": 0.18768468914765865,
+        "ex_z_sent_nf_p2": NaN,
+        "ex_z_pending_nf_p1": 0.3160513743464193,
+        "ex_z_pending_nf_p2": NaN,
+        "ex_hZ_nf_p1": 0.18768468914765865,
+        "ex_hZ_nf_p2": NaN,
+        "ex_y_power_agree_p1": 1.0,
+        "ex_y_power_agree_p2": 1.0,
+        "ex_z_power_agree_p1": 1.0,
+        "ex_z_power_agree_p2": 1.0,
+        "ex_direction_agree_p1": 1.0,
+        "ex_direction_agree_p2": 1.0,
+        "ex_y_fired_fraction_p1": 1.0,
+        "ex_y_fired_fraction_p2": 1.0,
+        "ex_z_fired_fraction_p1": 0.0,
+        "ex_z_fired_fraction_p2": 0.0,
+        "ex_search_complete_p1": 1.0,
+        "ex_search_complete_p2": 1.0,
+        "ex_search_cutoff_p1": 0.0,
+        "ex_search_cutoff_p2": 0.0,
+        "ex_completed_tapes_nf_p1": 1.0,
+        "ex_completed_tapes_nf_p2": 1.0,
+        "ex_proof_dead_p1": 0.0,
+        "ex_proof_dead_p2": 0.0,
+        "ex_hyp_dead_fraction_p1": 0.0,
+        "ex_hyp_dead_fraction_p2": 1.0,
+        "mk_ex_y_p1": 8,
+        "mk_ex_y_p2": 0,
+        "mk_ex_z_p1": 0,
+        "mk_ex_z_p2": 8,
+        "mk_ex_pair_p1": 0,
+        "mk_ex_pair_p2": 0,
+        "mk_ex_proof_p1": 0,
+        "mk_ex_proof_p2": 0,
+        "av_ex_p1": NaN,
+        "av_ex_p2": NaN
+      }
+    },
+    {
+      "mode": "cutoff",
+      "input": {
+        "output": {
+          "selection": {
+            "branches": [
+              {
+                "sample": 0,
+                "y_policy": "y",
+                "z_policy": "z",
+                "factual_reply_used": false,
+                "Y": {
+                  "scores": [
+                    100
+                  ],
+                  "moves": 2,
+                  "fire_sec": 1.0
+                },
+                "Z": {
+                  "scores": [
+                    40
+                  ],
+                  "moves": 1,
+                  "fire_sec": null
+                },
+                "accounting": {
+                  "pending": [
+                    3,
+                    5
+                  ],
+                  "projected_dead": [
+                    false,
+                    true
+                  ]
+                },
+                "events": [
+                  {
+                    "t": 1.0,
+                    "kind": 0,
+                    "side": 1,
+                    "source": "Y",
+                    "amount": 7
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 0,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 3
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 1,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 0
+                  }
+                ],
+                "y_surplus": [
+                  {
+                    "sent_surplus": 5
+                  }
+                ],
+                "z_surplus": [
+                  {
+                    "sent_surplus": 1
+                  }
+                ]
+              },
+              {
+                "sample": 1,
+                "y_policy": "y",
+                "z_policy": "z",
+                "factual_reply_used": false,
+                "Y": {
+                  "scores": [
+                    140
+                  ],
+                  "moves": 3,
+                  "fire_sec": 1.0
+                },
+                "Z": {
+                  "scores": [
+                    40
+                  ],
+                  "moves": 1,
+                  "fire_sec": null
+                },
+                "accounting": {
+                  "pending": [
+                    3,
+                    5
+                  ],
+                  "projected_dead": [
+                    false,
+                    true
+                  ]
+                },
+                "events": [
+                  {
+                    "t": 1.0,
+                    "kind": 0,
+                    "side": 1,
+                    "source": "Y",
+                    "amount": 7
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 0,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 3
+                  },
+                  {
+                    "t": 2.0,
+                    "kind": 1,
+                    "side": 0,
+                    "source": "Z",
+                    "amount": 0
+                  }
+                ],
+                "y_surplus": [
+                  {
+                    "sent_surplus": 5
+                  }
+                ],
+                "z_surplus": [
+                  {
+                    "sent_surplus": 1
+                  }
+                ]
+              }
+            ],
+            "selected_policy": [
+              "y",
+              "z"
+            ]
+          },
+          "receiver": 1,
+          "attacker": 0,
+          "cutoff": true,
+          "complete": false,
+          "completed_tapes": 2
+        },
+        "proof": {
+          "ok": true,
+          "death_sides": []
+        },
+        "observed_scores": null
+      },
+      "expected": {
+        "ex_y_score_p1": NaN,
+        "ex_y_score_p2": 120.0,
+        "ex_y_generated_p1": NaN,
+        "ex_y_generated_p2": 7.0,
+        "ex_y_sent_p1": NaN,
+        "ex_y_sent_p2": 5.0,
+        "ex_y_pending_p1": NaN,
+        "ex_y_pending_p2": 5.0,
+        "ex_hY_p1": NaN,
+        "ex_hY_p2": 2.5,
+        "ex_z_score_p1": 40.0,
+        "ex_z_score_p2": NaN,
+        "ex_z_generated_p1": 3.0,
+        "ex_z_generated_p2": NaN,
+        "ex_z_sent_p1": 1.0,
+        "ex_z_sent_p2": NaN,
+        "ex_z_pending_p1": 3.0,
+        "ex_z_pending_p2": NaN,
+        "ex_hZ_p1": 1.0,
+        "ex_hZ_p2": NaN,
+        "ex_y_score_nf_p1": NaN,
+        "ex_y_score_nf_p2": 0.6151769365206361,
+        "ex_y_generated_nf_p1": NaN,
+        "ex_y_generated_nf_p2": 0.4093838908503587,
+        "ex_y_sent_nf_p1": NaN,
+        "ex_y_sent_nf_p2": 0.3739251689769614,
+        "ex_y_pending_nf_p1": NaN,
+        "ex_y_pending_nf_p2": 0.3739251689769614,
+        "ex_hY_nf_p1": NaN,
+        "ex_hY_nf_p2": 0.29457625025798156,
+        "ex_z_score_nf_p1": 0.5531439939583906,
+        "ex_z_score_nf_p2": NaN,
+        "ex_z_generated_nf_p1": 0.3160513743464193,
+        "ex_z_generated_nf_p2": NaN,
+        "ex_z_sent_nf_p1": 0.18768468914765865,
+        "ex_z_sent_nf_p2": NaN,
+        "ex_z_pending_nf_p1": 0.3160513743464193,
+        "ex_z_pending_nf_p2": NaN,
+        "ex_hZ_nf_p1": 0.18768468914765865,
+        "ex_hZ_nf_p2": NaN,
+        "ex_y_power_agree_p1": 0.7142857142857143,
+        "ex_y_power_agree_p2": 0.7142857142857143,
+        "ex_z_power_agree_p1": 1.0,
+        "ex_z_power_agree_p2": 1.0,
+        "ex_direction_agree_p1": 1.0,
+        "ex_direction_agree_p2": 1.0,
+        "ex_y_fired_fraction_p1": 1.0,
+        "ex_y_fired_fraction_p2": 1.0,
+        "ex_z_fired_fraction_p1": 0.0,
+        "ex_z_fired_fraction_p2": 0.0,
+        "ex_search_complete_p1": 0.0,
+        "ex_search_complete_p2": 0.0,
+        "ex_search_cutoff_p1": 1.0,
+        "ex_search_cutoff_p2": 1.0,
+        "ex_completed_tapes_nf_p1": 1.0,
+        "ex_completed_tapes_nf_p2": 1.0,
+        "ex_proof_dead_p1": 0.0,
+        "ex_proof_dead_p2": 0.0,
+        "ex_hyp_dead_fraction_p1": 0.0,
+        "ex_hyp_dead_fraction_p2": 1.0,
+        "mk_ex_y_p1": 8,
+        "mk_ex_y_p2": 0,
+        "mk_ex_z_p1": 0,
+        "mk_ex_z_p2": 8,
+        "mk_ex_pair_p1": 0,
+        "mk_ex_pair_p2": 0,
+        "mk_ex_proof_p1": 0,
+        "mk_ex_proof_p2": 0,
+        "av_ex_p1": NaN,
+        "av_ex_p2": NaN
+      }
+    },
+    {
+      "mode": "incomplete",
+      "input": {
+        "output": {
+          "selection": null,
+          "receiver": 1,
+          "attacker": 0,
+          "cutoff": false,
+          "complete": true,
+          "completed_tapes": 1
+        },
+        "proof": {
+          "ok": true,
+          "death_sides": []
+        },
+        "observed_scores": null
+      },
+      "expected": {
+        "ex_y_score_p1": NaN,
+        "ex_y_score_p2": NaN,
+        "ex_y_generated_p1": NaN,
+        "ex_y_generated_p2": NaN,
+        "ex_y_sent_p1": NaN,
+        "ex_y_sent_p2": NaN,
+        "ex_y_pending_p1": NaN,
+        "ex_y_pending_p2": NaN,
+        "ex_hY_p1": NaN,
+        "ex_hY_p2": NaN,
+        "ex_z_score_p1": NaN,
+        "ex_z_score_p2": NaN,
+        "ex_z_generated_p1": NaN,
+        "ex_z_generated_p2": NaN,
+        "ex_z_sent_p1": NaN,
+        "ex_z_sent_p2": NaN,
+        "ex_z_pending_p1": NaN,
+        "ex_z_pending_p2": NaN,
+        "ex_hZ_p1": NaN,
+        "ex_hZ_p2": NaN,
+        "ex_y_score_nf_p1": NaN,
+        "ex_y_score_nf_p2": NaN,
+        "ex_y_generated_nf_p1": NaN,
+        "ex_y_generated_nf_p2": NaN,
+        "ex_y_sent_nf_p1": NaN,
+        "ex_y_sent_nf_p2": NaN,
+        "ex_y_pending_nf_p1": NaN,
+        "ex_y_pending_nf_p2": NaN,
+        "ex_hY_nf_p1": NaN,
+        "ex_hY_nf_p2": NaN,
+        "ex_z_score_nf_p1": NaN,
+        "ex_z_score_nf_p2": NaN,
+        "ex_z_generated_nf_p1": NaN,
+        "ex_z_generated_nf_p2": NaN,
+        "ex_z_sent_nf_p1": NaN,
+        "ex_z_sent_nf_p2": NaN,
+        "ex_z_pending_nf_p1": NaN,
+        "ex_z_pending_nf_p2": NaN,
+        "ex_hZ_nf_p1": NaN,
+        "ex_hZ_nf_p2": NaN,
+        "ex_y_power_agree_p1": NaN,
+        "ex_y_power_agree_p2": NaN,
+        "ex_z_power_agree_p1": NaN,
+        "ex_z_power_agree_p2": NaN,
+        "ex_direction_agree_p1": NaN,
+        "ex_direction_agree_p2": NaN,
+        "ex_y_fired_fraction_p1": NaN,
+        "ex_y_fired_fraction_p2": NaN,
+        "ex_z_fired_fraction_p1": NaN,
+        "ex_z_fired_fraction_p2": NaN,
+        "ex_search_complete_p1": 1.0,
+        "ex_search_complete_p2": 1.0,
+        "ex_search_cutoff_p1": 0.0,
+        "ex_search_cutoff_p2": 0.0,
+        "ex_completed_tapes_nf_p1": 0.5,
+        "ex_completed_tapes_nf_p2": 0.5,
+        "ex_proof_dead_p1": 0.0,
+        "ex_proof_dead_p2": 0.0,
+        "ex_hyp_dead_fraction_p1": NaN,
+        "ex_hyp_dead_fraction_p2": NaN,
+        "mk_ex_y_p1": 8,
+        "mk_ex_y_p2": 6,
+        "mk_ex_z_p1": 6,
+        "mk_ex_z_p2": 8,
+        "mk_ex_pair_p1": 6,
+        "mk_ex_pair_p2": 6,
+        "mk_ex_proof_p1": 0,
+        "mk_ex_proof_p2": 0,
+        "av_ex_p1": NaN,
+        "av_ex_p2": NaN
+      }
+    },
+    {
+      "mode": "proof_only",
+      "input": {
+        "output": {
+          "selection": null,
+          "receiver": 1,
+          "attacker": 0,
+          "cutoff": false,
+          "complete": true,
+          "completed_tapes": 1
+        },
+        "proof": {
+          "ok": true,
+          "death_sides": [
+            0
+          ]
+        },
+        "observed_scores": null
+      },
+      "expected": {
+        "ex_y_score_p1": NaN,
+        "ex_y_score_p2": NaN,
+        "ex_y_generated_p1": NaN,
+        "ex_y_generated_p2": NaN,
+        "ex_y_sent_p1": NaN,
+        "ex_y_sent_p2": NaN,
+        "ex_y_pending_p1": NaN,
+        "ex_y_pending_p2": NaN,
+        "ex_hY_p1": NaN,
+        "ex_hY_p2": NaN,
+        "ex_z_score_p1": NaN,
+        "ex_z_score_p2": NaN,
+        "ex_z_generated_p1": NaN,
+        "ex_z_generated_p2": NaN,
+        "ex_z_sent_p1": NaN,
+        "ex_z_sent_p2": NaN,
+        "ex_z_pending_p1": NaN,
+        "ex_z_pending_p2": NaN,
+        "ex_hZ_p1": NaN,
+        "ex_hZ_p2": NaN,
+        "ex_y_score_nf_p1": NaN,
+        "ex_y_score_nf_p2": NaN,
+        "ex_y_generated_nf_p1": NaN,
+        "ex_y_generated_nf_p2": NaN,
+        "ex_y_sent_nf_p1": NaN,
+        "ex_y_sent_nf_p2": NaN,
+        "ex_y_pending_nf_p1": NaN,
+        "ex_y_pending_nf_p2": NaN,
+        "ex_hY_nf_p1": NaN,
+        "ex_hY_nf_p2": NaN,
+        "ex_z_score_nf_p1": NaN,
+        "ex_z_score_nf_p2": NaN,
+        "ex_z_generated_nf_p1": NaN,
+        "ex_z_generated_nf_p2": NaN,
+        "ex_z_sent_nf_p1": NaN,
+        "ex_z_sent_nf_p2": NaN,
+        "ex_z_pending_nf_p1": NaN,
+        "ex_z_pending_nf_p2": NaN,
+        "ex_hZ_nf_p1": NaN,
+        "ex_hZ_nf_p2": NaN,
+        "ex_y_power_agree_p1": NaN,
+        "ex_y_power_agree_p2": NaN,
+        "ex_z_power_agree_p1": NaN,
+        "ex_z_power_agree_p2": NaN,
+        "ex_direction_agree_p1": NaN,
+        "ex_direction_agree_p2": NaN,
+        "ex_y_fired_fraction_p1": NaN,
+        "ex_y_fired_fraction_p2": NaN,
+        "ex_z_fired_fraction_p1": NaN,
+        "ex_z_fired_fraction_p2": NaN,
+        "ex_search_complete_p1": 1.0,
+        "ex_search_complete_p2": 1.0,
+        "ex_search_cutoff_p1": 0.0,
+        "ex_search_cutoff_p2": 0.0,
+        "ex_completed_tapes_nf_p1": 0.5,
+        "ex_completed_tapes_nf_p2": 0.5,
+        "ex_proof_dead_p1": 1.0,
+        "ex_proof_dead_p2": 0.0,
+        "ex_hyp_dead_fraction_p1": NaN,
+        "ex_hyp_dead_fraction_p2": NaN,
+        "mk_ex_y_p1": 8,
+        "mk_ex_y_p2": 6,
+        "mk_ex_z_p1": 6,
+        "mk_ex_z_p2": 8,
+        "mk_ex_pair_p1": 6,
+        "mk_ex_pair_p2": 6,
+        "mk_ex_proof_p1": 0,
+        "mk_ex_proof_p2": 0,
+        "av_ex_p1": NaN,
+        "av_ex_p2": NaN
+      }
+    }
+  ]
+}

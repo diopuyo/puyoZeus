@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle 58 (= 案 A): 38 動画で 7 クラス seed 採取 (= ojama 含む).
 # 並列 3 で時間短縮。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/phase_l/seeds_cycle58
 mkdir -p logs/cycle58_seed

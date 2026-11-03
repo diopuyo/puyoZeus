@@ -1,6 +1,6 @@
 #!/bin/bash
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 FF=$(PYTHONPATH=. ./venv/bin/python -c "from src.video_compositer import VideoCompositor; print(VideoCompositor._resolve_ffmpeg_bin())")
 echo "FFBIN=${FF}"
 rm -f /tmp/test_audio.aac

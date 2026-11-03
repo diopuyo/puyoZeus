@@ -6,7 +6,7 @@
 #
 # 出力ファイルの成長量から実効速度を出す。
 # 基準: 認識色重畳なしの1080p出力は動画1秒あたり約1MB (プローブ実測 300秒→300MB)。
-DIR=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/zenchi_render_2026-08-21
+DIR=<home>/.gemini/antigravity/scratch/puyo_analyzer/data/verify/zenchi_render_2026-08-21
 INTERVAL=60
 BYTES_PER_VIDEO_SEC=1048576  # 約1MB/動画秒
 

@@ -14,7 +14,7 @@
 # 変えるが、`enable_death_confirm_sequence=False` の OFF では death 列が
 # dump に出ないため bit-identical であるはず。「はず」で済ませず実測する。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 PY=./venv/bin/python
 

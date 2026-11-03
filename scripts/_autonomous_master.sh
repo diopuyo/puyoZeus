@@ -6,7 +6,7 @@
 #   2. 完了したら autonomous_sweep / cycle51_ojama_dryrun を background 起動
 #   3. 進捗 dashboard を 5 分ごと更新 (= logs/autonomous_dashboard.md)
 #   4. 朝 7:30 まで loop continuance (= 自走 cron 風)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health autonomous_master
@@ -66,7 +66,7 @@ start_autonomous_sweep_if_ready() {
      && ! pgrep -f "autonomous_sweep" > /dev/null; then
     mkdir -p logs/autonomous_sweep_main
     touch logs/autonomous_sweep_main/started.flag
-    setsid -f bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.autonomous_sweep --sweep all > logs/autonomous_sweep_main.log 2>&1; touch logs/autonomous_sweep_main/all_done.flag" < /dev/null
+    setsid -f bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.autonomous_sweep --sweep all > logs/autonomous_sweep_main.log 2>&1; touch logs/autonomous_sweep_main/all_done.flag" < /dev/null
     echo "[master] autonomous_sweep started @ $(date)"
   fi
 }

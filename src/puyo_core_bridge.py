@@ -71,6 +71,16 @@ except ImportError:
     NATIVE_AVAILABLE = False
 
 
+def b3_pair_search(grid: np.ndarray, queue: tuple[int, ...], colors: tuple[int, ...],
+                   hmax: int, width: int, resolve: bool, shortlist: int,
+                   observed: tuple[int, ...] = ()) -> tuple[list[int], list[int], int, bool, bool, int]:
+    """B3専用API。古い拡張のまま旧探索へ黙って戻ることは禁止する。"""
+    if not NATIVE_AVAILABLE or not hasattr(_native, "b3_search_py"):
+        raise RuntimeError("B3探索には更新したpuyo_coreが必要: native/puyo_coreでmaturin develop --release")
+    return _native.b3_search_py(np.asarray(grid).ravel().tolist(), list(queue), list(colors),
+                                hmax, width, resolve, shortlist, list(observed))
+
+
 # ============================
 # 配置列挙定数 (`src/indicators_v2.py::_enumerate_placements` 準拠、
 # マジックナンバー禁止のため名前付き定数として複製する。既存関数は無変更)
@@ -643,6 +653,18 @@ class PlacementSimResult:
     placed_board: Board
     is_dead: bool
     chain_result: ChainSimResult
+
+
+def b3_origin_candidates(board: Board, pairs: tuple, hidden: bool,
+                         parallel: bool = True) -> tuple[list[dict], int] | None:
+    """発火候補の段別結果だけ境界を渡す。旧wheel・未採用時は従来実装へ戻す。"""
+    from src.production_config import B3_ORIGIN_NATIVE_ENABLED
+    if not B3_ORIGIN_NATIVE_ENABLED or not NATIVE_AVAILABLE or not hasattr(_native, 'b3_origin_completions_py'):
+        return None
+    rows, trials = _native.b3_origin_completions_py(_grid_to_flat_list(board), pairs, hidden, parallel)
+    return [dict(prefix=tuple(prefix), colors=tuple(map(tuple, colors)), score=score,
+                 board=np.asarray(grid).reshape(BOARD_ROWS, BOARD_COLS).tolist(), weight=weight)
+            for prefix, colors, score, grid, weight in rows], trials
 
 
 def enumerate_and_simulate_placements(

@@ -2,7 +2,7 @@
 # 幻満杯盤面 検知器の妥当性確認: 検知上位動画の代表時刻フレームを抽出する。
 # 演出画面/ロビーなら真陽性、 実戦の終局盤面なら偽陽性 (閾値が緩い)。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 OUT=data/verify/phase_l_quality_gate_2026-08-07/triage_frames
 mkdir -p "$OUT"

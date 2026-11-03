@@ -3,7 +3,7 @@
 # t=29 (user 指摘: 1P の色ぷよが多く有利なはず)、 t=54.5 / 58 (大連鎖中の逆転)、
 # t=66 (1P 撃ち切り・2P 窒息寸前) を確認する。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 DEMO=data/verify/youtube_demo_2026-08-07
 OUT="$DEMO/final_check"

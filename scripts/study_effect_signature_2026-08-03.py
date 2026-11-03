@@ -34,6 +34,14 @@ Usage:
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,7 +80,7 @@ NPZ_DIR: Path = PROJ_ROOT / "data" / "indicators_v2" / "boards_lean_regen_2026-0
 
 # ローカル動画キャッシュ探索先 (WSLネイティブ優先、無ければリポジトリ相対)。
 # scripts/extract_exchange_event_frames.py の resolve_cached_video_path と同じ設計。
-WSL_NATIVE_FRAMES_DIR: Path = Path("/home/ryouj/frames")
+WSL_NATIVE_FRAMES_DIR: Path = Path(_public_dev_text('<home>/frames'))
 REPO_FRAMES_DIR: Path = PROJ_ROOT / "data" / "frames"
 
 # 調査対象動画 (バースト参照4本 [c18/c5/c29/c19] + 多様性確保の追加4本)。

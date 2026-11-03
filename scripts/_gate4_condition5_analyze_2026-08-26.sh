@@ -1,7 +1,7 @@
 #!/bin/bash
 # 条件5の会計検収とOFF表示比較を同じ成果物集合から実行する。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 OFF=data/verify/gate4_formal_dense_2026-08-26/cond1_off_baseline
 ON=data/verify/gate4_condition5_2026-08-26/cond5_exchange_episode_v12

@@ -91,7 +91,7 @@
 #
 # 対処: 環境変数で BLAS 系と OpenCV のスレッドを1に固定する。
 # 1プロセス1コアにして、並列数でスケールさせる思想 (収集と同じ)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 # BLAS/OpenMP 系のスレッドを1に固定 (過剰生成の防止)
 export OMP_NUM_THREADS=1

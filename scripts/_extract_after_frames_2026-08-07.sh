@@ -1,6 +1,6 @@
 #!/bin/bash
 # 学習後viz対比フレーム抽出 (m01クリップ相対: t=30がBefore viz_t30s相当、t=64がバースト)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 OUT=data/verify/youtube_demo_2026-08-07/stills
 for t in 30 64; do
   nice -n 19 ./venv/bin/ffmpeg -y -loglevel error -ss "$t" \

@@ -7,7 +7,7 @@
 #
 # setsid -f 経由で detach 起動する前提 (CLAUDE.md プロセス管理ルール)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 
 TARGET_N="${1:-20}"

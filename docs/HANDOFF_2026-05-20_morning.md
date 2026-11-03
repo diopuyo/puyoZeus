@@ -290,9 +290,9 @@ src/hybrid_classifier.py:BG_DIST_BOOST_MAX = 0.0  # 撤回 (cycle 34-36)
 
 最良候補 = cycle 37 (= threshold 25):
 ```
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\review_videos\cycle37\cycle37_v89m3.mp4
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\review_videos\cycle37\cycle37_v97m11.mp4
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\review_videos\cycle37\cycle37_v70m2.mp4
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\review_videos\cycle37\cycle37_v89m3.mp4
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\review_videos\cycle37\cycle37_v97m11.mp4
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\review_videos\cycle37\cycle37_v70m2.mp4
 ```
 
 ユーザー目視で「v97m11 の青誤認が cycle 33 比 で大幅減」 を確認できれば採用確定。

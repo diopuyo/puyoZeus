@@ -2,7 +2,7 @@
 # 2026-07-26 user指示: 21:00-22:00 は CPU/メモリを25%以上空ける。
 # 走行中の重いPythonジョブを21:00にSIGSTOPで凍結し、22:00にSIGCONTで再開する。
 set -u
-LOG=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/logs/throttle_2100_2200_2026-07-26.log
+LOG=<home>/.gemini/antigravity/scratch/puyo_analyzer/logs/throttle_2100_2200_2026-07-26.log
 PATTERN='measure_stable_cell_acc|_collect_1t|extract_match_winners|_zap_1t'
 
 now_epoch=$(date +%s)

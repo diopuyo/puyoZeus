@@ -1,0 +1,12 @@
+{
+  "rows": 28,
+  "fields": [
+    "frame",
+    "t_sec",
+    "trigger",
+    "raw_probability",
+    "error"
+  ],
+  "equal": true,
+  "scope": "生確率とトリガーのみ。公開確率・全評価行の検証ではない"
+}

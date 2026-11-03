@@ -1,6 +1,6 @@
 #!/bin/bash
 # cycle_10 (0.70) 完走後に cycle_11 (0.80) を自動起動する
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 # cycle_10 完走待ち (5 動画 mp4 全部できるまで)
 echo "[chain] waiting cycle_10 completion..."

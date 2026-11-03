@@ -17,7 +17,7 @@ wsl -d Ubuntu sudo apt install -y fonts-noto-cjk
 ### 3. バッチをダブルクリック
 プロジェクトフォルダ:
 ```
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\
+<home>\.gemini\antigravity\scratch\puyo_analyzer\
 ```
 
 | バッチ | 推奨度 |
@@ -165,7 +165,7 @@ data\pseudo_labels\<video_id>\frame_state.jsonl   (X-2: frame 状態ラベル、
 
 #### A. cell 色 CNN (= 既存):
 ```
-wsl -d Ubuntu bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_i_fine_tune --component cell_color --all"
+wsl -d Ubuntu bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_i_fine_tune --component cell_color --all"
 ```
 
 #### B. frame state CNN (= X-2、 将来実装):

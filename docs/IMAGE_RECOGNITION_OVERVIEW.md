@@ -890,34 +890,34 @@ mitigation: chain_event=None 中のみ filter 適用、CHAIN state 中はスキ�
 
 | 役割 | パス |
 |---|---|
-| 統合 pipeline | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\recognition_pipeline.py` |
-| 旧 pipeline | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\board_recognition_pipeline.py` |
-| ROI / HSV 分類 | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\image_reader.py` |
-| Patch 分類器 | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\patch_classifier.py` |
-| HSV+CNN ハイブリッド | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\hybrid_classifier.py` |
-| State machine | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\board_state_machine.py` |
-| State detectors | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\state_detectors.py` |
-| 推論盤面 | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\inference_board.py` |
-| Drift detector | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\drift_detector.py` |
-| Temporal smoothing | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\temporal_smoother.py` |
-| Stateful tracker | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\stateful_board_tracker.py` |
-| 物理ルール | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\board_rules.py` |
-| Physics sanity | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\physics_sanity.py` |
-| UI mask | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\ui_mask.py` |
-| Cell refiner | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\cell_recovery_refiner.py` |
-| 隠し段確率 | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\hidden_row_inferrer.py` |
-| 確率盤面 | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\probabilistic_board.py` |
-| Next 検出 | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\next_detector.py` |
-| Match state | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\match_state.py` |
-| Win panel | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\win_panel.py` |
-| Score zero | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\score_zero.py` |
-| Match winner | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\match_winner.py` |
-| Score OCR | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\score_ocr.py` |
-| Chain detector | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\chain_detector.py` |
-| Per-video selector | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\per_video_model_selector.py` |
-| Online HSV (未統合) | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\online_hsv_calibrator.py` |
-| Calibration | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\calibration.py` |
-| Storage | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\src\storage.py` |
+| 統合 pipeline | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\recognition_pipeline.py` |
+| 旧 pipeline | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\board_recognition_pipeline.py` |
+| ROI / HSV 分類 | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\image_reader.py` |
+| Patch 分類器 | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\patch_classifier.py` |
+| HSV+CNN ハイブリッド | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\hybrid_classifier.py` |
+| State machine | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\board_state_machine.py` |
+| State detectors | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\state_detectors.py` |
+| 推論盤面 | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\inference_board.py` |
+| Drift detector | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\drift_detector.py` |
+| Temporal smoothing | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\temporal_smoother.py` |
+| Stateful tracker | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\stateful_board_tracker.py` |
+| 物理ルール | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\board_rules.py` |
+| Physics sanity | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\physics_sanity.py` |
+| UI mask | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\ui_mask.py` |
+| Cell refiner | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\cell_recovery_refiner.py` |
+| 隠し段確率 | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\hidden_row_inferrer.py` |
+| 確率盤面 | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\probabilistic_board.py` |
+| Next 検出 | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\next_detector.py` |
+| Match state | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\match_state.py` |
+| Win panel | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\win_panel.py` |
+| Score zero | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\score_zero.py` |
+| Match winner | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\match_winner.py` |
+| Score OCR | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\score_ocr.py` |
+| Chain detector | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\chain_detector.py` |
+| Per-video selector | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\per_video_model_selector.py` |
+| Online HSV (未統合) | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\online_hsv_calibrator.py` |
+| Calibration | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\calibration.py` |
+| Storage | `<home>\.gemini\antigravity\scratch\puyo_analyzer\src\storage.py` |
 
 ### 9.2 関連 memory (`~/.claude/projects/.../memory/`)
 

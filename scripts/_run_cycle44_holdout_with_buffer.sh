@@ -2,7 +2,7 @@
 # cycle 44: 試合 11 を 15 秒前から切り出し (= 862-966 秒、 104 秒)
 # 認識 pipeline ウォームアップ用バッファ確保、 ユーザー指摘「14 秒で品質 OK」 検証
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/holdout_videos
 mkdir -p data/review_videos/cycle44

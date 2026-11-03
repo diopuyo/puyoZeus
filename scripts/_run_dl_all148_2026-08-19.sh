@@ -7,16 +7,16 @@
 # Cookie は毎回マスターから使い捨てコピーを作る (yt-dlp の書き戻しでマスターが
 # 壊れるのを防ぐ、2026-08-18 実測)。直列で回す。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 mkdir -p logs
 exec >> logs/dl_all148_2026-08-19.log 2>&1
 echo "[dl148] 開始 $(date)"
-SP="/mnt/c/Users/ryouj/AppData/Local/Temp/claude/C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/22abd085-8e57-4d2a-857e-8516be642774/scratchpad"
+SP="<home>/AppData/Local/Temp/claude/C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/22abd085-8e57-4d2a-857e-8516be642774/scratchpad"
 CKM="$SP/yt_cookies_master.txt"
 CK="$SP/yt_cookies_work_all148.txt"
-NODE=/home/ryouj/.nvm/versions/node/v24.19.0/bin/node
-FF=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
+NODE=<home>/.nvm/versions/node/v24.19.0/bin/node
+FF=<home>/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
 FMT='bv*[vcodec^=avc1][height<=1080]+ba/b[ext=mp4][vcodec^=avc1][height<=1080]/b[height<=1080][vcodec!*=av01]/b[ext=mp4]'
 MAN=data/verify/dl_all148_targets_2026-08-19.tsv
 MIN_FREE_GB=40

@@ -1,6 +1,6 @@
 #!/bin/bash
 # 修正C viz 完了待ち: 最大5分刻みで確認。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 n=0
 while pgrep -f _viz_chain_debounce_before_after > /dev/null && [ "$n" -lt 28 ]; do
   sleep 10

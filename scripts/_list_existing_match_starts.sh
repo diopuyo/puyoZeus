@@ -1,6 +1,6 @@
 #!/bin/bash
 # 各 evaluation_videos に対応する match の start_sec を表示
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 # evaluation_videos のファイル名から (video_id, match_idx) を抽出
 declare -A MATCH_MAP=(

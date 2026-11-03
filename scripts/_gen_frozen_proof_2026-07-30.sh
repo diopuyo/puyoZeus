@@ -21,7 +21,7 @@
 # warmup=30 は無害でむしろ初期収束に有利と実測済み、校正ONは盤面表示に影響しないと実フレームで確認済み。
 
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 OUT_DIR=data/verify/frozen_proof_2026-07-30
 LOG=logs/gen_frozen_proof_2026-07-30.log

@@ -17,6 +17,7 @@ Phase Z-1 (半自動 GT ツール) の suspicious 解析で判明した CNN の�
     - 統合先は StatePipeline.extract、CNN 分類後・他補正レイヤー前
 """
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 from dataclasses import dataclass
 
@@ -107,7 +108,7 @@ class CellRecoveryRefiner:
         vote_count = 0
         # Z-3C: HSV 全体変換は 1 度だけ (P1/P2 で共有可能)
         if hsv_full is None:
-            hsv_full = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            hsv_full = cv2.cvtColor(full_image(frame), cv2.COLOR_BGR2HSV)
         # 上から順に補正 (airborne チェックは下端から行うため、補正 → 検証)
         for vrow in range(12):
             row = vrow + HIDDEN_ROWS

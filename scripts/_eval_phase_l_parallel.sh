@@ -2,7 +2,7 @@
 # Phase L 評価 並列 3 版.
 # シリアル版 (= _eval_phase_l.sh) の代替、 並列で時間短縮。
 # 既存 report (= .json) あれば skip。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health phase_l_eval_par

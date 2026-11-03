@@ -6,7 +6,7 @@
 #   - --cell-base-model に baseline (cnn_phase_b_large_v2.pt) を渡して同 arch 保証
 #   - または完全 scratch で base なしを試す → ただし phase_i_fine_tune.py は base 必須っぽい
 #   - 安全策: baseline を base にして fine-tune 風に学習 (= ただし epochs 多めで scratch 近い学習量)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p logs/phase_l
 

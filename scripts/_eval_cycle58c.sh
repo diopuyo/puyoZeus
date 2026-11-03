@@ -1,6 +1,6 @@
 #!/bin/bash
 # cycle 58c 評価 並列 3.
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/verify/cycle58c_viz
 mkdir -p data/verify/cycle58c_eval

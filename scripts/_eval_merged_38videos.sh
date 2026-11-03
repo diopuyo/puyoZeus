@@ -1,7 +1,7 @@
 #!/bin/bash
 # Step 2: 38 動画 union 版 _merged_default.json の効果評価.
 # 8 動画 + 4 動画 (= ユーザー目視) 並列 3 で測定。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/verify/merged38_viz
 mkdir -p data/verify/merged38_eval

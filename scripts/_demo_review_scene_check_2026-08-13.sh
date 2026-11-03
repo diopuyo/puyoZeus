@@ -1,7 +1,7 @@
 #!/bin/bash
 # デモレビュー#3/#4/#5/#8 検証用: OLD/NEW構成のタイムラインdump比較 (使い捨て、コミット対象外)。
 # 3場面 (source 196s / 235-245s / 347s) を短い窓 (前後わずかな余裕+ウォームアップ) だけ処理する。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/frames/review_demo_2026-08-12.mp4

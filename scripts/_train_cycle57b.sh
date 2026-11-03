@@ -9,7 +9,7 @@
 # 中間層も c56_v3b の「ojama 維持済」 状態から微調整なので退行少ない期待。
 #
 # 設定: epochs 3、 lr 5e-6 (= さらに軽量、 c56_v3b 状態保持優先)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p logs
 

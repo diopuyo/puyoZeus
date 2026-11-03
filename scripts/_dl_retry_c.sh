@@ -1,7 +1,7 @@
 #!/bin/bash
 # 403で落ちた c9/c31 を個別再DL(H.264強制)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
-FF=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+FF=<home>/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
 names=(c9 c31)
 ids=(mtNoLwHSg1A 80W5JXVxM7U)
 for i in "${!names[@]}"; do

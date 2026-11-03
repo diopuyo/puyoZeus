@@ -2,7 +2,7 @@
 # #43: c系93本の勝敗抽出(WIN★パネル差分方式、コミット99a7172)を夜間一括実行。
 # 22:00以降開始(21-22時はCPU/メモリ25%空けのuser指示)。3並列・nice。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 OUT=data/verify/winners_panel_diff_2026-07-26
 LOG=logs/winners_panel_diff_all93_2026-07-26.log
 mkdir -p "$OUT"

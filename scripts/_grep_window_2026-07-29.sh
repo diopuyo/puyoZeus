@@ -1,7 +1,7 @@
 #!/bin/bash
 # ログから指定秒範囲の settled/SETTLED 行だけ抜き出す(MSYSパイプ回避のためファイル化)。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 LOG="$1"
 LO="$2"
 HI="$3"

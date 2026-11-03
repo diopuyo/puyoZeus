@@ -16,7 +16,7 @@
 # (_rescan_zenchi_kill_override_fix_v2_2026-08-22.sh と同じ設計判断)。
 # 出力は既存 dump を一切上書きしない別ディレクトリに書く
 # (user指示: 既存の dump は上書きしないこと)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1

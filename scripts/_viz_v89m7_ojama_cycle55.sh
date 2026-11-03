@@ -4,7 +4,7 @@
 # v89m7 = ojama 降下 (= 相手連鎖からの送り) が複数回あるシーン。
 # cycle 32 ojama 構造的除外 を撤回後、 既存 base model (= cnn_phase_b_large_v2.pt)
 # の ojama 認識が cycle 55 fine-tune で壊れていないかをユーザー目視で確認する。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health cycle55_viz_v89m7_ojama

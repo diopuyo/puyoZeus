@@ -1,7 +1,7 @@
 #!/bin/bash
 # evaluation_videos_v2 標準化 (= 15s バッファ付き 8 動画 を default に)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/evaluation_videos_v2
 cp data/holdout_videos/v29m2_buf15s.mp4 data/evaluation_videos_v2/v29m2_buf15s.mp4

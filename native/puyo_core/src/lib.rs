@@ -12,12 +12,32 @@
 //! 一切触れない (`src/chain_bitboard.py` 等は無変更)。
 
 mod beam;
+mod b3;
+mod b3_origin;
 mod bitboard;
+mod ama_eval;
+mod ama_form;
+mod ama_order;
+mod ama_table;
+mod ama_search;
+mod ama_f;
+mod ama_exchange;
+mod ama_py;
+mod ama_reference_py;
+mod ama_weights;
+mod ama_budget;
+#[cfg(feature = "ama-profile")]
+mod ama_profile_clock;
 
 use std::sync::OnceLock;
 
 // HSV セル分類のネイティブ実装 (2026-08-20 追加)
 mod hsv_classify;
+
+// read_board の 1st pass (背景パッチ NCC・HSV 中央値・ガード分類) のネイティブ実装 (2026-10-25 追加)
+mod board_first_pass;
+// per-pixel 投票方式の HSV 分類 (ColorClassifier(vote_mode=True)) のネイティブ実装 (2026-10-25 追加)
+mod hsv_vote;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -49,6 +69,20 @@ fn get_or_build_pool(num_threads: usize) -> Result<&'static ThreadPool, String> 
 }
 
 const GRID_LEN: usize = BOARD_ROWS * BOARD_COLS;
+
+/// B3専用探索。既存指標・既存ビームの意味論は変更しない。
+#[pyfunction]
+fn b3_search_py(py: Python<'_>, grid: Vec<u8>, queue: Vec<u8>, colors: Vec<u8>,
+                hmax: usize, width: usize, resolve: bool, shortlist: usize,
+                observed: Vec<u8>) -> PyResult<b3::SearchOutput> {
+    let arr = grid_from_pylist(grid)?;
+    if hmax == 0 || width == 0 || colors.is_empty()
+        || colors.iter().chain(observed.iter()).any(|&c| !(1..=5).contains(&c)) || queue.iter().any(|&c| c > 5) {
+        return Err(PyValueError::new_err("B3探索引数が不正"));
+    }
+    Ok(py.allow_threads(|| b3::search(board_from_grid(&arr), &queue, &colors,
+                                      hmax, width, resolve, shortlist, &observed)))
+}
 
 fn grid_from_pylist(grid: Vec<u8>) -> PyResult<[u8; GRID_LEN]> {
     if grid.len() != GRID_LEN {
@@ -107,6 +141,34 @@ fn simulate_chain_py(
         exact_score: result.exact_score,
         final_grid: board_to_grid(&result.final_board),
     })
+}
+
+/// レビュー専用。既存の連鎖APIと本番の呼出しは変更しない。
+#[pyfunction]
+fn review_gravity_py(grid: Vec<u8>) -> PyResult<Vec<u8>> {
+    let arr = grid_from_pylist(grid)?;
+    Ok(board_to_grid(&bitboard::review_gravity(&board_from_grid(&arr))).to_vec())
+}
+
+#[pyfunction]
+fn simulate_chain_trace_py(py: Python<'_>, grid: Vec<u8>, hidden: bool)
+    -> PyResult<Vec<bitboard::TraceStep>> {
+    let arr = grid_from_pylist(grid)?;
+    if arr.iter().any(|&c| c != 0 && c != 9 && !(1..=5).contains(&c)) {
+        return Err(PyValueError::new_err("トレース入力の不明セルは先におじゃまへ置換してください"));
+    }
+    Ok(py.allow_threads(|| bitboard::simulate_chain_trace(&board_from_grid(&arr), hidden)))
+}
+
+#[cfg(feature = "compact-chain-summary")]
+#[pyfunction]
+fn simulate_chain_summary_py(py: Python<'_>, grid: Vec<u8>, hidden: bool)
+    -> PyResult<(Vec<i64>, Vec<i64>, Vec<u8>)> {
+    let arr = grid_from_pylist(grid)?;
+    if arr.iter().any(|&c| c != 0 && c != 9 && !(1..=5).contains(&c)) {
+        return Err(PyValueError::new_err("トレース入力の不明セルは先におじゃまへ置換してください"));
+    }
+    Ok(py.allow_threads(|| bitboard::simulate_chain_summary(&board_from_grid(&arr), hidden)))
 }
 
 /// 1 ステップ (1 消し) の同時消し詳細 (Python から属性アクセス可能、
@@ -467,6 +529,30 @@ pub struct PlacementSimResultPy {
     /// 連鎖解決後の盤面。
     #[pyo3(get)]
     pub final_grid: Vec<u8>,
+}
+
+/// B3発火起点の列挙・完走をPython境界内でまとめる。
+#[pyfunction]
+#[pyo3(signature = (grid, pairs, hidden, parallel=true))]
+fn b3_origin_candidates_py(py: Python<'_>, grid: Vec<u8>, pairs: Vec<(u8, u8)>,
+                           hidden: bool, parallel: bool) -> PyResult<(Vec<(Vec<u8>, usize)>, usize)> {
+    let arr = grid_from_pylist(grid)?;
+    if pairs.iter().any(|&(a, b)| !(1..=5).contains(&a) || !(1..=5).contains(&b)) {
+        return Err(PyValueError::new_err("組の色は1〜5が必要"));
+    }
+    Ok(py.allow_threads(|| b3_origin::candidates(board_from_grid(&arr), &pairs, hidden, parallel)))
+}
+
+#[pyfunction]
+#[pyo3(signature = (grid, pairs, hidden, parallel=true))]
+fn b3_origin_completions_py(py: Python<'_>, grid: Vec<u8>, pairs: Vec<(u8, u8)>,
+                            hidden: bool, parallel: bool)
+    -> PyResult<(Vec<b3_origin::Completion>, usize)> {
+    let arr = grid_from_pylist(grid)?;
+    if pairs.iter().any(|&(a, b)| !(1..=5).contains(&a) || !(1..=5).contains(&b)) {
+        return Err(PyValueError::new_err("組の色は1〜5が必要"));
+    }
+    Ok(py.allow_threads(|| b3_origin::completions(board_from_grid(&arr), &pairs, hidden, parallel)))
 }
 
 /// 22 配置を列挙し、各配置の連鎖シミュレーション結果まで一括して返す
@@ -937,19 +1023,31 @@ fn beam_search_continue_py(
 /// PyO3 モジュール定義。
 #[pymodule]
 fn puyo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    ama_reference_py::register(m)?;
+    ama_py::register(m)?;
     m.add_function(wrap_pyfunction!(simulate_chain_py, m)?)?;
+    m.add_function(wrap_pyfunction!(simulate_chain_trace_py, m)?)?;
+    #[cfg(feature = "compact-chain-summary")]
+    m.add_function(wrap_pyfunction!(simulate_chain_summary_py, m)?)?;
+    m.add_function(wrap_pyfunction!(review_gravity_py, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_chain_with_steps_py, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_after_drops_py, m)?)?;
     m.add_function(wrap_pyfunction!(chain_metrics_after_drops_py, m)?)?;
     m.add_function(wrap_pyfunction!(max_chain_after_drops_for_boards_py, m)?)?;
+    m.add_function(wrap_pyfunction!(b3_search_py, m)?)?;
     m.add_function(wrap_pyfunction!(potential_fire_power_raw_for_boards_py, m)?)?;
     m.add_function(wrap_pyfunction!(enumerate_placements_py, m)?)?;
     m.add_function(wrap_pyfunction!(enumerate_and_simulate_placements_py, m)?)?;
+    m.add_function(wrap_pyfunction!(b3_origin_candidates_py, m)?)?;
+    m.add_function(wrap_pyfunction!(b3_origin_completions_py, m)?)?;
     m.add_function(wrap_pyfunction!(select_build_placement_py, m)?)?;
     m.add_function(wrap_pyfunction!(beam_search_py, m)?)?;
     m.add_function(wrap_pyfunction!(exact_shallow_search_py, m)?)?;
     m.add_function(wrap_pyfunction!(beam_search_continue_py, m)?)?;
     m.add_function(wrap_pyfunction!(hsv_classify::classify_cells_hsv, m)?)?;
+    m.add_function(wrap_pyfunction!(board_first_pass::read_board_first_pass, m)?)?;
+    m.add_function(wrap_pyfunction!(board_first_pass::pairwise_sum_f64, m)?)?;
+    m.add_function(wrap_pyfunction!(hsv_vote::classify_cells_vote, m)?)?;
     m.add_class::<ChainSimResultPy>()?;
     m.add_class::<ChainStepInfoPy>()?;
     m.add_class::<DropSimResultPy>()?;

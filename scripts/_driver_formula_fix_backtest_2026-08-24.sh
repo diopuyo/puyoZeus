@@ -4,9 +4,9 @@
 #  A. 基準 (変更前コード = worktree 再構築版)、フラグOFF
 #  B. 最終コード、フラグOFF   → A と md5 一致で bit-identical 証明
 #  C. 最終コード、フラグON    → 認識精度 99.5% ライン維持の確認
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 PY="./venv/bin/python"
-WT="/mnt/c/Users/ryouj/AppData/Local/Temp/claude/C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/85af3971-d05b-42eb-8a0a-fce931916160/scratchpad/wt_baseline_ff"
+WT="<home>/AppData/Local/Temp/claude/C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/85af3971-d05b-42eb-8a0a-fce931916160/scratchpad/wt_baseline_ff"
 OUT=data/verify/formula_read_backtest_2026-08-24
 ARGS="--videos v29,v40,v51,v57,v70,v89,v95,v97 --holdout v89,v97 --workers 4 --game-event-chain-exit"
 

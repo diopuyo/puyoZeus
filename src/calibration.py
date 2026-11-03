@@ -24,6 +24,7 @@ annotation.json 例:
 """
 
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 import json
 from dataclasses import dataclass, field
@@ -452,7 +453,7 @@ class CalibrationHelper:
     def _board_background_mask(frame: np.ndarray) -> np.ndarray:
         """盤面背景 (暗めで均一なブロック) のマスクを返す。"""
         h, w = frame.shape[:2]
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hsv = cv2.cvtColor(full_image(frame), cv2.COLOR_BGR2HSV)
         rows = h // AUTO_DETECT_BLOCK
         cols = w // AUTO_DETECT_BLOCK
         block_mask = np.zeros((rows, cols), dtype=np.uint8)

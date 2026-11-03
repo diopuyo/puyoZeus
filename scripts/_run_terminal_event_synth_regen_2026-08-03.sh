@@ -2,7 +2,7 @@
 # 方針(a) 終局イベント合成込みラベル生成 (2026-08-03 main発注)。
 # 既存ファイルは上書きしない (新ファイル名)。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 NPZ_DIR="data/indicators_v2/boards_lean_regen_2026-07-31"
 BASE_CSV="data/indicators_v2/exchange_labels_regen_synth_2026-08-03.csv"

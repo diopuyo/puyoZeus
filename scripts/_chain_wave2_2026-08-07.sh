@@ -11,10 +11,10 @@
 # 参照し、書き込みは一切行わない (絶対不変)。
 #
 # 使い方 (WSL detach で長時間放置前提):
-#   wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \
+#   wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \
 #     setsid -f bash scripts/_chain_wave2_2026-08-07.sh < /dev/null"
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 
 WAVE1_LOG="logs/phase_l_regen_2026-08-07.log"

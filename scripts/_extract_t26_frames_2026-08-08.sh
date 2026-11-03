@@ -2,7 +2,7 @@
 # user 指摘「26秒の 1P 2連鎖なのに 1連鎖判定」の実画面確認。
 # 連鎖は数フレームで進むため、 前後 1 秒を 0.2 秒刻みで抜く。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 DEMO=data/verify/youtube_demo_2026-08-07
 OUT="$DEMO/t26_check"

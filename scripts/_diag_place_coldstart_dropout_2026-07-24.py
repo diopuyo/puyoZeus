@@ -66,7 +66,7 @@ data/verify/recognition_diag_placement_dropout_2026-07-24/
     - viz_<video>_t<trigger>.png: 代表例の実画面 (設置直前 vs トリガー時)
 
 Usage (WSL 経由、CLAUDE.md プロセス管理ルール準拠):
-    wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \
+    wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \
       PYTHONPATH=. ./venv/bin/python scripts/_diag_place_coldstart_dropout_2026-07-24.py"
 """
 from __future__ import annotations

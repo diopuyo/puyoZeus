@@ -113,6 +113,11 @@ class OjamaCnn(nn.Module):
     def predict_class(self, patch_bgr: np.ndarray) -> tuple[str, float]:
         """36×36 BGR パッチからクラス名と confidence を返す。"""
         self.eval()
+        return self.predict_class_readonly(patch_bgr)
+
+    @torch.no_grad()
+    def predict_class_readonly(self, patch_bgr: np.ndarray) -> tuple[str, float]:
+        """eval済みモデルを変更せず、単体推論と同じ演算を行う。並列読取用。"""
         if patch_bgr.shape[:2] != (INPUT_HEIGHT, INPUT_WIDTH):
             raise ValueError(
                 f"入力サイズ不一致: {patch_bgr.shape[:2]}, "

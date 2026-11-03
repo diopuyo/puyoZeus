@@ -22,7 +22,7 @@
 # 使い方 (実行判断は呼び出し側=親エージェント/userに委ねる):
 #   bash scripts/_gate4_pm100_aggregate_2026-08-25.sh
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 SNAP=data/verify/gate4_pregate_pm100_2026-08-25/_snapshot_20260825_2300jst
 if [ ! -f "$SNAP/scripts/_analyze_pm100_pair_2026-08-24.py" ]; then

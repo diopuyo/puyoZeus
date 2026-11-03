@@ -18,6 +18,14 @@ t≈830.6秒付近)。近傍 report.md の「MENU state が近傍(±1.5s)に出�
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import csv
 import sys
 from dataclasses import dataclass
@@ -33,8 +41,7 @@ from src.score_zero import ScoreZeroDetector, ZERO_NCC_THRESHOLD  # noqa: E402
 
 VIDEO_DIR: Path = Path.home() / "frames"
 OUT_DIR: Path = Path(
-    "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
-    "/data/verify/boundary_impl_verify_2026-08-18"
+    _public_dev_text('<repo>/data/verify/boundary_impl_verify_2026-08-18')
 )
 WINDOW_MARGIN_SEC: float = 15.0
 

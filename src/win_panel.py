@@ -64,6 +64,9 @@ class WinPanelDetector:
         template_path: Path = DEFAULT_TEMPLATE,
         threshold: float = PANEL_NCC_THRESHOLD,
     ) -> "WinPanelDetector":
+        from src.image_free_ui import enabled, LearnedPanel
+        if enabled():
+            return LearnedPanel(threshold)
         img = cv2.imread(str(template_path))
         if img is None:
             raise FileNotFoundError(f"テンプレートが存在しない: {template_path}")

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Step 1: 全 phase_l/cut 動画から per-video HSV JSON を抽出.
 # 並列 3 で時間短縮、 既存 JSON は skip。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/per_video_hsv_ranges
 mkdir -p logs/hsv_extract

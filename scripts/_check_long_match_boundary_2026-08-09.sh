@@ -3,7 +3,7 @@
 # 試合の開始直後・中間・終了直前のフレームを抜き、勝利数が途中で変わっていれば
 # 境界検出の失敗 (= 複数試合が1つに繋がっている)。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 OUT=data/verify/long_match_check
 mkdir -p "$OUT"

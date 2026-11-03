@@ -1,7 +1,7 @@
 #!/bin/bash
 # write_trace フル走行(4動画・既知窓を明示指定、順次実行)
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONPATH=.
 PY=./venv/bin/python
 run() {

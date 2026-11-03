@@ -6,7 +6,7 @@
 #   - baseline_v3_eval/ (= critical 合計 1512、変更前基準)
 #   - eta_only_eval/    (= axis3b +15.0 適用版、変更前最新)
 # 並列上限 3 (= CLAUDE.md / CYCLE_FINDINGS.md ルール準拠)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health axis3b_revert_eval

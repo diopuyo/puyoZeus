@@ -46,7 +46,7 @@
 #      > logs/gate4_pregate_pm100_2026-08-25/all.log 2>&1 < /dev/null"
 #
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 COND="${1:-}"
 SEG_START="${2:-1}"

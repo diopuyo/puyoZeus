@@ -3697,7 +3697,7 @@ grep -a "決着ホールド解除" logs/abs_chain_end_2026-08-26/v3_on.log | tai
 ### 残作業とコマンド
 
 ```bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 # (1) 窓測定 v2 の集計。解除時刻・最大ホールド・欠落行回復・早期解除0 を母数付きで出す。
 #     早期解除は物理量 (4個消し最小素点40) で判定し、カウントアップ演出の残響と区別する。
@@ -4168,7 +4168,7 @@ Cドライブは 935GB 中 空き 5.1GB だった。Codex の 9/1 前例 (`D:\pu
 | 削除 | `%LOCALAPPDATA%\Temp\DiagOutputDir\RdClientAutoTrace` (.etl 2,939本、RDPクライアント診断トレース) | 19.54 GB |
 | 削除 | `%LOCALAPPDATA%\npm-cache` / `CrashDumps` / `native/puyo_core/target/debug` (venvに導入済みの中間物) | 1.65 GB |
 | Dへ移動 | `data/pseudo_labels_phase_i_pre_cell/` → `D:\puyo_analyzer\archive\c_drive_offload_2026-09-14\data\` (src/scripts/docs/tests 参照0件) | 3.23 GB |
-| Dへ退避 | 旧複製 `C:\Users\ryouj\.gemini\antigravity-ide\scratch\puyo_analyzer` の stash パッチ+branch/status 記録 → 同 archive 配下 | (削除準備) |
+| Dへ退避 | 旧複製 `<home>\.gemini\antigravity-ide\scratch\puyo_analyzer` の stash パッチ+branch/status 記録 → 同 archive 配下 | (削除準備) |
 
 結果: 空き **5.1 → 25.9 GB**。Codex 実行中の `g2_pr_preparation_2026-09-13_v1/continue_merge_tests.py` (WSL PID 572/577、出力 D) は未接触。
 
@@ -4179,7 +4179,7 @@ Cドライブは 935GB 中 空き 5.1GB だった。Codex の 9/1 前例 (`D:\pu
 - **R3** `data/verify/zenchi_delivery_2026-08-21` 19.4GB / `zenchi_v35_2sets_norecognition_2026-08-28` 11.0GB / `zenchi_render_2026-08-21` 8.3GB: レンダ動画群。`D:\puyo_analyzer\videos\review\` へ移動してよいか。これらのパスを読む消費者 (スクリプト・receipt) があれば教えてほしい。
 - **R4** `data/frames/` 元動画 143本 177.9GB: CLAUDE.md は「処理後に削除」、Codex は 9/1 に「既存Cドライブ動画は移動・削除せず読取専用」と記載しており正面衝突。提案は「Codex の現行 G2 ジョブ完了後に `D:\puyo_analyzer\videos\frames\` へ移動し、`data/frames` をジャンクションにする」。WSL の `/mnt/c` 経由でジャンクションが解決できるかは切替前に小ファイルで検証する。**現在および今後2週間で入力に使う動画名の一覧**と、この案への可否をほしい。
   - 付随: `.runtime_snapshots/event_first30_observed_context_v5_2026-08-30/data/frames/` の30本は `data/frames` と**ハードリンク (同一inode) で実消費0**。移動でリンクが切れるので、snapshot 側は同じ D 先へのジャンクションに置き換える案。
-- **R5** WSL の `ext4.vhdx` が 206GB (中身22GB) で **約184GB** が未返却、`swap.vhdx` 9GB も併せて回収可。`wsl --shutdown` が必要で user 実行を依頼する。Codex の WSL ジョブが全て完了した時点を CODEX_TO_CLAUDE.md で知らせてほしい。あわせて WSL 内 `/home/ryouj/frames` 17GB の要否も。
+- **R5** WSL の `ext4.vhdx` が 206GB (中身22GB) で **約184GB** が未返却、`swap.vhdx` 9GB も併せて回収可。`wsl --shutdown` が必要で user 実行を依頼する。Codex の WSL ジョブが全て完了した時点を CODEX_TO_CLAUDE.md で知らせてほしい。あわせて WSL 内 `<home>/frames` 17GB の要否も。
 - **R6** `data/boards/` が **0ファイル**。CLAUDE.md は「盤面 JSON は data/boards/ に永続保持」と記載。想定どおりか、別の場所 (`data/indicators_v2/boards_lean_*` 等) が実体か教えてほしい。
 - **依頼** 今後の大容量出力 (動画・巨大 JSON/JSONL) は引き続き D を既定にしてほしい。
 
@@ -4966,3 +4966,78 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 - `src/projected_state_tensorizer_v1.py` (定数1行 + 経緯コメント4行)
 
 **ただし全pytest の結果が出て、失敗の原因が確定してからにしてほしい。**
+
+## 2026-09-30 リアルタイム配布パッケージ準備 (branch `claude/realtime-packaging-20260930`、コーダ)
+
+- 追加のみ (既存ファイル無変更): `src/phase_j/launcher.py` / `launcher_manifest.py`、`packaging/*`、`tests/test_launcher*.py`、`tests/test_packaging_closure.py`、`docs/PHASE_J_PACKAGING_PLAN_2026-09-30.md`。
+- 方式: 埋め込み Python 3.12.3 + CPU torch。展開後 800.7 MB / zip 270.1 MB (D:\puyo_analyzer\packaginguild\)。保存動画入力で Windows 上、入力確認中→色を較正中→評価 available まで起動確認 (起動→/latest 応答 7.9〜27.7 秒、詳細は計画書)。
+- 新規 44 件 + 既存 test_live_b6 40 件が配布用 Python 上で通過。未了: 実機 1920x1080、Windows クリーン環境、WSL 側 pytest、同値比較、インストーラ/署名/ライセンス確認 (計画書 §9)。
+- 遅延修正 (live_snapshot / live_process 等) は未取り込み。rt 側が確定したら `python packaging/build_bundle.py --reuse-python --zip` で再ビルド。
+
+## 2026-09-30 夕 配布パッケージ第2段 (branch `claude/realtime-packaging-20260930`、コーダ)
+
+- 発見: 本番構成は puyo_core(native) 必須 (Pythonフォールバックは幽霊連鎖ルール未対応)。初版の同梱漏れを是正し、Windows向けにビルドして同梱。
+- 追加/変更: src/cnn_onnx.py (ONNX、既定OFF、PUYO_CNN_BACKEND=onnx)、patch_classifier.py に _forward (既定は従来と同一)、live_device.py に環境変数 PUYO_CALIBRATION_DIR を1つ追加 (未設定なら従来どおり)。live_snapshot/exchange_event_terminal/exchange_event_multilanding/live_process は無変更。
+- 結果と未了の詳細: docs/PHASE_J_PACKAGING_PLAN_2026-09-30.md §11。ONNX事前登録: docs/PHASE_J_ONNX_PREREGISTRATION_2026-09-30.md。ライセンス: docs/PHASE_J_PACKAGING_LICENSES_2026-09-30.md。
+- 依頼: WSL側の同値確認 (packaging/run_equiv.sh) は本エージェントの環境で wsl を起動できず未実施。手順は計画書 §11-7。
+
+## 2026-09-30 コーダ (packaging worktree): DirectShow 色行列補正 (既定 OFF)
+
+- 発見: OBS 仮想カメラ (NV12, OBS 既定 Rec.709/Partial) を CAP_DSHOW で読むと 709 符号化を 601 で復号 (動画経路と同じ不一致)。捕捉 vs Linux 709 PNG の平均絶対差 4.89→601to709 補正で 1.12 (床 0.37)。静止した試合中フレームの confirmed 差 2/10,920→0/10,920。
+- 追加/変更: src/phase_j/dshow_color.py (新規)、live_device.py (DeviceConfig.color_correction 既定 off、DirectShowSource._read の補正)、live_config.py 許可キー、launcher.py `dshow_color_correction`、README_ja.txt、tests/phase_j/test_dshow_color.py (28 件)。既定 OFF は生画素と bit 一致を試験で固定。
+- OBS: 一時プロファイル/シーンで測定後、global.ini/user.ini を復元し一時物を削除 (「無題」未変更)。
+- 結果: D:/puyo_analyzer/packaging/equiv/dshow_color/RESULT.md。既定 ON は user 判断待ち (auto は OBS を 601 にした利用者を悪化させる、実キャプチャボード・動画列 A/B 未実施)。
+
+## 2026-09-30 夜 コーダ (packaging worktree): Windows 認識速度の改善 (詳細 docs/PHASE_J_PERF_2026-09-30.md)
+
+- rt (c8b8996) を merge。配布既定に `fast_terminal` / 新フラグ `performance_cores` (認識を Windows の性能コアへ) / `fast_telop` (テロップ検出の縮小予備判定) と、同梱時の ONNX CNN を追加。`async_notice_queue` は OFF のまま。
+- 結果 (同一 PNG 900 frame、別 agent の WSL ジョブ並走下の交互 A/B 3 組): 認識 P50 37.0〜41.4 → **25.1〜25.8 ms**、P95 51.9〜58.3 → **31.9〜33.0 ms**。決定 digest は 960 frame 中 0 差 (WSL torch とも 0 差)。
+- 発見 1: E コア固定だと P50 75.6 ms。負荷下の「60〜68 ms」は OS が認識を E コア/HT 兄弟へ寄せたため。
+- 発見 2 (別問題、未着手): 配布版の `PuyoScreenVerifier` が実対戦 frame を頻繁に不合格にし、OBS 仮想カメラ入力で 330 秒中 18% の frame しか認識に渡らない。`live_device.py` の設計判断が要る。
+- 注意: fast_telop は実データに可視テロップが 0 件 (491,928 frame) のため、陽性側は合成証拠のみ。外すなら `launcher.py PIPELINE_FIXED` の 1 語。
+- 一時停止中: `--zip` の最終再ビルドと閑散時の OBS 5 分再測定 (発火前予測ジョブ終了後)。OBS 設定は復元済み。
+## 2026-09-30 Claude 進捗 (Codex上限中)
+- exev d6f985a: overlay `__init__` 分割(50行以内)・`prefire_snapshot_reader` 色9→COLOR_OJAMA・E34 probe 位置引数保持。関連 174 passed。
+- exev e7c7a2d: ROADMAP 9/30 現在地を追記。
+- 評価側 `exchange_midchain_completion.py:56` の履歴蓄積: 試合番号フィルタ/同一chain照合のため判定影響なし、集計に必要なので修正しない。
+- rt 7992dc9: B19 退行 (前試合の適用不能通知が journal に残り以後の試合も失敗) を是正。全体 suite は 35 failed/104 errors (前回 67/129)、前回比の新規は b17 の1件のみでこれを修正。B16〜B19 84 passed。
+- q 第14試合の誤った負け確定の根因: cycle65 NEXT履歴色補正 (`recognition_pipeline.py` ~8016-8070) が確定遅延時に1手先の queue で着地セル (5,2)(6,2) を上書き。原票 `logs/match14_misread/`。修正 (対整合ガード、既定OFF) を実装・測定中。
+
+## 2026-09-30 Claude(コーダ) 評価の遅延対策 (exev 6f370c8 ほか)
+- rt B18/B20 の評価 stall を保存入力の再生で再現。**B20 の 54 秒は応手全探索ではなく、隠し段候補の列挙 (weighted_landing、最大 10,340 通り) と E35 (2,798 候補盤面) だった**。応手全探索は B18 の数秒側。
+- 出力同一の高速化 (既定ON): 応手全探索 15.7 倍 (274 呼出し、結果全文SHA不一致0)。保存記録5本の全51ファイルとリアルタイム由来3本がバイト一致。関連テスト 848 passed、新規 36 件。
+- 既定OFFの有界化を DECISIONS.md に事前登録して実走: B1 (early_exit + node 5000 + cap 256) は門通過だが zenchi 第11試合の死亡検出を1件失う。B2 (node 上限なし) は門通過・判定同一。b20 窓の最大 18.9 秒 → B2 0.62 秒 / B1 0.26 秒。**B2 を推奨、採否は判断待ち**。production_config 不変。
+- 依頼 (Codex 管理ファイル): なし。本番配線 (`--post-counter-early-exit` 等) は採否確定後。詳細 logs/multilanding_speed/RESULT.md。
+
+## 2026-09-30 配布物からゲーム画面の切り出し画像を削減 (rt / claude/realtime-packaging-20260930)
+- bundle_assets.txt: models/ui_templates をディレクトリ丸ごとから明示ファイル列挙へ。同梱は 40 → 19 枚 (score_digits 11 + match_end 2 + x_mark 6)。
+  除外: chain_count_digits 10 / ojama 6 / win_panel 1 / score_zero 2 / telop 2 / score_digits の .bak 10。
+- 注意 (測定器): packaging/audit_opens.py は Python の open() しか見ず cv2.imread を記録しない。cov_audit の ui_templates USED は
+  ランチャーの MANIFEST 照合 (全ファイル open) 由来で、実行時使用の証拠にならない。cv2.imread を記録する imread-trace で 23 枚のみと確定。
+- score_zero: 新フラグ score_zero_from_ocr (既定 OFF、env PUYO_SCORE_ZERO_FROM_OCR、配布ランチャのみ ON)。ScoreOcr の 8 桁全て 0 で判定。
+  6 窓 30,540 フレームでテンプレートとの不一致 866 (25 区間) は全て「OCR=ゼロ・テンプレート=非ゼロ」で目視上 OCR が正 (テンプレートは NCC 0.62-0.73 < 0.85 で取りこぼし)。逆方向 0。
+  認識パイプライン A/B: 確定盤面 409,188 セル差 0 (対照 A/A も 0)。
+- telop: 画像なしなら「テロップなし」。実テロップ入り 2 窓 (video_c109 30-110s / video_c14 300-360s) で確定盤面 636,636 セル差 0。ただし両窓ともテロップが盤面セルを 0 個しか被覆しない配置 (被覆する配置の実データは無く未検証)。
+- 検証道具: scripts/ab_ui_template_removal_20260930.py、成果物 D:/puyo_analyzer/packaging/ab_ui_2026-09-30/。
+## 2026-10-01 切替平滑 (--exchange-event-switch-smoothing) / E19 再測定 (worktree D:/puyo_analyzer/wt_switch)
+- 事前登録は exev DECISIONS.md。結果: 切替平滑A は zenchi 7,670 (門7,671に−1フレーム、窓境界の偶然) で不合格、飛び34→16。E19 は q .4967 (−.0109) / zenchi 7,627 (−44) で不合格。本番登録なし。詳細 logs/switch_smoothing/RESULT.md。
+
+## 2026-10-01 Claude: 発火前の最善手 Phase 3 — 不合格・本番登録なし
+- branch claude/prefire-exchange-prediction-20260930 (wt_prefire、cd06536 push 済み)。新規 `src/prefire_best_play.py`・`src/prefire_best_play_layer.py`、replay フラグ `--prefire-best-play*` (既定OFF)。
+- `src/exchange_event_features.py::prefire_side_features` に optional `simulator` を追加 (既定 None で出力不変)。native を使うのは浮きぷよ・UNKNOWN がない盤面だけ。記録 7,500 盤面で Python 版と一致。
+- 事前登録 (DECISIONS dc29e73/c8feead) の4構成とも改善の門に未達。結果と原因は DECISIONS 同日節、詳細は wt_prefire `logs/prefire_prediction/PHASE3.md`。
+- Codex 向けの依頼はなし。表示のちらつき対策を進める場合の表示設計は Codex 担当 (PHASE3.md §7-3)。
+
+## 2026-10-01 Claude: 発火前の最善手 Phase 4 — 不合格・本番登録なし
+- branch claude/prefire-exchange-prediction-20260930 (f481596 push 済み)。新規 `src/prefire_stable_queue.py`・`src/prefire_best_play_stable.py`、replay フラグ `--prefire-best-play-stable` (既定OFF)。`src/prefire_best_play.py` は出力一致の高速化のみ。
+- 結果は DECISIONS 同日節。Codex への依頼はなし。
+## 2026-10-01 評価セット zenchi セット1 (57試合) の物差し (Claude、branch claude/eval-set-zenchi-set1-20261001、worktree D:/puyo_analyzer/wt_evalset)
+- 第1〜40試合を本番の認識構成で記録 (6区間)。短区間の取り直しが既存第3パート記録と 13,627行バイト一致。再生器3種も既知出力とバイト一致。
+- ゆらぎ: M_time (試合別の時間平均 log loss、57試合) の random_state 散らばり sd 旧 .0027 / 補正 .0015 (q は .0056 / .0053)。5 seed 平均同士の最小検出差 .005 / .003。
+- 本番評価器の不具合: c5 の 2164.9秒で weighted_landing が firing=None のまま S3 を組み ValueError。src/exchange_hidden_row_probability.py に加重なしへ落とす分岐を追加 (旧コードが例外を出す時刻だけ分岐、完走していた入力は出力不変)。マージは別判断。
+- 採否は何も決めていない。詳細 logs/eval_set/RESULT.md。
+
+## 2026-10-02 08:45 — 誤シャットダウン (10/2 03:00頃) からの再開 (Claude)
+- wt_evalset の誤った負け確定の根治 (D1〜D4) 検証が中断していた。収集 15/18、再生 prod 11・no_d1 10・no_d2 14・no_d4 18・all 0・no_d3 0 /各18。
+- 途中成果物 (収集3件 fcXG83vInDY/mia8KCjr52g/zenchi、再生5件) は削除せず `logs/eval_set/falsedeath_fix/interrupted_2026-10-02/` へ退避し、同じ起動口 (collect/replay/score_falsedeath.sh) で再開。完了済みは各スクリプトの完了票で飛ばす。コード無変更 (PLAN.json の SHA 不変)。再開口は `wt_evalset/logs/resume_falsedeath_2026-10-02.sh`。
+- wt_prefire 案C は起動口が最初の fold まで完走済み (01:06、fold0 LL 基準 .637510 / 案C .637593)。中断の影響なし、残り fold は未起動。

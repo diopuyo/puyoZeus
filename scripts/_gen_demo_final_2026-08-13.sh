@@ -2,7 +2,7 @@
 # 最終デモ (2026-08-13): Rust native反撃計算 + 30fps正規化 + 0.5秒間引き入り。
 # 区間 = 1試合目の実開始 (t=167秒実測) の少し前 〜 5試合目終了 (410秒)。
 # 冒頭のメニュー区間はカット (user指摘 2026-08-13)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/frames/review_demo_2026-08-12.mp4

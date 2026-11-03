@@ -11,7 +11,7 @@ data/verify/npz_light_smoke_2026-08-12/labeled_win_light63.csv
 を計算する。
 
 Windows直接実行ではなく WSL venv 経由で実行すること:
-  wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && OMP_NUM_THREADS=1 ./venv/bin/python scripts/_analyze_reorg_evidence_2026-08-12.py"
+  wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && OMP_NUM_THREADS=1 ./venv/bin/python scripts/_analyze_reorg_evidence_2026-08-12.py"
 """
 from __future__ import annotations
 

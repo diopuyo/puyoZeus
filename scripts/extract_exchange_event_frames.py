@@ -21,7 +21,7 @@ t_sec = フレームインデックス ÷ fps (対象 mp4 ファイル自身の�
 ## 動画ソースの選び方 (2026-08-02、実行時に判明した事実を反映)
 選定イベントの動画 (video_c27/c40/c45 等の c系動画) は、boards_lean 生成時に
 使った mp4 が **既にローカルにキャッシュ済み** (data/frames/ 配下、WSL環境では
-/home/ryouj/frames/ 配下にも同一サイズのコピーが存在、2026-08-02実行時に66動画
+<home>/frames/ 配下にも同一サイズのコピーが存在、2026-08-02実行時に66動画
 全件で確認済み)。これは「削除済みなので再DLが必要」という前提 (ストレージ管理
 ルール的には動画は処理後削除が原則) と食い違うが、**t_sec整合性の観点で
 このキャッシュ済みファイルを使う方が正しい** (再DLだと同一動画でも再エンコードで
@@ -40,6 +40,14 @@ t_sec = フレームインデックス ÷ fps (対象 mp4 ファイル自身の�
         --out-dir data/verify/exchange_divergence_review_2026-08-02
 """
 from __future__ import annotations
+
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
 
 import argparse
 import subprocess
@@ -90,7 +98,7 @@ PRE_CHAIN_START_CLAMPED_NOTE: str = "動画先頭のためクランプ済み (�
 
 # ローカルキャッシュ探索先 (WSL環境の高速ネイティブパスを優先、無ければ
 # リポジトリ相対の data/frames/ にフォールバック)。
-WSL_NATIVE_FRAMES_DIR = Path("/home/ryouj/frames")
+WSL_NATIVE_FRAMES_DIR = Path(_public_dev_text('<home>/frames'))
 REPO_FRAMES_DIR = Path("data/frames")
 
 # yt-dlp フォールバックDL先 (一時領域、処理後に必ず削除する)

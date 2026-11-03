@@ -1,0 +1,146 @@
+[
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/c1.jsonl.json",
+    "receipt_sha256": "6170db05aff142dfb51552e2b18444c2421d0673d4673d8552090fcbf1cedef4",
+    "record": "c1",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/c2.jsonl.json",
+    "receipt_sha256": "61d0d8d990114efdf7a436e6cdc9a97f1e91f1900184974a6cca68bafcde9b19",
+    "record": "c2",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/c3.jsonl.json",
+    "receipt_sha256": "529e67b7d03d36ddb92f745993f107e2e5bd71d0b79a4cf4898d11ec0704af73",
+    "record": "c3",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/c4.jsonl.json",
+    "receipt_sha256": "9fd8c444c24f9f3f33f477a083d81193fc67448ef3265caab8c4848644f11d95",
+    "record": "c4",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/c5.jsonl.json",
+    "receipt_sha256": "9ed53018631694c5fec7703b33767bf614bc4e6e7590d5976e06d849a2b58318",
+    "record": "c5",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/c6.jsonl.json",
+    "receipt_sha256": "ab93d758e7f933e2aea1176ab4c19321ca0ddfa8444ae9970a1d4cc406f4f7bd",
+    "record": "c6",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/fcXG83vInDY.jsonl.json",
+    "receipt_sha256": "669508ee4991a8a7758af9b40ea6daded3a4a08fe3f52e4c4d5bed3abfb0dbf9",
+    "record": "fcXG83vInDY",
+    "source_video": "/mnt/d/puyo_analyzer/videos/source/fcXG83vInDY_first_0_900_20260925_v1.mp4",
+    "youtube_id": "fcXG83vInDY"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/mia8KCjr52g.jsonl.json",
+    "receipt_sha256": "8614eb131b8376714999c1cb2a38103c0b72d4eae26fc172776219511dbc6499",
+    "record": "mia8KCjr52g",
+    "source_video": "/mnt/d/puyo_analyzer/videos/source/mia8KCjr52g_first_0_900_20260925_v1.mp4",
+    "youtube_id": "mia8KCjr52g"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/q_7gc4TgFig.jsonl.json",
+    "receipt_sha256": "e7fc96f37f128f26efc3ea5c5f93ba6eb9cda427b48dea4003f18f83a3b1d7e5",
+    "record": "q_7gc4TgFig",
+    "source_video": "/mnt/d/puyo_analyzer/videos/source/q_7gc4TgFig_first_0_900_20260925_v1.mp4",
+    "youtube_id": "q_7gc4TgFig"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/review.jsonl.json",
+    "receipt_sha256": "82a7e75ada8265c2b9cbc555e3ae40ec0f51edd4b1f1da418244ab85a2060012",
+    "record": "review",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/s0.jsonl.json",
+    "receipt_sha256": "a2f870d18e411ef7f42ad5f8a489f411cd1bccf582cd521f7574901d423d9b04",
+    "record": "s0",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/s1.jsonl.json",
+    "receipt_sha256": "37144ea3b65c4d1f7aa8467fe285680e73e1652a28a28f5f461ed28e94ec04a2",
+    "record": "s1",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/s2.jsonl.json",
+    "receipt_sha256": "2aa4e5cad7ca1566214be1c5e0b2fc2e0641a77ace97c24bbce04cefc11a5d1e",
+    "record": "s2",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/s3.jsonl.json",
+    "receipt_sha256": "cedc0301398bdadb361da68f90a8d9633cd56dc2b8b26b69f873b5d9e4838b2c",
+    "record": "s3",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/s4.jsonl.json",
+    "receipt_sha256": "75234e50cdd6a13d1edb8b211f9f83a2f4ed8ce26afadba614e94b370e1bb530",
+    "record": "s4",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/s5.jsonl.json",
+    "receipt_sha256": "1399f82d748ca2e2e4946ef0fbb7d43a108b8ff144b363f408f283cd76fc4dcf",
+    "record": "s5",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/s6.jsonl.json",
+    "receipt_sha256": "d51062005523284bcc5b074da81890170099f378b943194e66142a7cc79103b4",
+    "record": "s6",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  },
+  {
+    "overlap": false,
+    "receipt": "/mnt/d/puyo_analyzer/wt_evalset/logs/eval_set/falsedeath_fix/collect/records/zenchi.jsonl.json",
+    "receipt_sha256": "821d76ca07020e05176b94b762b59b310881dabfd1f82bf8f2e851252c7fc741",
+    "record": "zenchi",
+    "source_video": "<home>/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+    "youtube_id": "c0BQoMJwwQU"
+  }
+]

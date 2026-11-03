@@ -8,7 +8,7 @@
 #  2. CNN 学習 (= 円形マスク有効、 ~1 分)
 #  3. viz 動画生成 (= 円形マスク + ojama mask + puyo gate、 3 動画直列 ~35 分)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 ###############################################################################
 # Step 1: seed 再抽出 (並列 3)

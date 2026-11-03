@@ -2,7 +2,7 @@
 # v89m7 を F + E 適用済 state machine で viz 生成 (= ユーザー目視用).
 # 現 default cnn_phase_b_large_v2.pt + F (STABLE 復帰ゲート) + E (HSV 赤色循環バグ修正)
 # の効果をユーザーが直接目視確認するための viz。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health viz_v89m7_F_E

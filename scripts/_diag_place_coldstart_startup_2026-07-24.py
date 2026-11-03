@@ -56,7 +56,7 @@ data/verify/recognition_diag_coldstart_2026-07-24/
     - viz_<video>_t<start>.png: 代表例 (試合開始直後 数手分の実画面 vs confirmed)
 
 Usage (WSL 経由):
-    wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \
+    wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \
       PYTHONPATH=. ./venv/bin/python scripts/_diag_place_coldstart_startup_2026-07-24.py"
 """
 from __future__ import annotations

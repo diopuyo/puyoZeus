@@ -10,7 +10,7 @@
 # fail-silent 防止: labeled_win_m30.csv の存在・最低行数を検証してから学習起動。
 # 検証に失敗した場合は学習を起動せず、ログにFATALを残して終了する。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 

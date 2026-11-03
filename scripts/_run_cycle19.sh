@@ -2,7 +2,7 @@
 # cycle_19 = B-AND: cycle_18 + ImageReader 1st pass で AND 条件
 # (bg_fp 距離 < 50 AND HSV-単独でも puyo 色判定されない) で empty 確定
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 LOG=logs/cycle19_pipeline.log
 exec > >(tee -a "$LOG") 2>&1
 echo "=== START cycle19 $(date) ==="

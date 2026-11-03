@@ -1,7 +1,7 @@
 #!/bin/bash
 # (a)persist eval 完了を待ってから autohsv eval+viz を実行(競合回避の連鎖)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
 LOGDIR="logs/fix_v70_eval"; OUTDIR="data/verify/stable_cell_acc"; VIZDIR="data/verify/viz"; VDIR="data/match_clips"
 MASTER="${LOGDIR}/master_autohsv_chain.log"
 echo "[chain start] $(date)" > "${MASTER}"

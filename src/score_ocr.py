@@ -25,10 +25,11 @@ ROI:
     print(res.score_1p, res.score_2p)
 """
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Mapping
+from typing import Callable, Literal, Mapping
 
 import cv2
 import numpy as np
@@ -101,6 +102,9 @@ FORMULA_LEFT_UNIT: int = 10
 # 同一値の連続確認フレーム数。出現/消滅アニメ中の部分読み (実測 1.4%、
 # 1〜2 フレーム持続) を除去する。機能D の CHAIN_FORMULA_CONSEC_FRAMES=2 と同根拠。
 FORMULA_STEP_CONFIRM_FRAMES: int = 2
+# 次の回 2 (PC1 10/30、旗 PUYO_CHAIN_SPLIT_PLACE=1 の時だけ): 最後の有効読取りから 0.5 秒未満の置き (tsumo_count の増え) は
+# 連鎖の途中の読みの揺れとして数えない (自分の連鎖中は操作中のツモが無い)。wt_r src/fire_board.PLACE_GAP_SEC と同じ値。
+PLACE_GAP_SEC: float = 0.5
 
 # 有効読取りが途絶えてからセッション (= 1 連鎖分の累積) を破棄するまでの秒数。
 # 連鎖 1 段の表示周期は実測 ≈1.4 秒 (memory reference_chain_formula_per_step_
@@ -276,7 +280,7 @@ def _ensure_1080p(frame: np.ndarray) -> np.ndarray | None:
         return frame
     if h < 100 or w < 100:
         return None
-    return cv2.resize(frame, (EXPECTED_FRAME_SHAPE[1], EXPECTED_FRAME_SHAPE[0]),
+    return cv2.resize(full_image(frame), (EXPECTED_FRAME_SHAPE[1], EXPECTED_FRAME_SHAPE[0]),
                       interpolation=cv2.INTER_AREA)
 
 
@@ -430,6 +434,13 @@ class ScoreOcr:
         も存在すれば読み込む。不在でも従来と完全に同じ動作 (read_formula_side
         だけが常に invalid になる)。
         """
+        import os
+        from src.image_free_ui import enabled as all_image_free
+        from src.production_config import IMAGE_FREE_SCORE_OCR_DEFAULT
+        if all_image_free() or os.environ.get('PUYO_IMAGE_FREE_SCORE_OCR', str(int(IMAGE_FREE_SCORE_OCR_DEFAULT))) == '1':
+            from src.image_free_digit import ImageFreeScoreOcr
+            return ImageFreeScoreOcr(min_confidence=min_confidence, margin_min=margin_min,
+                                    avg_min_confidence=avg_min_confidence, region_offsets=region_offsets)
         templates = cls._load_templates_from_dir(template_dir)
         mult_path = template_dir / FORMULA_MULT_TEMPLATE_FILENAME
         mult_template = (
@@ -575,6 +586,11 @@ class ScoreOcr:
         if cell.shape[0] < tpl.shape[0] or cell.shape[1] < tpl.shape[1]:
             return 0.0
         return float(cv2.matchTemplate(cell, tpl, cv2.TM_CCOEFF_NORMED).max())
+
+    def placement_multiply_reader(self) -> Callable[[np.ndarray], list[float]]:
+        """R1の広域検出を返す。画像非同梱方式はこの境界を差し替える。"""
+        from src.placement_signal_images import multiply
+        return lambda frame: multiply(frame, self._mult_template_gray)
 
     def read_with_neighbor_search(
         self,
@@ -1101,6 +1117,11 @@ class FormulaStepAccumulator:
         # 実測の幕間は 13〜19 フレームなので、確認フレーム数を要求しても
         # 本物の幕間を取り逃さない (13 ≫ confirm_frames)。
         self._interlude_run: int = 0
+        # 依頼 §4 (PC1 10/30、既定 OFF: PUYO_CHAIN_SPLIT_PLACE=1): 段が確定した後にこの側の置き (tsumo_count の増え) を見たら、
+        # 次の有効読取りは別の連鎖 (同じ値でも再読みとして捨てない)。旗 OFF・placed を渡さない呼出しは従来と同じ。
+        import os
+        self._split_on_place: bool = os.environ.get("PUYO_CHAIN_SPLIT_PLACE", "0") == "1"
+        self._placed_after_step: bool = False
 
     # ------------------------------
     # 公開プロパティ
@@ -1136,6 +1157,7 @@ class FormulaStepAccumulator:
         self._pending_count = 0
         self._saw_interlude = False
         self._interlude_run = 0
+        self._placed_after_step = False
 
     # ------------------------------
     # 更新
@@ -1172,6 +1194,7 @@ class FormulaStepAccumulator:
         result: "FormulaReadResult",
         *,
         score_displayed: bool = False,
+        placed: bool = False,
     ) -> FormulaStep | None:
         """読取り 1 件を反映する。新規に段が確定したらその FormulaStep を返す。
 
@@ -1194,9 +1217,14 @@ class FormulaStepAccumulator:
                 旧実装と結果が変わり得る (旧実装は非連続 2 観測を誤って
                 「連続 2 フレーム」と数えていた)。
 
+            placed: 依頼 §4 (旗 PUYO_CHAIN_SPLIT_PLACE=1 の時だけ効く): このフレームでこの側が置いた (tsumo_count が増えた)。
+
         Returns:
             新規確定した段 (なければ None)。
         """
+        if self._split_on_place and placed and self._steps and (
+                self._last_valid_t is None or t_sec - self._last_valid_t >= PLACE_GAP_SEC):
+            self._placed_after_step = True   # 次の回 2: 式が出ている間 (連鎖の途中) の増えは数えない
         if score_displayed:
             self._on_interlude()
             return None
@@ -1214,8 +1242,8 @@ class FormulaStepAccumulator:
             t_sec - self._last_valid_t
             if self._last_valid_t is not None else float("inf")
         )
-        if gap > self._session_reset_sec:
-            self._reset_session()
+        if gap > self._session_reset_sec or self._placed_after_step:
+            self._reset_session()   # 依頼 §4: 段の後に置いた = 前の連鎖は終わっている
         self._last_valid_t = t_sec
         v = (int(result.left), int(result.right))
         if self._steps and not self._saw_interlude:

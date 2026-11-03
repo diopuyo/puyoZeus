@@ -8,7 +8,7 @@
 #
 # 使い方: bash scripts/_gen_jobs_labeled_win_m20_2026-07-28.sh <selected_videos_m20.txt>
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 
 VIDEO_LIST="${1:?selected_videos_m20.txt (1行1 video_id) が必要}"
 OUT_STUDY_DIR="data/verify/labeled_win_m20_2026-07-28/study"

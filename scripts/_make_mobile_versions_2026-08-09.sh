@@ -4,7 +4,7 @@
 #   2) 圧力なし指標デモ demo_no_pressure.mp4
 # 720p / H.264 High / CRF 28 / faststart (先頭から再生できる) へ変換。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 DEMO=data/verify/youtube_demo_2026-08-07
 OUT="$DEMO/mobile"

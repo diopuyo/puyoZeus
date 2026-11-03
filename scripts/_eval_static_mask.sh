@@ -12,7 +12,7 @@
 # 並列上限 3 (CLAUDE.md / CYCLE_FINDINGS.md ルール準拠)。
 # p_to_e_count 増加があれば fail-silent 自動 REJECT。
 
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health static_mask_eval

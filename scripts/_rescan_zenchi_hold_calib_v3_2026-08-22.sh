@@ -17,7 +17,7 @@
 #
 # 出力は既存の本番dump・v1(単発)・v2(累積)を一切上書きしない別ディレクトリに
 # 書く (before/after 比較を保持するため)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 # BLAS/OpenMP 系のスレッドを1に固定 (_render_zenchi_8seg_2026-08-21.sh と
 # 同じ教訓、過剰スレッド生成によるスループット崩壊の防止)。

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Gate 4正式検収用の固定snapshot。既存snapshot/成果物は上書きしない。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 SNAP=data/verify/gate4_formal_dense_2026-08-26/_snapshot_codex_20260826
 if [[ -e "$SNAP/SNAPSHOT_COMPLETE" ]]; then

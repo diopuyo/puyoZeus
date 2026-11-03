@@ -31,12 +31,12 @@
 
 ### ⑤ 主要動画ファイル
 ```
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\evaluation_videos\
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\evaluation_videos\
 ├── v89_match3_phase_i_viz_FINAL2.mp4    ★★★ stable_frame_count=6 で完全認識
 ├── v89_match3_phase_i_viz_MERGED.mp4    ← merged_default 適用版
 ├── v29/v40/v51/v57_phase_i_viz_FINAL2.mp4 (各動画別 DB 適用)
 
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\
 ├── unknown_aMwcxoWNfzk.mp4 (DL 元、 55 分)
 ├── unknown_match_120s.mp4 (切り出し)
 ├── unknown_viz_merged.mp4 ★ frame 0 から DB
@@ -106,7 +106,7 @@ data/evaluation_videos/v89_compare/clip_30s_DB.mp4         ← Phase I.c DB 8 �
 ### 2. まず見る動画 (改善前/後 の比較)
 ```
 ベースライン → 最終改善版で進化を確認:
-└ C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\evaluation_videos\
+└ <home>\.gemini\antigravity\scratch\puyo_analyzer\data\evaluation_videos\
     ├ v89_match3_phase_i_viz_baseline.mp4      ← 改善前
     └ v89_match3_phase_i_viz_DB.mp4            ★★ 最終 (動画別 HSV 自動学習 + 起動時 inject)
 

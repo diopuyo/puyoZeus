@@ -7,7 +7,7 @@
 # config3 vs default=総改善、config3 vs config2=deferred純効果。
 # viz は corruption濃い v89m01/v70m2 を config3 で生成(before=既存default board_log)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
 V="v29_match01,v29_match02,v40_match01,v40_match02,v51_match01,v51_match02,v57_match01,v57_match02,v70_match01,v70_match02,v89_match01,v89_match02,v95_match01,v95_match02,v97_match01,v97_match02"
 H="v29_match01,v29_match02,v40_match01,v40_match02,v89_match01,v89_match02"
 VDIR="data/match_clips"; SI="0.03333333"

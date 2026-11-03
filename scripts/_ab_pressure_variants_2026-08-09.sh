@@ -6,7 +6,7 @@
 # user 伝授:
 #   「スコア差はおじゃまを送る手段で、送った時点で意味を失う」
 #   「おじゃまは個数でなく、飽和連鎖量が減った・連鎖がつながりづらくなった で判断すべき」
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/verify/youtube_demo_2026-08-07/dio_vs_ts_m01_clip.mp4

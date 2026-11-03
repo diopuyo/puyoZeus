@@ -2,7 +2,7 @@
 # 8分割点 (1/8,2/8,...,7/8地点) 付近の試合開始時刻をスポット確認する (2026-08-21)。
 # --no-render + 本体の _detect_score_reset (通常の generate() 経路) を各ターゲット
 # 周辺140秒だけ流し、[reset] 行を集める。7点を並列実行する。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 mkdir -p logs/split_probes_2026-08-21
 
 run_probe() {

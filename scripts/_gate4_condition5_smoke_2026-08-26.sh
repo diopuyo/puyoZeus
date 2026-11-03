@@ -1,7 +1,7 @@
 #!/bin/bash
 # seg01 game2の誤反転窓を含む条件5の短時間実データsmoke。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 export PYTHONHASHSEED=0
 export OMP_NUM_THREADS=1

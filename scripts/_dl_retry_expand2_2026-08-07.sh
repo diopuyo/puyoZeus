@@ -1,7 +1,7 @@
 #!/bin/bash
 # _dl_expand2 のFAIL4本をエラー可視化付きで再試行 (原因判定用にstderr表示)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
-FF=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+FF=<home>/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
 names=(c104 c113 c123 c141)
 ids=(-w9ziMGve40 kOWy50IddfI TkvXHB-Bqcw R7vU1wQ4BxI)
 for i in "${!names[@]}"; do

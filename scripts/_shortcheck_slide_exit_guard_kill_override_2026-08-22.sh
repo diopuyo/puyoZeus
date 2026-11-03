@@ -6,7 +6,7 @@
 # 前回の inline bash -c 実行はネストしたクォート層で $ADOPTED が空展開になり
 # warmup/sample-interval等が無効なまま走っていた (MSYS/WSL 経由の既知の
 # escape事故、feedback_msys_pipe_escape.md)。スクリプトファイル化して回避する。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1

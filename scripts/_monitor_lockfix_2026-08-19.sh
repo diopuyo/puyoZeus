@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 want="$1"
 for i in $(seq 1 240); do
   n=$(ls logs/_verify_lockdown_release_fix_2026-08-19/*.json 2>/dev/null | wc -l)

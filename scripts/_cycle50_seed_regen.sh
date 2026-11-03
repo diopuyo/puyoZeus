@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle 50: 改修済 seed pipeline で 22 動画再抽出
 # 改修 2 (両側 STABLE) + 改修 3 (色別 H filter) + 改修 4 (effect recovery)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health cycle50_seed_regen

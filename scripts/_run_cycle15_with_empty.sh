@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle_15: empty seed 追加 → 再 fine-tune → 5 動画 cycle_15 viz → 集計
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 LOG=logs/cycle15_pipeline.log
 exec > >(tee -a "$LOG") 2>&1

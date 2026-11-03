@@ -8,6 +8,14 @@
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import os
 import subprocess
 import sys
@@ -27,7 +35,7 @@ _VENV_BIN = _PROJECT_ROOT / "venv" / "bin"
 YT_DLP = str(_VENV_BIN / "yt-dlp") if (_VENV_BIN / "yt-dlp").exists() else "yt-dlp"
 
 # Node.js パス (以前のログから推定)
-NODE_PATH = "/home/ryouj/.nvm/versions/node/v20.20.1/bin/node"
+NODE_PATH = _public_dev_text('<home>/.nvm/versions/node/v20.20.1/bin/node')
 
 PLAYLISTS = [
     ("pl1", "https://www.youtube.com/playlist?list=PLsjREVssD8baPrsapHGszFzhObLANmd6B"),

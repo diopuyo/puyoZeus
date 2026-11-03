@@ -32,6 +32,14 @@ DL関数は w12 スクリプトと同じ node v24.19.0 + リトライ強化版�
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import importlib.util
 import shutil
 import subprocess
@@ -59,7 +67,7 @@ _spec.loader.exec_module(orch)
 # 判定される問題 (2026-08-16 w12 再収集で発見・node24へ切替済み) を継承する。
 # あわせて 403/500 の間欠的失敗 (同一URLで再試行すると成功する事例を確認済み)
 # に対し DL_RETRY_COUNT を 1->4 に引き上げ、再試行間に短い待機を入れる。
-_NODE24_PATH = "/home/ryouj/.nvm/versions/node/v24.19.0/bin/node"
+_NODE24_PATH = _public_dev_text('<home>/.nvm/versions/node/v24.19.0/bin/node')
 _DL_RETRY_COUNT = 4
 _DL_RETRY_SLEEP_SEC = 8.0
 
@@ -70,9 +78,7 @@ _DL_RETRY_SLEEP_SEC = 8.0
 # **認証情報のため scratchpad にのみ置き、git 管理下には絶対に置かない**。
 # 存在しなければ Cookie 無しで動作する (後方互換)。
 _COOKIES_MASTER = Path(
-    "/mnt/c/Users/ryouj/AppData/Local/Temp/claude/"
-    "C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/"
-    "22abd085-8e57-4d2a-857e-8516be642774/scratchpad/yt_cookies_master.txt"
+    _public_dev_text('<work>/scratchpad/yt_cookies_master.txt')
 )
 
 

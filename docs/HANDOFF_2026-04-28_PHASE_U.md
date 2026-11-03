@@ -85,7 +85,7 @@ CELL_SAMPLE_RATIO: 0.5  (中央 50%)
 
 ```bash
 # 全テスト走行
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q --ignore=tests/test_video_processor.py"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q --ignore=tests/test_video_processor.py"
 
 # 分類器精度評価
 wsl -- bash -c "cd /mnt/c/.../puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_u_eval_classifiers"

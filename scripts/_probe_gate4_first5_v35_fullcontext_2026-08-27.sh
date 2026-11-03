@@ -1,7 +1,7 @@
 #!/bin/bash
 # v35を動画先頭から3:51後まで通し、差分範囲を描画なしで最終検証する。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 export PYTHONHASHSEED=0
 export OMP_NUM_THREADS=1

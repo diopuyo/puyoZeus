@@ -1,6 +1,6 @@
 #!/bin/bash
 # もう一方の実アンカー t=4914.533 の短区間確認 (修正①+③組み合わせ、2026-08-22)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1

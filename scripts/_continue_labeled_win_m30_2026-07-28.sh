@@ -8,7 +8,7 @@
 # cv2.setNumThreads(1)ラッパー×14並列)。PCクーラー導入済みのため熱対策は不要
 # (2026-07-27 user指示、m20継続ランナーで採用済みの構成をそのまま踏襲)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 
 OUT_DIR="data/verify/labeled_win_m30_2026-07-28"

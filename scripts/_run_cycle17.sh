@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle_17 = B: cycle_14 model (cnn_phase_i_hsv_seed.pt) + bg_fp 閾値 35→50 で viz
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 LOG=logs/cycle17_pipeline.log
 exec > >(tee -a "$LOG") 2>&1
 echo "=== START cycle17 $(date) ==="

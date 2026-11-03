@@ -8,7 +8,7 @@
 # 構成は v4 と同一 (465.6-511.8s、warmup 30s、着地色補正ON + Driftガード2種ON)
 # に --match-start-full-clear のみ追加。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 OUT_DIR="data/verify/review_video_new_2026-07-25"
 mkdir -p "${OUT_DIR}"
 RAW="${OUT_DIR}/advantage_recog_c34_game1_full_score0to0_v6.mp4"

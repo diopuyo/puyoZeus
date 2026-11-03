@@ -2,7 +2,7 @@
 # measure_stable_cell_acc.py を match_v29_02 で実行する smoke test
 set -e
 
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}"
 
 mkdir -p data/verify/stable_cell_acc

@@ -1,7 +1,7 @@
 #!/bin/bash
 # 指摘1(c56_g3 51秒)・指摘2(c65_g3 1分)検証用フレーム抽出。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 FF=./venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2
 OUTDIR=/tmp/frames_review4
 mkdir -p "$OUTDIR"

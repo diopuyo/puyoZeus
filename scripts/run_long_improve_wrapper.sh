@@ -1,9 +1,9 @@
 #!/bin/bash
 # long_improve_v2.py が何らかの理由で死んだら自動再起動するラッパー
 # 40時間モードなのでスクリプト自身が時間管理して自然終了する
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 # src パッケージを import できるようプロジェクトルートを PYTHONPATH へ
-export PYTHONPATH="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer:${PYTHONPATH}"
+export PYTHONPATH="<home>/.gemini/antigravity/scratch/puyo_analyzer:${PYTHONPATH}"
 # FAST_MODE: Phase 2 (アーキ探索) スキップ + stagnation_limit=2 で時短
 # data/disable_fast_mode が存在すれば無効化（fallback）
 if [ ! -f data/disable_fast_mode ]; then
@@ -27,7 +27,7 @@ echo "[wrapper] $(date '+%Y-%m-%d %H:%M:%S') acquired lock pid=$$" >> $LOG
 # watchdog.ps1 が data/watchdog_heartbeat の mtime を120秒毎に更新するので、
 # 10分以上古くなったら Windows 側で bootstrap スクリプトを発火して再起動する。
 WATCHDOG_HEARTBEAT=data/watchdog_heartbeat
-WATCHDOG_BOOTSTRAP='/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/scripts/watchdog_bootstrap.ps1'
+WATCHDOG_BOOTSTRAP='<home>/.gemini/antigravity/scratch/puyo_analyzer/scripts/watchdog_bootstrap.ps1'
 PWSH='/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 (
   while true; do

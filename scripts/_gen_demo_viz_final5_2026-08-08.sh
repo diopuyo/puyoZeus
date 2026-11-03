@@ -3,7 +3,7 @@
 # × (a:全状態表示 / b:stable+ツモ落下のみ) の2本
 # 設置確定レイテンシA/B実験 (data/verify/recovery_min_frames_ab_2026-08-08) で
 # 非対称3/8が一律短縮より効果大・汚染量小と確認済みの構成を反映したデモ。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/verify/youtube_demo_2026-08-07/dio_vs_ts_m01_clip.mp4

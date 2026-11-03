@@ -2,7 +2,7 @@
 # 最終候補: 連鎖終了①次ツモのみ(2c829bc) + 着地色修正動作版(738d364) の eval + viz 並列。
 # 比較: chainexit(②あり/着地色なし yellow->red=6404) と landingfix(不発)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}"
 VIDEOS="v29_match01,v29_match02,v40_match01,v40_match02,v51_match01,v51_match02,v57_match01,v57_match02,v70_match01,v70_match02,v89_match01,v89_match02,v95_match01,v95_match02,v97_match01,v97_match02"
 HOLDOUT="v29_match01,v29_match02,v40_match01,v40_match02,v89_match01,v89_match02"

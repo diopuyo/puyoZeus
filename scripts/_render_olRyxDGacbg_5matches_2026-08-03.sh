@@ -2,7 +2,7 @@
 # olRyxDGacbg (A級 DIO vs TS) の5試合 (game_idx 1-5、t=2887-3231s付近) に
 # 有利不利判定オーバーレイ (対称化+タイムライン密度 修正版) を合成する。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 OUT_DIR="data/verify/advantage_videos_olRyxDGacbg_2026-08-03"
 mkdir -p "$OUT_DIR"
 DELTA_CSV="data/verify/delta_winprob_olRyxDGacbg_2026-08-03/exchange_delta_winprob.csv"

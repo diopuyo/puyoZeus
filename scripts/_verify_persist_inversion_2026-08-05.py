@@ -43,6 +43,14 @@ Usage:
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import csv
 import importlib
 import sys
@@ -71,7 +79,7 @@ _diag_c = importlib.import_module("scripts._diag_c_zero_effect_2026-08-04")
 # 定数
 # =============================================================================
 
-VIDEO_DIR: Path = Path("/home/ryouj/frames")
+VIDEO_DIR: Path = Path(_public_dev_text('<home>/frames'))
 OUT_DIR: Path = Path("data/verify/persist_inversion_2026-08-05")
 
 # onset 周辺の範囲限定 (フル動画再走行禁止)。

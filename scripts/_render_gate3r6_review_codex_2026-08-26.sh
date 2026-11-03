@@ -1,7 +1,7 @@
 #!/bin/bash
 # Gate 3R-6候補のレビュー動画: user指定どおり先頭5試合を開始〜終了まで。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 export PYTHONHASHSEED=0
 export OMP_NUM_THREADS=1

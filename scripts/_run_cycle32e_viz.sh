@@ -4,7 +4,7 @@
 #  --mask-ojama-logit (= ojama logit 推論時 mask)
 #  --use-puyo-gate (= PuyoPresenceGate 配線)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 MODEL="models/cnn_cycle32e.pt"
 HSV_STATE="data/per_video_hsv_ranges/_merged_default.json"

@@ -7,7 +7,7 @@
 #   - axis3b_revert_eval/ (= 軸 3-b 撤回後、直近 baseline)
 #   - patch_fp_eval/ (= 案 d NCC 評価)
 # 並列上限 3 (= CLAUDE.md / CYCLE_FINDINGS.md ルール準拠)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health highlight_override_eval

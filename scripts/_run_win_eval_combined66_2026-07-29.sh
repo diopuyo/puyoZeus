@@ -7,7 +7,7 @@
 # (m30収集完走・labeled_win_m30.csv 検証OK後にのみ呼ばれる前提。単体実行時は
 #  labeled_win_m30.csv の存在を事前に確認すること)
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 

@@ -18,6 +18,7 @@ Canny + Hough Line + 交点クラスタリングで 6 列 × 13 行のグリッ�
 """
 
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 from dataclasses import dataclass
 from typing import Optional
@@ -216,7 +217,7 @@ class BoardGridDetector:
             return None
         if frame_bgr.ndim != 3 or frame_bgr.shape[2] != 3:
             return None
-        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(full_image(frame_bgr), cv2.COLOR_BGR2GRAY)
         # 単一色フレームなら edge が皆無 → None
         if int(gray.std()) < 3:
             return None

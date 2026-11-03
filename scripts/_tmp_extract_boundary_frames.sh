@@ -1,7 +1,7 @@
 #!/bin/bash
 # c34 game1 境界確認用フレーム抽出 (2026-07-25)
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 FF=$(./venv/bin/python -c 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())')
 OUT=data/verify/review_video_new_2026-07-25/boundary_check
 mkdir -p "$OUT"

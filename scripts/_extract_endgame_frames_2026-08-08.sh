@@ -2,7 +2,7 @@
 # 試合終盤の有利不利表示を確認する (user 指摘「最後の連鎖を撃った瞬間に
 # 勝利が確定しているのに、 モデルがそれを確定として扱えていないのでは」)。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 DEMO=data/verify/youtube_demo_2026-08-07
 OUT="$DEMO/endgame_check"

@@ -7,7 +7,7 @@
 # 完了後は scripts/phase_e_count_match や detect_match_winners も
 # v41-v95 (-2 = v39, v22 等の異常をスキップした連番) について実行する必要あり
 
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 LOG=data/phase_e_dl_remaining.log
 > "$LOG"

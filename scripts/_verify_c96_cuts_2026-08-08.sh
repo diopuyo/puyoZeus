@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # c96 切り出し 3 本の検収: duration 確認 + 中間地点フレームの静止画抽出。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 OUTDIR="$ROOT/data/verify/c96_split_2026-08-08/cuts"
 mkdir -p "$OUTDIR"
 FFMPEG=$("$ROOT/venv/bin/python" -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())")

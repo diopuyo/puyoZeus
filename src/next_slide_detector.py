@@ -28,6 +28,7 @@ from typing import Iterable
 
 import numpy as np
 
+from src.recog_speed_py import ITEM_SLIDE_GRAY, STATS, audit_enabled, enabled
 from src.board import (
     BOARD_COLS,
     BOARD_ROWS,
@@ -144,6 +145,9 @@ class NextSlideDetector:
         )
         self._cooldown: int = 0
         self._last_diff_score: float = 0.0
+        # live_recog_speed_py (既定 OFF): 直前に使った現コマと、その ROI のグレー画像。
+        # 次のコマの prev_frame が「同じ画像オブジェクト」なら前コマ側のグレー化を省く。
+        self._gray_cache: tuple[np.ndarray, tuple[np.ndarray | None, ...]] | None = None
 
     @property
     def side(self) -> str:
@@ -154,6 +158,7 @@ class NextSlideDetector:
         self._diff_history.clear()
         self._cooldown = 0
         self._last_diff_score = 0.0
+        self._gray_cache = None
 
     def _get_rois(self) -> tuple[tuple[int, int, int, int], ...]:
         """side に応じた next/dnext ROI 4 つを返す."""
@@ -192,19 +197,45 @@ class NextSlideDetector:
     ) -> float:
         """全 NEXT ROI 共通の平均絶対差分 (gray) を計算."""
         diffs: list[float] = []
-        for roi in self._get_rois():
-            prev_gray = self._extract_roi_gray(prev_frame, roi)
+        reuse = enabled(ITEM_SLIDE_GRAY)
+        cached = self._gray_cache
+        # 前コマ側: 前回の現コマと同じ画像オブジェクトなら、そのとき作ったグレーをそのまま使う
+        # (同じ画素・同じ式なので値は同じ。強参照を持つので画像は書き換わらない)。
+        prev_grays = cached[1] if reuse and cached is not None and cached[0] is prev_frame else None
+        curr_grays: list[np.ndarray | None] = []
+        for index, roi in enumerate(self._get_rois()):
+            if prev_grays is not None:
+                prev_gray = prev_grays[index]
+                STATS["slide_gray_reused"] += 1
+                if audit_enabled():
+                    self._audit_prev_gray(prev_gray, prev_frame, roi)
+            else:
+                prev_gray = self._extract_roi_gray(prev_frame, roi)
             curr_gray = self._extract_roi_gray(curr_frame, roi)
+            curr_grays.append(curr_gray)
             if prev_gray is None or curr_gray is None:
                 continue
             if prev_gray.shape != curr_gray.shape:
                 continue
             diffs.append(float(np.abs(prev_gray - curr_gray).mean()))
+        self._gray_cache = (curr_frame, tuple(curr_grays)) if reuse else None
         if not diffs:
             return 0.0
         # 全 ROI の平均ではなく最大を採用: スライド初期は next_top のみが
         # 動き、他 ROI はまだ静止のことが多いため、平均だと信号が薄まる。
         return max(diffs)
+
+    def _audit_prev_gray(
+        self, reused: np.ndarray | None, prev_frame: np.ndarray, roi: tuple[int, int, int, int],
+    ) -> None:
+        """検証用 (live_recog_speed_py の監査): 使い回したグレーを作り直した結果と突き合わせて数える。"""
+        fresh = self._extract_roi_gray(prev_frame, roi)
+        STATS["audit_checked"] += 1
+        same = (fresh is None and reused is None) or (
+            fresh is not None and reused is not None and fresh.shape == reused.shape
+            and np.array_equal(fresh, reused))
+        if not same:
+            STATS["audit_mismatch"] += 1
 
     def _adaptive_threshold(self) -> float:
         """直近 history から適応 threshold を計算 (median * K, floor あり)."""

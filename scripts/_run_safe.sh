@@ -13,7 +13,7 @@ MAXPAR="${2:-2}"       # 同時実行上限(既定2 = 最大 MAXPAR*THREADS コ�
 COOLDOWN="${3:-60}"    # ジョブ完了後の休止秒(既定60)
 THREADS="${4:-3}"      # 1プロセスのスレッド上限(既定3)
 
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 # numpy/OpenBLAS/MKL/torch のスレッドを絞る(単一プロセスの発熱を抑える最重要レバー)
 export OMP_NUM_THREADS="$THREADS" OPENBLAS_NUM_THREADS="$THREADS" \

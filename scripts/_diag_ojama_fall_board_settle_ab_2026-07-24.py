@@ -59,7 +59,7 @@ OFF/ON 効果測定という本スクリプトの目的には実際の confirmed
   本スクリプト単体では --smoke 指定時のみ短窓 1 件で動作確認する。
 
 Usage (本走行、WSL 経由、CLAUDE.md プロセス管理ルール準拠):
-    wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \\
+    wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \\
       setsid -f bash -c 'PYTHONPATH=. ./venv/bin/python \\
       scripts/_diag_ojama_fall_board_settle_ab_2026-07-24.py \\
       > logs/ojama_fall_board_settle_ab_2026-07-24.log 2>&1 < /dev/null'"

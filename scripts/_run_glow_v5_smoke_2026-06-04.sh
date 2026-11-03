@@ -2,7 +2,7 @@
 # v5 スモーク: v89_match01 の board_log jsonl のみ生成し、v4 と比較する。
 # v5 の変更: apply_glow_guard の frozen非有色でもconsensus復元 (frozen=O/空/UNKNOWNでも CNN==HSV=色 → 復元)
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
 VDIR="data/match_clips"; VIZDIR="data/verify/viz"; LOGDIR="logs/fix_v70_eval"
 
 echo "[start] glow v5 smoke $(date)"

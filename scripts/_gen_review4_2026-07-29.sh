@@ -25,7 +25,7 @@
 #     c56 の1試合を校正ON(フラグ省略=CLI既定True)でも追加生成する。
 #     存在しない場合はスキップしログに明記する(fail-silent にしない)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Gate 4正式検収: 全frameの実表示値を含む密timelineを8区間で収集する。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 COND="${1:?条件番号1-4}"
 SEG_START="${2:-1}"

@@ -21,7 +21,7 @@
 #   2. 区間のフレーム数の合計 = 結合後のフレーム数 (欠落・重複ゼロ)
 #   3. 2本の再生時間の合計 = 元動画 117分 (7033.6s) ± 数秒
 #   4. 音声トラックが載っている
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 DIR=data/verify/zenchi_render_2026-08-21
 OUT=data/verify/zenchi_delivery_2026-08-21

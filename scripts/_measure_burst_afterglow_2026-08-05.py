@@ -40,6 +40,14 @@ Usage:
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import csv
 import importlib
 import sys
@@ -65,7 +73,7 @@ _SHEET = importlib.import_module("scripts.build_error_onset_sheet_2026-08-04")
 # 定数 (マジックナンバー禁止のため全て定数化)
 # =============================================================================
 
-VIDEO_DIR: Path = Path("/home/ryouj/frames")
+VIDEO_DIR: Path = Path(_public_dev_text('<home>/frames'))
 CALIBRATION_CSV: Path = Path(
     "data/verify/effect_detector_calibration_v3_2026-08-04/labeled_cell_features_v3.csv"
 )

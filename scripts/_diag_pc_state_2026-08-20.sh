@@ -3,7 +3,7 @@
 # ディスクI/O飽和) を切り分ける (2026-08-20)。
 # ノートPC (RTX 4060 Laptop) なので長時間高負荷でサーマルスロットリングが
 # 起きうる。それが「14並列で1本あたり4.3倍遅い」の真因かを確認する。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 echo "=== CPU ==="
 grep -m1 "model name" /proc/cpuinfo

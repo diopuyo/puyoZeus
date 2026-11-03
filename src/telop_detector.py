@@ -18,12 +18,16 @@ HSV/CNN がぷよを誤認識する (m27 で実証済)。
         # covered 内のセルは COLOR_UNKNOWN として扱う
 """
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+from src.prepared_template import PreparedImage, PreparedTemplate
 
 from src.board import BOARD_COLS, BOARD_ROWS, HIDDEN_ROWS
 
@@ -42,6 +46,14 @@ SEARCH_Y: int = 300
 SEARCH_W: int = 720
 SEARCH_H: int = 400
 
+# 高速経路 (既定 OFF、環境変数 PUYO_FAST_TELOP=1): 1/4 縮小の粗スコアが床未満のテンプレートは、
+# 閾値 (0.55) 未満と扱って全解像度照合を省く。粗スコア >= 床の時は従来の全解像度経路へ進むので、
+# 誤って「不可視」にできるのは粗スコアが床未満なのに全解像度が閾値以上のときだけ (実測は docs/PHASE_J_PERF_2026-09-30)。
+# 省いたテンプレートは template_name/score に寄与しない (これらの値は is_visible=False では未使用)。
+FAST_ENV: str = "PUYO_FAST_TELOP"
+COARSE_SCALE: float = 0.25
+PREFILTER_FLOOR: float = 0.30
+
 
 @dataclass(frozen=True)
 class TelopResult:
@@ -55,6 +67,10 @@ class TelopResult:
     bbox: tuple[int, int, int, int] | None = None
 
 
+def _shrink(image: np.ndarray) -> np.ndarray:
+    return cv2.resize(full_image(image), None, fx=COARSE_SCALE, fy=COARSE_SCALE, interpolation=cv2.INTER_AREA)
+
+
 class TelopDetector:
     """中央テロップを NCC マッチで検出する。"""
 
@@ -62,17 +78,32 @@ class TelopDetector:
         self,
         templates: dict[str, np.ndarray],
         threshold: float = DEFAULT_NCC_THRESHOLD,
+        fast: bool | None = None,
     ) -> None:
+        """fast=None は環境変数 PUYO_FAST_TELOP=1 の時だけ高速経路 (既定OFF = 従来と bit-identical)。"""
         self._templates = templates
+        self._prepared = {name: PreparedTemplate(value) for name, value in templates.items()}
         self._threshold = threshold
+        self.fast = os.environ.get(FAST_ENV) == "1" if fast is None else fast
+        self._coarse = {name: _shrink(value) for name, value in templates.items()} if self.fast else {}
+        self.coarse_rejects = 0  # 予備判定で全解像度照合を省いた回数 (テンプレート単位。実測用)
+
+    @property
+    def template_count(self) -> int:
+        """読み込んだテンプレート数。0 なら detect は常に「テロップなし」を返す (配布版でテンプレート不在の状態)。"""
+        return len(self._templates)
 
     @classmethod
     def load_default(
         cls,
         template_dir: Path = DEFAULT_TEMPLATE_DIR,
         threshold: float = DEFAULT_NCC_THRESHOLD,
+        fast: bool | None = None,
     ) -> "TelopDetector":
         """既定ディレクトリから telop_*.png を読み込む。"""
+        from src.image_free_ui import enabled, LearnedTelop
+        if enabled():
+            return LearnedTelop(threshold, fast)
         templates: dict[str, np.ndarray] = {}
         if template_dir.exists():
             for p in sorted(template_dir.glob(f"{TELOP_PREFIX}*.png")):
@@ -81,7 +112,7 @@ class TelopDetector:
                     continue
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 templates[p.stem] = gray
-        return cls(templates=templates, threshold=threshold)
+        return cls(templates=templates, threshold=threshold, fast=fast)
 
     def detect(self, frame_bgr: np.ndarray) -> TelopResult:
         """フレーム中央領域に対してテンプレートマッチ。最大スコアと bbox を返す。"""
@@ -97,6 +128,8 @@ class TelopDetector:
         y2 = max(y1 + 1, min(SEARCH_Y + SEARCH_H, h))
         roi = frame_bgr[y1:y2, x1:x2]
         roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        prepared = PreparedImage(roi_gray)
+        coarse_roi = _shrink(roi_gray) if self.fast else None
 
         best_name: str | None = None
         best_score: float = -1.0
@@ -105,8 +138,9 @@ class TelopDetector:
             tH, tW = tmpl.shape[:2]
             if roi_gray.shape[0] < tH or roi_gray.shape[1] < tW:
                 continue
-            result = cv2.matchTemplate(roi_gray, tmpl, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, max_loc = cv2.minMaxLoc(result)
+            if coarse_roi is not None and self._coarse_below_floor(name, coarse_roi):
+                continue
+            max_val, max_loc = self._prepared[name].peak(roi_gray, self._threshold, prepared)
             if max_val > best_score:
                 best_score = float(max_val)
                 best_name = name
@@ -122,6 +156,16 @@ class TelopDetector:
             score=best_score,
             bbox=best_bbox if is_vis else None,
         )
+
+    def _coarse_below_floor(self, name: str, coarse_roi: np.ndarray) -> bool:
+        """縮小 ROI での最大 NCC が床未満なら True (= このテンプレートは閾値未満と扱える)。"""
+        coarse = self._coarse[name]
+        if coarse_roi.shape[0] < coarse.shape[0] or coarse_roi.shape[1] < coarse.shape[1]:
+            return False  # 縮小後にテンプレートが入らない場合は判断せず従来経路へ
+        peak = float(cv2.minMaxLoc(cv2.matchTemplate(coarse_roi, coarse, cv2.TM_CCOEFF_NORMED))[1])
+        below = peak < PREFILTER_FLOOR
+        self.coarse_rejects += below
+        return below
 
     def is_visible(self, frame_bgr: np.ndarray) -> bool:
         """簡易メソッド。"""

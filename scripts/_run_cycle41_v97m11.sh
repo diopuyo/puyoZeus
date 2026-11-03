@@ -3,7 +3,7 @@
 # 既 default model (= cnn_phase_b_large_v2.pt) + gate で 「puyo らしさ」 事前判定
 # 時間節約のため v97m11 1 本で先に判定、 効果あれば 3 動画展開
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle41
 mkdir -p logs/board_logs

@@ -1,7 +1,7 @@
 #!/bin/bash
 # 検収デモ再生成4ジョブ (確認デモrender/demo2render/確認デモselfverify/demo2 selfverify)
 # の完了をポーリングする (MSYSエスケープ事故回避のためスクリプトファイル化)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 i=0
 while true; do
   R1=done

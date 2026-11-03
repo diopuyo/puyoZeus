@@ -1,6 +1,6 @@
 #!/bin/bash
 # cycle 57b 評価: 4 動画 viz + 8 動画 eval + 集計.
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health cycle57b_eval

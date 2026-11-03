@@ -3,7 +3,7 @@
 # MSYSパイプ・特殊文字の罠 (feedback_msys_pipe_escape.md) を避けるため
 # スクリプトファイル化してある。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 mkdir -p logs
 while IFS= read -r line; do
   echo "[job] ${line}"

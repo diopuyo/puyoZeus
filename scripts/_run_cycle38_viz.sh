@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle 38: tier 1 threshold 30 sweep (c37=25 が良かった→ 更に上げて確認)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle38
 mkdir -p logs/board_logs

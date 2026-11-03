@@ -1,7 +1,7 @@
 #!/bin/bash
 # 検収用フレーム抜き出し (区間A/B/C、境界イベント前後 + 30秒おき定点)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 FFMPEG=venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2
 OUTDIR=data/verify/zenchi_probe_2026-08-21/frames
 mkdir -p "$OUTDIR"

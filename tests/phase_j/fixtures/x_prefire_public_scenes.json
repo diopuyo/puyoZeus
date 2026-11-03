@@ -1,0 +1,803 @@
+{
+ "source": {
+  "path": "C:/puyo1_work/live_x_timing_20261022/stage3_replay/replay_21c_events.jsonl",
+  "sha256": "7160027781f0e3226bd8c516fa9fe070111d15edb633e4e3ff6582dd66f124d9",
+  "note": "段3 再生結果の事象から Python の public() で組み立てた公開欄 x_provisional の時系列"
+ },
+ "scenes": [
+  {
+   "name": "confirmed",
+   "game": 36,
+   "side": 0,
+   "resolution": "confirm",
+   "rows": [
+    {
+     "t": 1854.4856932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1854.7356932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "pending",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 0.0
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1854.9420394999906,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 0.2063462999649346
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1854.9856932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 0.25
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1855.2356932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 0.5
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1855.4856932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 0.75
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1855.7356932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 1.0
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1855.9856932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 1.25
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1856.2356932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 1.5
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1856.4856932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 1.75
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1856.7356932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 2.0
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1856.9856932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 2.25
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1857.2356932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 2.5
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1857.4856932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 2.75
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1857.7356932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 3.0
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1857.9856932000257,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "confirmed",
+        "score": 15360,
+        "chain": 7,
+        "generated": 220,
+        "landing_t": 1854.7356932000257,
+        "source": "confirmed",
+        "col": 2,
+        "rotation": 1,
+        "age_sec": 3.25
+       },
+       null
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "retract_next_moved",
+   "game": 3,
+   "side": 0,
+   "resolution": "retract:next_moved",
+   "rows": [
+    {
+     "t": 728.4935519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 728.7435519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "pending",
+        "score": 360,
+        "chain": 2,
+        "generated": null,
+        "landing_t": 728.7435519000283,
+        "source": "confirmed",
+        "col": 3,
+        "rotation": 3,
+        "age_sec": 0.0
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 728.9935519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "pending",
+        "score": 360,
+        "chain": 2,
+        "generated": null,
+        "landing_t": 728.7435519000283,
+        "source": "confirmed",
+        "col": 3,
+        "rotation": 3,
+        "age_sec": 0.25
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 729.2435519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "pending",
+        "score": 360,
+        "chain": 2,
+        "generated": null,
+        "landing_t": 728.7435519000283,
+        "source": "confirmed",
+        "col": 3,
+        "rotation": 3,
+        "age_sec": 0.5
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 729.4935519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "pending",
+        "score": 360,
+        "chain": 2,
+        "generated": null,
+        "landing_t": 728.7435519000283,
+        "source": "confirmed",
+        "col": 3,
+        "rotation": 3,
+        "age_sec": 0.75
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 729.5082612000406,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 729.7435519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 729.9935519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 730.2435519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 730.4935519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 730.7435519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 730.9935519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 731.2435519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 731.4935519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 731.7435519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 731.9935519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 732.2435519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 732.4935519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 732.7435519000283,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "retract_timeout",
+   "game": 27,
+   "side": 0,
+   "resolution": "retract:timeout",
+   "rows": [
+    {
+     "t": 1325.4167914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1325.6667914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "pending",
+        "score": 2620,
+        "chain": 4,
+        "generated": null,
+        "landing_t": 1325.6667914999416,
+        "source": "confirmed",
+        "col": 1,
+        "rotation": 3,
+        "age_sec": 0.0
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1325.9167914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "pending",
+        "score": 2620,
+        "chain": 4,
+        "generated": null,
+        "landing_t": 1325.6667914999416,
+        "source": "confirmed",
+        "col": 1,
+        "rotation": 3,
+        "age_sec": 0.25
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1326.1667914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "pending",
+        "score": 2620,
+        "chain": 4,
+        "generated": null,
+        "landing_t": 1325.6667914999416,
+        "source": "confirmed",
+        "col": 1,
+        "rotation": 3,
+        "age_sec": 0.5
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1326.4167914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       {
+        "status": "pending",
+        "score": 2620,
+        "chain": 4,
+        "generated": null,
+        "landing_t": 1325.6667914999416,
+        "source": "confirmed",
+        "col": 1,
+        "rotation": 3,
+        "age_sec": 0.75
+       },
+       null
+      ]
+     }
+    },
+    {
+     "t": 1326.6269314000383,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1326.6667914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1326.9167914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1327.1667914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1327.4167914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1327.6667914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1327.9167914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1328.1667914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1328.4167914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1328.6667914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1328.9167914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1329.1667914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1329.4167914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    },
+    {
+     "t": 1329.6667914999416,
+     "x_provisional": {
+      "label": "撃つ直前の火力 X (暫定)",
+      "sides": [
+       null,
+       null
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

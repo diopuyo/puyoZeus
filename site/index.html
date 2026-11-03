@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="puyoZeus Live は、ぷよぷよeスポーツの対戦映像から有利不利を推定し、OBS に表示する非公式ツールです。">
+  <title>puyoZeus Live — 対戦の流れを、配信に。</title>
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="skip" href="#main">本文へ</a>
+<header><a class="wordmark" href="#">puyo<span>Zeus</span> <small>Live</small></a><nav aria-label="メイン"><a href="#start">はじめ方</a><a href="#faq">よくある質問</a><a href="https://github.com/diopuyo/puyoZeus">GitHub ↗</a></nav></header>
+<main id="main">
+  <section class="hero">
+    <div class="eyebrow">FOR PUYO PUYO CHAMPIONS / OBS</div>
+    <p class="draft">公開準備中 · 0.6.0 下書き</p>
+    <h1>対戦の流れを、<br><span>配信に。</span></h1>
+    <p class="lead">盤面から有利不利を推定。<br>ゼウスくんの表情とオーバーレイで、観戦にもうひとつの視点を。</p>
+    <div class="actions"><a class="button" href="https://github.com/diopuyo/puyoZeus/releases/latest">公開済みの最新版を確認 <span>↗</span></a><a href="#start">導入の流れ ↓</a></div>
+    <p class="muted">Windows x64 向け · 署名なし ZIP · MIT License<br>0.6.0 の公開・動作確認は未完了です。リンク先の版名をご確認ください。</p>
+  </section>
+  <section class="showcase" aria-labelledby="preview-title">
+    <div class="section-label">01 / DISPLAY</div><h2 id="preview-title">表情で伝わる、いまの形勢。</h2>
+    <figure><img src="mascot_expressions_preview.png" alt="ゼウスくんの表情見本。不利から有利へ、5段階の表情が並ぶ。" width="1600" height="410"><figcaption>既存の表情見本。背景は単色で、ゲーム映像は含みません。表示値は見本であり、実戦の測定結果ではありません。</figcaption></figure>
+    <div class="features"><article><b>映像を読み取る</b><p>ぷよぷよeスポーツの対戦映像を入力し、盤面を認識します。</p></article><article><b>有利不利を推定する</b><p>盤面と学習モデルから推定します。勝敗を保証する表示ではありません。</p></article><article><b>OBS に重ねる</b><p>ブラウザソースで配信へ。表示の位置や内容は設定画面で調整できます。</p></article></div>
+  </section>
+  <section id="start"><div class="section-label">02 / GET STARTED</div><h2>ZIP からはじめる。</h2>
+    <ol class="steps">
+      <li><h3>ダウンロードして確かめる</h3><p><a href="https://github.com/diopuyo/puyoZeus/releases/latest">Releases</a> から配布 ZIP と SHA256SUMS を取得します。「Source code」は実行用 ZIP ではありません。版名・既知の制約を読んでください。</p></li>
+      <li><h3>フォルダへ展開する</h3><p>ZIP を右クリックして「すべて展開」。書き込み可能な場所に置き、ZIP の中から直接起動しないでください。</p></li>
+      <li><h3>OBS の入力を準備する</h3><p>ゲーム映像を 16:9・1920×1080 に合わせ、OBS の仮想カメラを開始します。認識用の入力には、本ツールの表示を重ねないゲーム映像を使います。</p></li>
+      <li><h3>専用窓の案内に従う</h3><p><code>puyoZeus Live.vbs</code> を開き、初回の入力選択・画面調整を進めます。専用窓を開けない場合はブラウザーに切り替わることがあります。</p></li>
+      <li><h3>配信に表示する</h3><p>OBS にブラウザソースを追加し、初期設定の最後に表示された URL をコピーします。通常は <code>http://127.0.0.1:8765/</code>、幅 1920・高さ 1080 です。ポートが変更された場合は表示された URL を優先します。既存のソースは起動後に再読み込みしてください。表情の自動切替は配布の既定でオンです。不要な場合は、設定の「マスコットの表情を勝率で変える」をオフにできます。</p></li>
+    </ol>
+    <aside><h3>SHA256 の確かめ方</h3><p>PowerShell で、ダウンロードした実際の ZIP の名前を指定します。</p><pre><code>Get-FileHash -Algorithm SHA256 -LiteralPath '.\puyoZeus-0.6.0-windows-x64.zip'</code></pre><p>表示された Hash の 64 桁と、SHA256SUMS の同じファイル名の値を比較します。大文字・小文字は問いません。不一致なら実行せず、取得元とファイルを確認してください。SHA256 はファイルの一致確認で、発行元を証明する電子署名ではありません。</p></aside>
+  </section>
+  <section id="environment"><div class="section-label">03 / REQUIREMENTS</div><h2>動く環境と、できる範囲。</h2>
+    <p>Windows x64、OBS Studio と仮想カメラ、ぷよぷよeスポーツの対戦映像を想定しています。配布 ZIP に Python と実行用モデルを同梱する予定です。Python を別に導入する手順はありません。</p>
+    <p>Windows の対応版・OBS の確認済み版・必要メモリは最終 ZIP の初回導入試験（C5）後に確定します。専用窓は WebView2 Runtime を利用し、利用できない場合は通常のブラウザーへ退避します。</p>
+    <ul><li>上級者対戦のデータに基づく推定です。初級者対戦や別タイトルの精度は保証しません。</li><li>解像度・配置・色・映像の遅延で誤認識や表示遅れが起きます。安定した盤面が読めない間は、表示を保持することがあります。</li><li>推定は参考情報です。個々の試合の勝敗やプレイヤーの強さを断定しません。</li><li>216 本のデータによる次期モデルは、この 0.6.0 の採用確定事項に含めません。</li></ul>
+  </section>
+  <section id="faq"><div class="section-label">04 / HELP</div><h2>よくある質問</h2>
+    <details><summary>SmartScreen が表示される</summary><p>この配布物は署名なしです。GitHub の正しいリポジトリ・版名・SHA256 を確認し、信頼できると判断した場合のみ「詳細情報」→「実行」を選びます。その選択肢がない場合や組織の管理下では、制限を解除せず管理者に相談してください。Windows の保護機能全体を無効にする必要はありません。</p></details>
+    <details><summary>Visual C++ の DLL が見つからない</summary><p><a href="https://learn.microsoft.com/ja-jp/cpp/windows/latest-supported-vc-redist">Microsoft 公式の Visual C++ 再頒布可能パッケージ</a>から x64 版を確認してください。個別の DLL を非公式サイトから取得しないでください。解消しない場合は表示されたエラー文を Issue に記載します。</p></details>
+    <details><summary>表示が出ない・入力を読めない</summary><p>OBS の仮想カメラ、入力番号、1920×1080・16:9 の映像、入力への重ね表示の混入を確認します。アプリ起動後にブラウザソースを再読み込みし、設定と OBS のポートを一致させてください。初回の画面調整が終わるまでは判定を待ちます。</p></details>
+    <details><summary>止め方・消し方</summary><p>画面内または通知領域の「終了」を使います。専用窓の × は窓を隠す操作で、処理は終了しません。終了後に展開フォルダを削除できます。設定を LocalAppData に保存した場合は <code>%LOCALAPPDATA%\PuyoLive</code> の必要な設定を退避し、不要なら別途削除します。OBS のブラウザソースも不要なら削除してください。</p></details>
+    <details><summary>不具合を報告したい</summary><p><a href="https://github.com/diopuyo/puyoZeus/issues/new">不具合報告</a>へ、版・Windows・OBS・入力方法・再現手順を記載してください。ログ全文やゲーム映像をそのまま投稿せず、ユーザー名・パス・配信キー等を除いた必要最小限の文字情報を送ってください。</p></details>
+  </section>
+  <section class="closing"><h2>配信に、もうひとつの視点を。</h2><p lang="en">An unofficial OBS overlay for Puyo Puyo Champions. Estimates the match advantage from gameplay video. Windows x64 ZIP; unsigned. Please read the release notes before use.</p><a class="button" href="https://github.com/diopuyo/puyoZeus/releases/latest">Releases を開く ↗</a></section>
+</main>
+<footer><p><strong>puyoZeus Live</strong> · 非公式プロジェクト。ゲームの権利者・開発元による提供、承認、提携を示すものではありません。</p><p>コード・ゼウスくん・ロゴは MIT。第三者の部品は各ライセンスに従います。<a href="https://github.com/diopuyo/puyoZeus/blob/release/v0.6.0/LICENSE">LICENSE</a> · <a href="https://github.com/diopuyo/puyoZeus/blob/release/v0.6.0/THIRD_PARTY_NOTICES.md">第三者表記</a> · <a href="https://github.com/diopuyo/puyoZeus/issues">Issues</a></p><p>このページに外部 CDN・解析タグ・追跡スクリプトはありません。</p></footer>
+</body></html>

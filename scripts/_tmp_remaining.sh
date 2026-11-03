@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 echo "=== 残り(rows未出力)==="
 for f in logs/collect_xii_v*.log; do
   grep -q rows "$f" 2>/dev/null || echo "  $(basename "$f")"

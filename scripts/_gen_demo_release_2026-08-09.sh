@@ -9,7 +9,7 @@
 #   release_C_recognition.mp4      認識のみ (色記号+状態+連鎖数)
 #   release_D_no_cell_overlay.mp4  色記号なし (状態+連鎖数のみ)
 #   release_E_stable_tsumo.mp4     確定盤面+ツモ落下のみ表示
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/verify/youtube_demo_2026-08-07/dio_vs_ts_m01_clip.mp4

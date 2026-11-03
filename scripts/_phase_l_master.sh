@@ -3,7 +3,7 @@
 # 旧版 set -e で evaluate 段階の空 vid → 全停止 → all_done.flag 出ず
 # v3 では _lib_health.sh の run_item で fail-tolerant + 中間状態保存
 set +e  # run_step / run_item で個別 rc 拾うため
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 source scripts/_lib_health.sh
 init_health phase_l
 

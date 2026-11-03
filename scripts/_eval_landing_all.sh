@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 全既知動画で eval_landing 実行
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 mkdir -p data/eval_results logs
 
 declare -A VIDEOS=(

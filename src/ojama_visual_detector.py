@@ -15,6 +15,7 @@
 """
 
 from __future__ import annotations
+from src.live_speed_c import resolve_hsv
 
 from dataclasses import dataclass, field
 
@@ -29,6 +30,7 @@ from src.board_state_machine import (
     GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD,
     StateContext,
 )
+from src.media_tick import TickShadow, TickStamp, audit_note, site_enabled, tick_reached
 
 # ============================
 # 定数
@@ -173,6 +175,7 @@ def _count_top_ojama(
             if int(cnn_board.get(r, c)) == COLOR_OJAMA:
                 count_cnn += 1
 
+    hsv_board = resolve_hsv(hsv_board)
     if hsv_board is None:
         return count_cnn
 
@@ -430,6 +433,11 @@ class OjamaVisualDetector:
     _scoped_exit_start_time: float = field(default=0.0, init=False, repr=False)
     _scoped_stable_consec: int = field(default=0, init=False, repr=False)
     _prev_board_ojama_count: int = field(default=-1, init=False, repr=False)
+    # コマ落ちに強い数え方 (2026-10-23、R10 型 A、既定 OFF): _board_stable_consec に並べる
+    # 刻みの影。signals.media_tick が None (既定) の間は一切書き込まれない。
+    _board_stable_tick: TickShadow = field(
+        default_factory=TickShadow, init=False, repr=False,
+    )
 
     def detect(
         self,
@@ -591,7 +599,7 @@ class OjamaVisualDetector:
         else:
             self._board_stable_consec = 0
 
-        if self._board_stable_consec >= OJAMA_FALL_SETTLE_STABLE_FRAMES:
+        if self._board_settled(getattr(signals, "media_tick", None)):
             # バグ修正 (2026-07-24): タイムアウト分岐と同様、 settle 退出時も
             # ROI 実カウントを保持して次フレームの誤再突入を防ぐ。
             exit_top_count = _count_top_ojama(signals.cnn_board, signals.hsv_board)
@@ -599,6 +607,21 @@ class OjamaVisualDetector:
             return BoardState.STABLE
 
         return None  # 継続
+
+    def _board_settled(self, stamp: "TickStamp | None") -> bool:
+        """案B の退出: 盤面のぷよ数の静止が OJAMA_FALL_SETTLE_STABLE_FRAMES 続いたか.
+
+        stamp が None (既定 = コマ落ちに強い数え方 OFF) なら従来の回数判定 (bit-identical)。
+        刻みモード (2026-10-23、R10 型 A) では回数に並べて刻みも数え、回数 ≥ N、または
+        回数 ≥ m かつ 刻み ≥ N で成立 (m = max(2, ⌊N/4⌋))。全コマでは従来と同じ。
+        """
+        count = self._board_stable_consec
+        if stamp is None or not site_enabled('R10'):
+            return count >= OJAMA_FALL_SETTLE_STABLE_FRAMES
+        ticks = self._board_stable_tick.observe(count, stamp)
+        reached = tick_reached(count, ticks, OJAMA_FALL_SETTLE_STABLE_FRAMES)
+        audit_note('R10', reached and count < OJAMA_FALL_SETTLE_STABLE_FRAMES)
+        return reached
 
     def _detect_ojama_fall_exit_scoped(
         self, ctx: StateContext, signals: DetectorSignals,

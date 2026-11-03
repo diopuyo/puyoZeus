@@ -3,7 +3,7 @@
 # HSV 分類の Rust 化に着手する前に、ビルドできる状態かを確定させる。
 # PATH に空白やカッコを含むため wsl 直書きでは MSYS に壊される
 # (memory feedback_msys_pipe_escape) — スクリプト化する。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 export PATH="$HOME/.cargo/bin:$PATH"
 

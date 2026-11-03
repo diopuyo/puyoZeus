@@ -1,7 +1,7 @@
 #!/bin/bash
 # olRyxDGacbg 陰性対照 regen 完了待ち → ゲート自動実行 (使い捨て、2026-08-07)
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 NPZ="data/verify/phase_l_quality_gate_2026-08-07/negative_control/olRyxDGacbg_10min.npz"
 LOG="logs/phase_l_quality_gate_negctrl_2026-08-07.log"

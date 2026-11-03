@@ -14,7 +14,7 @@
 #   (試合境界: t=284/340/406 で 0-0 リセット確認済み、464/450/490/528/614 も後続に検出)
 #   検収指摘⑨ (2026-08-14): 旧 --end-sec 411 は4試合目の頭2.5秒が混入していた
 #   (3試合目終了 t≈405.7 に対し余裕が過大)。407 に短縮して排除。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/frames/video_74.mp4

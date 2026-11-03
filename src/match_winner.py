@@ -19,6 +19,7 @@
     # winner: "1P" / "2P" / None
 """
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -255,7 +256,7 @@ class MatchWinnerDetector:
         if not ok or frame is None:
             return None
         if frame.shape[:2] != (1080, 1920):
-            frame = cv2.resize(frame, (1920, 1080), interpolation=cv2.INTER_AREA)
+            frame = cv2.resize(full_image(frame), (1920, 1080), interpolation=cv2.INTER_AREA)
         return frame
 
     def _find_panel_visible_time(

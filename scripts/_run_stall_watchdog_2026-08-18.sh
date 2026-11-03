@@ -6,10 +6,10 @@
 # 外部リダイレクトのバッファ滞留も避ける。
 #
 # 使い方 (WSL detach、長時間放置前提、CLAUDE.md プロセス管理ルール):
-#   wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \
+#   wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \
 #     setsid -f bash scripts/_run_stall_watchdog_2026-08-18.sh < /dev/null"
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 mkdir -p logs
 exec >> logs/stall_watchdog_2026-08-18.log 2>&1

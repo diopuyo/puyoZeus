@@ -144,13 +144,13 @@ sh /tmp/rustup-init.sh -y --default-toolchain stable --profile minimal
 python3 -m venv ~/zigvenv
 ~/zigvenv/bin/pip install ziglang
 mkdir -p ~/.local/bin
-cp /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/native/puyo_core/zigcc.sh ~/.local/bin/zigcc
+cp <home>/.gemini/antigravity/scratch/puyo_analyzer/native/puyo_core/zigcc.sh ~/.local/bin/zigcc
 chmod +x ~/.local/bin/zigcc
 # native/puyo_core/.cargo/config.toml が ~/.local/bin/zigcc を linker として参照する
 # (このパスはこの環境固有、別環境では書き換えるか gcc 導入で削除)
 
 # 3. maturin (プロジェクト venv へ)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 ./venv/bin/python -m pip install maturin
 
 # 4. ビルド + インストール (-j 4 制限、148収集ジョブと競合しないよう)
@@ -254,7 +254,7 @@ CPU飽和 のどちらに起因するかは、**148収集完了後の空きCPU�
 ## 既知の制約・注意点
 
 - **linker 回避策は環境固有**: `native/puyo_core/.cargo/config.toml` の
-  `linker = "/home/ryouj/.local/bin/zigcc"` は絶対パス。別マシン/別WSL
+  `linker = "<home>/.local/bin/zigcc"` は絶対パス。別マシン/別WSL
   distroに移行する場合は書き換えが必要 (または gcc 導入で本設定自体を削除)。
 - **numpy crate 未使用**: PyO3 バインディングは `Vec<u8>` (78要素flat) で
   やり取りする。numpy 配列との変換は `src/puyo_core_bridge.py` が担う。
@@ -282,3 +282,20 @@ CPU飽和 のどちらに起因するかは、**148収集完了後の空きCPU�
 - `src/puyo_core_bridge.py`
 - `tests/test_puyo_core_parity.py`
 - `scripts/_bench_puyo_core_2026-08-12.py`
+
+## 2026-10-14: ama方式F（明示呼出専用）
+
+`ama_eval` / `ama_form` / `ama_table` / `ama_order` / `ama_search` を追加し、
+amaの15項目評価・quiet・build/ac・形照合・置換表付きビームを移植した。
+方式Fの `ama_f_py` と候補木2/3段の `ama_exchange_py` は独立APIであり、
+既存ブリッジ・採用フラグ・本番の既定動作へ接続していない。
+
+C++オラクルとの照合は固定36盤面648条件と実動画ツモ528条件で、
+合計9,120手の選択・1,176件の得点すべて一致。
+Windows向けビルドは `build_ama_windows.sh` と `ama_zig_link.py` で
+作業用 `target/ama/` へ出力する。既存 `zigcc.sh` や配布先は変更しない。
+
+API契約は [AMA_F.md](AMA_F.md)、一致母数・時間表・テスト・未実装範囲は
+[方式F実装報告](../../docs/AMA_RUST_F.md) を参照。
+特に再帰の相手盤面は自分の最初の発火時点のスナップショットを渡す契約であり、
+最初の自分の準備中の相手の積み進行は予測しない。

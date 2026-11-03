@@ -2,7 +2,7 @@
 # collect_boards_lean --sample-interval ベンチマーク (短尺 30 秒)
 set -e
 
-PROJ=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+PROJ=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$PROJ"
 
 VIDEO=data/frames/video_29.mp4

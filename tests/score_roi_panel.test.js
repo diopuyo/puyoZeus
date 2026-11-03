@@ -1,0 +1,24 @@
+/* 公開DTOから式枠の日本語表示を作り、OFFに戻ると隠れることを確認する。 */
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const html = fs.readFileSync('src/phase_j/overlay.html', 'utf8');
+const source = html.match(/function renderScoreRoiStatus\(display\) \{[\s\S]*?\n\}/)[0];
+const node = {hidden: false, textContent: ''};
+const context = {el: id => id === 'score-roi-status' ? node : null};
+vm.createContext(context);
+vm.runInContext(source, context);
+context.renderScoreRoiStatus({});
+assert.equal(node.hidden, true);
+const sides = {'1P': {ready: false, offset: [0, 0]}, '2P': {ready: true, offset: [0, -2]}};
+context.renderScoreRoiStatus({score_roi_alignment: sides});
+assert.equal(node.hidden, false);
+assert.equal(node.textContent, '式の枠: 1P 合わせ中 / 2P 0,-2px');
+sides['1P'].ready = true;
+context.renderScoreRoiStatus({score_roi_alignment: sides});
+assert.equal(node.textContent, '式の枠: 1P 0,0px / 2P 0,-2px');
+context.renderScoreRoiStatus({});
+assert.equal(node.hidden, true);
+assert.equal(node.textContent, '');
+assert.match(html, /renderScoreRoiStatus\(display\);/);
+console.log('式枠パネル: 7検査通過');

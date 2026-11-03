@@ -1,0 +1,54 @@
+{
+  "baseline": "f185c1f6a75033ed4c80fc0bca2802df1a5a71fb",
+  "conditions": [
+    {
+      "guard": 0,
+      "audit": 0,
+      "frames": 128,
+      "nonnull_display": 84,
+      "mismatches": {
+        "result": 0,
+        "published": 0,
+        "internal": 0,
+        "display": 0
+      }
+    },
+    {
+      "guard": 0,
+      "audit": 1,
+      "frames": 128,
+      "nonnull_display": 84,
+      "mismatches": {
+        "result": 0,
+        "published": 0,
+        "internal": 0,
+        "display": 0
+      }
+    },
+    {
+      "guard": 1,
+      "audit": 0,
+      "frames": 128,
+      "nonnull_display": 84,
+      "mismatches": {
+        "result": 0,
+        "published": 0,
+        "internal": 0,
+        "display": 0
+      }
+    },
+    {
+      "guard": 1,
+      "audit": 1,
+      "frames": 128,
+      "nonnull_display": 84,
+      "mismatches": {
+        "result": 0,
+        "published": 0,
+        "internal": 0,
+        "display": 0
+      }
+    }
+  ],
+  "scope": "保存実画素3組、冷起動、B3同期表示、外部R死亡証明なし。eb2全試合再門ではない。"
+}

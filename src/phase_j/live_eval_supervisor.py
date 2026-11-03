@@ -1,0 +1,314 @@
+"""一回の評価失敗をHOLDへ隔離し、連続失敗時だけ子プロセスを交換する。"""
+from __future__ import annotations
+
+from collections import Counter
+from datetime import datetime, timezone
+import json
+import multiprocessing as mp
+import os
+from pathlib import Path
+import pickle
+import time
+import traceback
+from typing import Any
+
+from .live_eval_worker import AUDIT_ENGINES, worker
+from .live_spool import DiskRows
+from .live_eval_recovery import commit_history, failure_kind
+from . import live_stage_timing as timing
+
+FAILURE_LIMIT = 3
+REPLY_TIMEOUT_SEC = 30.0
+# 再起動時の試合journal再実行は件数に比例して時間がかかる。1通知あたり評価P95 (B18実測
+# 25.9ms) の約2倍を足し、長い試合の再実行で応答期限を超えて再起動を繰り返さない。
+REPLAY_TIMEOUT_PER_COMMAND_SEC = 0.05
+STARTUP_TIMEOUT_SEC = 120.0
+JOIN_TIMEOUT_SEC = 2.0
+NOTICE_PREFIX_SIZE = 4
+
+
+class EvaluationError(RuntimeError):
+    """親のフレーム境界で処理する、記録済みの子プロセス例外。"""
+
+
+class AuditView:
+    """終了時の描画側保存へ、子が生成した監査原票だけを返す。"""
+
+    def __init__(self, value: dict) -> None:
+        self.value = value
+
+    def summary(self) -> dict:
+        return self.value
+
+
+class TrackerView:
+    def __init__(self, owner: Any) -> None:
+        self.owner = owner
+        self.probability: float | None = None
+        self.source = 'waiting_confirmed'
+        self._static_probability: float | None = None
+        self.prediction_discard_reason: str | None = None
+        self.records: list = []
+
+    def save(self, path: Path) -> None:
+        self.owner.save(path)
+
+
+class SupervisedOverlay:
+    def __init__(self, models: Any, build_static: Any, signals: Any, m0: Any = None,
+                 per_side_settled: bool = False, *, directory: Path,
+                 **evaluation_options: Any) -> None:
+        self.config = (models, signals, m0, per_side_settled, evaluation_options)
+        self.build_static, self.directory = build_static, directory
+        directory.mkdir(parents=True, exist_ok=True)
+        self.tracker = TrackerView(self)
+        self.archive = DiskRows(directory/'supervised-exchanges.pickle')
+        self.diagnostics = DiskRows(directory/'supervised-diagnostics.pickle')
+        self.journal = DiskRows(directory/'evaluation-journal.pickle')
+        self.pending: list[bytes] = []
+        self.game: int | None = None
+        self.request_id, self.boundary_next_id = 0, 1
+        self.discarded_replies: list[dict] = []
+        self.t_sec = 0.0
+        self.display, self.smoothing, self.boundary_smoothing = None, (0., .5, None), (0., .5, None)
+        self.failures, self.restarts, self.error_count = 0, 0, 0
+        self.dirty, self.closed = False, False
+        self.fault: str | None = None
+        self.auto_acknowledge = True
+        self.on_error: Any = None
+        for name in AUDIT_ENGINES:
+            setattr(self, name, None)
+        self.start()
+
+    def start(self) -> None:
+        context = mp.get_context('spawn')
+        self.connection, child = context.Pipe()
+        self.process = context.Process(target=worker,
+            args=(child, self.config, os.getpid(), self.directory/'spool'), name='event-evaluation-worker')
+        self.process.start()
+        child.close()
+        try:
+            self.runtime = self.receive(STARTUP_TIMEOUT_SEC)
+        except Exception:
+            self.stop_worker()
+            raise
+
+    def receive(self, timeout: float = REPLY_TIMEOUT_SEC, request_id: int | None = None,
+                operation: str | None = None) -> dict:
+        deadline = time.monotonic()+timeout
+        while True:
+            if not self.connection.poll(max(0.0, deadline-time.monotonic())):
+                raise TimeoutError('イベント評価応答なし')
+            reply = self.connection.recv()
+            if reply.get('request_id') != request_id:
+                if reply['kind'] == 'static':
+                    self.connection.send(dict(kind='error', message='期限切れの評価要求',
+                                              request_id=reply.get('request_id')))
+                self.discarded_replies.append(dict(kind='stale_evaluation_reply',
+                    expected=request_id, received=reply.get('request_id'), op=reply.get('op')))
+                continue
+            if reply['kind'] != 'static':
+                if operation is not None and reply.get('op') != operation:
+                    raise OSError('イベント評価応答の操作不一致')
+                return reply
+            try:
+                value = timing.measure('event_static_callback', self.build_static, *reply['args'])
+                self.connection.send(dict(kind='ok', value=value, request_id=request_id))
+            except Exception as error:
+                self.connection.send(dict(kind='error', message=str(error), request_id=request_id))
+                self.static_error = dict(exception_type=type(error).__name__,
+                                        message=str(error), stack=traceback.format_exc())
+
+    def update(self, *args: Any) -> None:
+        from .live_death_retr import with_snapshot
+        args = with_snapshot(args)
+        self.t_sec, game = args[3:5]
+        changed, self.game = game != self.game, game
+        blob = pickle.dumps(('update', args), protocol=pickle.HIGHEST_PROTOCOL)
+        self.journal.append(blob)
+        self.pending.append(blob)
+        # 物理更新を公開周期まで貯めず、最新通知の到着時に完了させる。
+        commands = list(self.journal) if self.dirty else self.pending
+        try:
+            reply = self.request(dict(op='advance', commands=commands, reset=self.dirty,
+                                      smoothing=self.boundary_smoothing, next_id=self.boundary_next_id))
+        except EvaluationError:
+            if not (changed and self.dirty and len(commands) > 1):
+                raise
+            commands = self._drop_unreplayable_match(game)
+            reply = self.request(dict(op='advance', commands=commands, reset=True,
+                                      smoothing=self.boundary_smoothing, next_id=self.boundary_next_id))
+        commit_history(self, reply, commands)
+        self.smoothing = reply['smoothing']
+        if 'b3_reference' in reply:
+            self.b3_reference = reply['b3_reference']
+        self.pending.clear()
+        self.dirty = False
+
+    def _drop_unreplayable_match(self, game: int) -> list[bytes]:
+        """前試合の再実行が失敗した時だけ、新試合の通知からjournalを作り直す。
+
+        前試合に適用できない通知が残ると、境界の回収が一度も成功せず全試合が止まる。
+        前試合の交換はこの時点で回収不能なので、破棄した件数を記録して先へ進む。
+        """
+        rows = list(self.journal)
+        start = next(i for i, blob in enumerate(rows)
+                     if (lambda row: row[0] == 'update' and row[1][4] == game)(pickle.loads(blob)))
+        replacement = DiskRows(self.directory/f'evaluation-journal-{self.request_id}-dropped.pickle')
+        replacement.extend(rows[start:])
+        replacement.stream.flush()
+        previous, self.journal = self.journal, replacement
+        previous.close()
+        previous.path.unlink()
+        self.boundary_smoothing = self.smoothing
+        log_event(self.directory, dict(kind='unreplayable_match_dropped', t_sec=self.t_sec,
+            game=game, dropped_notifications=start, kept_notifications=len(rows)-start))
+        return rows[start:]
+
+    def request(self, request: dict) -> dict:
+        """物理更新と公開計算の両方を同じ障害隔離境界で処理する。"""
+        self.static_error = None
+        self.discarded_replies = []
+        self.request_id += 1
+        request = dict(request, request_id=self.request_id)
+        context = timing.CURRENT.get()
+        if context is not None:
+            request['timing_context'] = {key: context.get(key) for key in ('captured_at','frame','t_sec')}
+        try:
+            timing.measure('event_ipc_send', self.connection.send, request)
+            replay = len(request.get('commands', ())) if request.get('reset') else 0
+            reply = timing.measure('event_ipc_wait', self.receive,
+                timeout=REPLY_TIMEOUT_SEC+replay*REPLAY_TIMEOUT_PER_COMMAND_SEC,
+                request_id=self.request_id, operation=request['op'])
+        except (OSError, EOFError, TimeoutError) as error:
+            reply = dict(kind='error', exception_type=type(error).__name__, message=str(error),
+                         stack=traceback.format_exc(), pid=self.process.pid)
+        try:
+            for discarded in self.discarded_replies:
+                log_event(self.directory, discarded)
+        except Exception:
+            self.dirty = True
+            raise
+        if reply['kind'] == 'error':
+            self.failed(dict(reply, **(self.static_error or {})))
+            raise EvaluationError(reply['message'])
+        return reply
+
+    def calculate(self) -> None:
+        commands = list(self.journal) if self.dirty else self.pending
+        request = dict(op='batch', commands=commands, reset=self.dirty, fault=self.fault,
+                       smoothing=self.boundary_smoothing, next_id=self.boundary_next_id)
+        self.fault = None
+        reply = self.request(request)
+        commit_history(self, reply, commands)
+        self.pending.clear()
+        self.journal.append(pickle.dumps(('calculate', ())))
+        self.dirty = False
+        if self.auto_acknowledge:
+            self.succeeded()
+        self.tracker.probability, self.tracker.source = reply['probability'], reply['source']
+        self.display = reply['display']
+        self.smoothing = reply['smoothing']
+        self.tracker._static_probability = reply['static_probability']
+        self.tracker.prediction_discard_reason = reply['prediction_discard_reason']
+        for key, value in reply['tracker_view'].items():
+            setattr(self.tracker, key, value)
+        self._landing_projection, self._history = reply['landing_view'], reply['history']
+
+    def succeeded(self) -> None:
+        """イベント計算だけでなく、公開候補の組立まで成功した時点で連続数を戻す。"""
+        self.failures = 0
+
+    def failed(self, error: dict) -> None:
+        self.dirty = True
+        self.pending.clear()  # 再構築用の全通知はディスクの試合journalに残っている。
+        self.failures += 1
+        self.error_count += 1
+        log_event(self.directory, dict(error, kind='evaluation_error',
+            t_sec=error.get('t_sec') if error.get('t_sec') is not None else self.t_sec,
+            observed_sec=self.t_sec, game=self.game, consecutive=self.failures))
+        if self.on_error is not None:
+            self.on_error()  # 再起動のモデル読込を待たず、まずHOLDを公開する。
+        if self.failures >= FAILURE_LIMIT or not self.process.is_alive():
+            previous = self.process.pid
+            self.stop_worker()
+            self.start()
+            self.restarts += 1
+            self.failures = 0
+            log_event(self.directory, dict(kind='evaluation_restart', t_sec=self.t_sec,
+                game=self.game, previous_pid=previous, pid=self.process.pid,
+                replay_from='match_boundary', notifications=len(self.journal)))
+
+    def save(self, path: Path) -> None:
+        if self.pending or self.dirty:
+            self.calculate()
+        current = self.request(dict(op='records'))
+        for name, value in current['audits'].items():
+            setattr(self, name, AuditView(value) if value is not None else None)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.with_suffix('.audit_retention.json').write_text(
+            json.dumps(current.get('audit_retention', {}), ensure_ascii=False), encoding='utf-8')
+        with path.open('w', encoding='utf-8') as stream:
+            for rows in (self.archive, current['records']):
+                for row in rows:
+                    stream.write(json.dumps(row, ensure_ascii=False, allow_nan=False)+'\n')
+        events = list(self.diagnostics)+current['diagnostics']
+        path.with_suffix('.diagnostics.json').write_text(json.dumps(
+            dict(events=events, counts=dict(Counter(r['reason'] for r in events))),
+            ensure_ascii=False), encoding='utf-8')
+
+    def stop_worker(self) -> None:
+        if self.process.is_alive():
+            try:
+                self.connection.send(dict(op='close'))
+            except (OSError, EOFError):
+                pass
+            self.process.join(JOIN_TIMEOUT_SEC)
+        if self.process.is_alive():
+            self.process.terminate()
+            self.process.join(JOIN_TIMEOUT_SEC)
+        self.connection.close()
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        self.stop_worker()
+        for rows in (self.journal, self.archive, self.diagnostics):
+            rows.close()
+
+
+def log_event(directory: Path, row: dict) -> None:
+    row.update(utc=datetime.now(timezone.utc).isoformat(), monotonic=time.perf_counter())
+    with (directory/'evaluation_errors.jsonl').open('a', encoding='utf-8') as stream:
+        stream.write(json.dumps(row, ensure_ascii=False)+'\n')
+
+
+def factory(bridge: Any, directory: Path) -> Any:
+    def create(*args: Any, **kwargs: Any) -> SupervisedOverlay:
+        overlay = SupervisedOverlay(*args, **kwargs, directory=directory)
+        overlay.auto_acknowledge = False
+        overlay.on_error = lambda: bridge.evaluation_hold(bridge.current_notice, overlay.game or 0)
+        bridge.event_evaluator = overlay
+        return overlay
+    return create
+
+
+def guard_loop(loop: Any) -> None:
+    """認識通知の取得後に限って例外を隔離し、次の通知を継続する。"""
+    import ast
+    handler = ast.parse('try:\n    pass\nexcept Exception as error:\n'
+        '    _evaluation_failure(_live_bridge, packet, locals(), error)\n    continue').body[0]
+    handler.body = loop.body[NOTICE_PREFIX_SIZE:]
+    loop.body = loop.body[:NOTICE_PREFIX_SIZE]+[handler]
+
+
+def evaluation_failure(bridge: Any, notice: Any, local: dict, error: Exception) -> None:
+    evaluator = getattr(bridge, 'event_evaluator', None)
+    if not isinstance(error, EvaluationError):
+        row = dict(exception_type=type(error).__name__, message=str(error),
+                   stack=traceback.format_exc(), pid=os.getpid())
+        directory = evaluator.directory if evaluator is not None else bridge.evaluation_directory
+        log_event(directory, dict(row, kind=failure_kind(error), t_sec=notice.t_sec))
+    if not isinstance(error, EvaluationError) or evaluator is None or evaluator.on_error is None:
+        bridge.evaluation_hold(notice, local.get('game_idx', 0))

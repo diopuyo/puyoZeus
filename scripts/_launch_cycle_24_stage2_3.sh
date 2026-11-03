@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle_24 stage 2 (empty 追加) + stage 3 (CReST 学習) 個別起動
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 LOG=logs/cycle24v2_stage2_3.log
 exec > >(tee -a "$LOG") 2>&1
 echo "=== START $(date) ==="

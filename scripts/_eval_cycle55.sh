@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle 55 (= cnn_cycle55.pt) を baseline_videos_v3 8 動画で評価。
 # baseline (= cnn_phase_b_large_v2.pt) との比較 anchor を取得。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health cycle55_eval

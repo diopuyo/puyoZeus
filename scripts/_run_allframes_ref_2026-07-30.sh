@@ -26,7 +26,7 @@
 #   (既存の基準データセット boards_lean_fixed_regen_2026-07-28 等とは別ディレクトリ、
 #    混ざらないことを明示的に保証する)
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 
 # MAXPAR/JOBS は環境変数で上書き可能 (既定値は従来通り動く、後方互換維持)
 MAXPAR="${ALLFRAMES_REF_MAXPAR:-8}"

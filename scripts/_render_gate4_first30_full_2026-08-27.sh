@@ -1,7 +1,7 @@
 #!/bin/bash
 # Gate 4 合格構成で30先全体（公式109試合）を音声付き描画する。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 export PYTHONHASHSEED=0
 export OMP_NUM_THREADS=1

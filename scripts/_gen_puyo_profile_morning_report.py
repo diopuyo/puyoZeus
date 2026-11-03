@@ -1,4 +1,12 @@
 """案 R3 改 (= ぷよ色プロファイル DB) 朝報告 markdown 生成"""
+
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
 import json
 from pathlib import Path
 
@@ -17,7 +25,7 @@ for v in per:
     improved.append((v, d, p, p_fp))
 improved.sort(key=lambda x: x[1])
 
-VIZ_BASE = "C:\\Users\\ryouj\\.gemini\\antigravity\\scratch\\puyo_analyzer\\data\\verify"
+VIZ_BASE = _public_dev_text('<repo>\\data\\verify')
 ORDER = ["v89m7", "v30_match11", "v30_5min", "v97_match11", "v29m2",
          "v40m7", "v51m2", "v57m2", "v70m2", "v89m3", "v95m15", "v97m11"]
 

@@ -1,0 +1,78 @@
+{
+  "left": "D:\\puyo_analyzer\\packaging\\equiv\\fixed_win_torch",
+  "right": "D:\\puyo_analyzer\\packaging\\equiv\\fixed_win_onnx",
+  "complete": true,
+  "pixels": {
+    "left": 3450,
+    "right": 3450,
+    "identical": true
+  },
+  "recognition_config_equal": true,
+  "settings_equal": {
+    "seed": true,
+    "production_flags": true,
+    "manifest_sha256": true
+  },
+  "backends": [
+    "torch",
+    "onnx"
+  ],
+  "frames": [
+    3420,
+    3420
+  ],
+  "dropped": [
+    0,
+    0
+  ],
+  "missing": [],
+  "total_mismatches": 0,
+  "files": {
+    "display.npz": {
+      "rows_a": 3420,
+      "rows_b": 3420,
+      "mismatched_columns": [],
+      "missing_columns": [],
+      "mismatched_rows_any_column": 0
+    },
+    "settled.npz": {
+      "rows_a": 2249,
+      "rows_b": 2249,
+      "mismatched_columns": [],
+      "missing_columns": [],
+      "mismatched_rows_any_column": 0
+    },
+    "events.jsonl": {
+      "lines_a": 6,
+      "lines_b": 6,
+      "compared": 6,
+      "mismatched": 0,
+      "mismatched_excluding_path_separator": 0,
+      "path_separator_only": 0,
+      "length_diff": 0
+    },
+    "inputs.jsonl.gz": {
+      "lines_a": 9172,
+      "lines_b": 9172,
+      "compared": 9172,
+      "mismatched": 0,
+      "mismatched_excluding_path_separator": 0,
+      "path_separator_only": 0,
+      "length_diff": 0
+    },
+    "review_data.csv": {
+      "rows_a": 3420,
+      "rows_b": 3420,
+      "compared_rows": 3420,
+      "length_diff": 0,
+      "compared_cells": 680580,
+      "header_equal": true,
+      "mismatched_cells": 0,
+      "mismatched_rows": 0,
+      "numeric_mismatched_cells": 0,
+      "max_abs_diff_numeric": 0.0
+    }
+  },
+  "first_display_difference": null,
+  "first_recognition_difference": null
+}

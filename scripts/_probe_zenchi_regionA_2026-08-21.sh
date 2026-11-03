@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 PYTHONPATH=. ./venv/bin/python -m scripts.visualize_advantage_overlay \
   --video data/frames/video_zenchi_c0BQoMJwwQU.mp4 \
   --start-sec 0 --end-sec 300 \

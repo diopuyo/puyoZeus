@@ -1,6 +1,6 @@
 #!/bin/bash
 # デモviz2本のクリーン再起動 (既存viz残骸をkill→部分出力削除→detach起動→生存確認)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 pkill -f "scripts.visualize_recognition" 2>/dev/null
 sleep 3
 rm -f data/verify/youtube_demo_2026-08-07/dio_vs_ts_full_overlay_viz.mp4 \

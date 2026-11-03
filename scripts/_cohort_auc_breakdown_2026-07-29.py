@@ -6,13 +6,20 @@
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import re
 import statistics
 from pathlib import Path
 
 LOG = Path(
-    "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/"
-    "data/verify/win_eval_combined66_2026-07-29/combined66_video_breakdown.log"
+    _public_dev_text('<repo>/data/verify/win_eval_combined66_2026-07-29/combined66_video_breakdown.log')
 )
 
 # 動画番号 → コホート

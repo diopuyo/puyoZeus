@@ -2134,3 +2134,38 @@ run 同士は一致)。
   `ojama_damage` 連続量近似のような期待値化は別課題
 - `ojama_disruption` (`indicators_v2.py`、seed=i の n_samples 平均) は
   元から決定的で無関係
+
+### ライブの旧手書きモデル指定 (2026-10-02、統合B査読)
+
+`config/live_evaluation.json` の保存済みcommandには
+`--exchange-event-model-dir models/exchange_event_v2` が残っている。
+`scripts/measure_realtime_breakdown_20260928.py` の `build_command` も同じパスへ置換する
+（査読時177行付近）。旧計測の再現性を保つため、この二箇所の動作は変更していない。
+ライブ起動は `scripts/run_live_pipeline_20260928.py` が後置する
+`--production-exchange-event` を通じて `src/production_config.py` の本番構成を適用する。
+旧計測スクリプト単独の結果を、現在の本番モデル構成の結果とみなしてはいけない。
+
+評価workerは `live_cpu.apply_runtime('event-evaluation')` でロード済みOpenMP/BLASを
+1スレッドへ制限する。HistGBCの少量推論が無制限のOpenMPを起動しないための実行資源制約であり、
+採用モデルの変更ではない。CLIの `--cpu-threads 0` の認識側の意味は変更しない。
+起動口の実体はこのbranchでは上記run_liveスクリプトの `parse_args → live_config.apply_config`
+（`src/phase_j/launcher.py` は存在しない）。`config/live_defaults.json` は従来どおりthreads=1/nice=10。
+
+# B3 原票認識の未修正項目（2026-10-06、PC2全件監査）
+
+監査場所: `D:/puyo_analyzer/share/tasks/done/y_b3_rows_anomaly_audit/`。
+コード142a923・60動画・3,112試合・960,903行（orientation=0）。件数は保持行を含み、事象数や映像真値ではない。
+今回の生成器修正では以下の認識時差・取りこぼし候補を変更しない。原票・全該当CSV・代表例は同所の `DETAILS.md`、各 `*_hits.csv.gz`、`representative_evidence.json`、`source_evidence.jsonl.gz` に保存済み。
+
+- 式段があるのに連鎖非活動: 2,094行。例 video_29 g3 frame10987（366.233333秒、1P、式40点）。
+- 原票CHAINなしのおじゃま減少: 21,087行。例 video_29 g0 frame5606（186.866667秒、1P、おじゃま15→14、原票CHAIN累計123のまま）。
+- 色増加の設置予算超過: 10,366行。例 video_29 g0 frame5378（179.266667秒、1P、色45→52、設置正増分0）。
+- 台帳予告を超える盤面増加: 179,067行（累積保持）。例 video_29 g3 frame11811（393.7秒、1P、sl_board_excess=7）。
+- 偽連鎖終了に伴うQ急落候補: 921行。例 video_29 g49 frame91538（3051.266667秒、2P、Q965→57、後続生成199）。
+
+生成器f9f5758の純増必須化後、「相手生成0で着弾」は6,130行から15行へ減少。
+全15原票の照合先: `D:/puyo_analyzer/b3_data/codex_tasks/rows_anomaly_fix/landing_evidence.json`。
+観測開始前の生成履歴欠落3件、双方得点0の盤面増4件、落下点のみで換算契機なし6件、原票窒息による既定停止後2件。台帳の算術的取りこぼしは確認されないため、追加の生成補完はしない。
+「窒息持続3秒後の手数増加」66行・13試合側は、全て原票とleanの同一試合範囲内の矛盾（`death_evidence.json`）。試合境界外の取り込みは0件。原票の盤面・状態・材料カウンタのどれが誤認かの映像確定は別作業とする。
+
+盤面消費割合>1の2事象も原票で分解済み（同出力先 `board_denominator_evidence.json`）。video_c117 g20は負断片-23と正断片28の合算5を起点1で割っていた。video_c139 g44は55→38の消費17の後、次断片が41→1の消費40で、断片間に材料が3増えている。発火補完の式分母とは別の認識不整合であり、根拠のない分母拡張はせず、負断片・起点材料超過をmask=10で欠測にする。

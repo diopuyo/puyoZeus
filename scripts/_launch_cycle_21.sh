@@ -7,7 +7,7 @@
 # 2026-05-17 修正: cycle_14 以降の正しい比較には cnn_phase_i_hsv_seed.pt を明示指定が必要。
 # multi_video_cycle.py の default は cnn_phase_b_large_v3.pt で別 model のため、
 # cycle_19 baseline (mismatch 38) と比較する場合は hsv_seed を明示指定する。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 PYTHONPATH=. ./venv/bin/python -m scripts.multi_video_cycle \
     --cycle 21 --parallel 3 \
     --cnn-model models/cnn_phase_i_hsv_seed.pt \

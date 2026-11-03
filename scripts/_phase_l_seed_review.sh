@@ -1,6 +1,6 @@
 #!/bin/bash
 # Phase L seed 38 動画一括可視化 (= ユーザー目視用)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health phase_l_seed_review

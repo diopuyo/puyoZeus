@@ -1,0 +1,83 @@
+{
+  "passed": true,
+  "work": "D:\\puyo_analyzer\\packaging\\build_20261020d_work\\parity_delivery",
+  "off_sha256": "b5b484bd7285faac97f5626cb4ded35f7f53ebae2bd6c8c4c5fdfd0d57e487ce",
+  "receipts": {
+    "ama_inputs/receipt.json": {
+      "80_g7": {
+        "matched": 488,
+        "expected": 488,
+        "mismatches": 0,
+        "evidence_metadata_differences": 209
+      },
+      "1042_g1": {
+        "matched": 305,
+        "expected": 305,
+        "mismatches": 0,
+        "evidence_metadata_differences": 148
+      }
+    },
+    "m3_live.receipt.json": {
+      "rows": 292,
+      "features": 295,
+      "max_probability_difference": 0.0,
+      "mismatches": [],
+      "missing_reference_rows": [],
+      "passed": true
+    },
+    "v49f_80_7/receipt.json": {
+      "video": 80,
+      "game": 7,
+      "rows": 1448,
+      "base_rows": 764,
+      "input_records": 4313,
+      "audit_records": 4313,
+      "tolerance": 1e-09,
+      "max_probability_difference": 2.220446049250313e-16,
+      "rounded_fields": 469,
+      "discrete_differences": 0,
+      "seconds": 101.72833229997195,
+      "python": "C:\\puyo1_work\\build_20261019a_stage\\PuyoLive\\python\\python.exe"
+    },
+    "v49f_51_4/receipt.json": {
+      "video": 51,
+      "game": 4,
+      "rows": 269,
+      "base_rows": 110,
+      "input_records": 1018,
+      "audit_records": 1018,
+      "tolerance": 1e-09,
+      "max_probability_difference": 5.551115123125783e-17,
+      "rounded_fields": 44,
+      "discrete_differences": 0,
+      "seconds": 30.10933759994805,
+      "python": "C:\\puyo1_work\\build_20261019a_stage\\PuyoLive\\python\\python.exe"
+    },
+    "ama_values/receipt.json": {
+      "binary_sha256": "4e9f725b4538db80d3f0be309636e3fb1723b11750641c9c7fb9d9aaf9b91fdb",
+      "model_sha256": "39abc1654dc417dba6d90fa30816d26656d8a5835cf9f48deed6d14fc14f9860",
+      "games": {
+        "80_g7": {
+          "rows": 488,
+          "valid": 245,
+          "max_probability_difference": 2.220446049250313e-16,
+          "discrete_differences": 0
+        },
+        "1042_g1": {
+          "rows": 305,
+          "valid": 277,
+          "max_probability_difference": 2.220446049250313e-16,
+          "discrete_differences": 0
+        }
+      },
+      "passed": true
+    },
+    "static.json": {
+      "unique_boards": 326,
+      "compared": 326,
+      "all_static_fields_exact": true,
+      "mismatches": [],
+      "scope": "同一保存盤面・会計・経過時刻。モデル・探索候補・予算は変更しない。"
+    }
+  }
+}

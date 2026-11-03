@@ -2,7 +2,7 @@
 # cycle 37 (2026-05-20): tier 1 threshold sweep (20→25)
 # soft prior は OFF (= BG_DIST_BOOST_MAX=0)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle37
 mkdir -p logs/board_logs

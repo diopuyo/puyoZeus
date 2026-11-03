@@ -67,7 +67,7 @@ STAGE_SIZES=(30, 60, 100, 144) の各断面で、揃い次第すぐ学習する
   (2026-08-18 コーダタスクの指示)
 
 ## 使い方 (WSL detach、長時間放置前提)
-    wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \\
+    wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \\
       setsid -f bash scripts/_run_ab_stage_compare_2026-08-18.sh < /dev/null"
 
 軽量部分だけ試す場合 (小さいテスト用tsv/npzディレクトリで自己診断):

@@ -6,7 +6,7 @@
 # 本ドライバはそこへ enable_formula_step_interlude を足した構成を測る。
 # W36/W37 是正後の物差しなので、3 者を同じ条件で比べられる。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 OUT=data/verify/w37_rebaseline_2026-08-24
 ARGS="--videos v29,v40,v51,v57,v70,v89,v95,v97 --holdout v89,v97 --workers 4 --game-event-chain-exit"
 

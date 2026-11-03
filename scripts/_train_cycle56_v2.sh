@@ -11,7 +11,7 @@
 #
 # 期待: ojama 認識保持 + 5 色精度小改善
 # リスク: cycle 55 同型過学習 (= 軽量設定で回避目標)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p logs
 

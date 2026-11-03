@@ -81,13 +81,13 @@ Phase W: 状況認識統合 (StatePipeline) + 勝率予測 MLP (in-distribution 
 
 ```bash
 # 全テスト走行
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"
 
 # 勝率予測 MLP 再訓練 (新データ生成後)
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_w_train_predictor --augment-swap --holdout-video 3 --epochs 30"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_w_train_predictor --augment-swap --holdout-video 3 --epochs 30"
 
 # state overlay 動画
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_w_render_state_overlay --video data/frames/video_05.mp4 --start 315 --end 385 --out data/verify/state_overlay.mp4"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_w_render_state_overlay --video data/frames/video_05.mp4 --start 315 --end 385 --out data/verify/state_overlay.mp4"
 ```
 
 ## ユーザールール (継続有効)

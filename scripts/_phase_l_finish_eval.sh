@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 for k in v75m14 v89m7 v95m3; do
   PYTHONPATH=. ./venv/bin/python -m scripts.evaluate_recognition \
     --board-log "logs/phase_l/viz_${k}.jsonl" \

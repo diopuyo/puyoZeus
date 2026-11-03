@@ -41,7 +41,7 @@ OJAMA_FALL の各滞在区間について:
       投票数<3 なら層3、 に分類する。
 
 Usage (WSL 経由、CLAUDE.md プロセス管理ルール準拠):
-    wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \\
+    wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \\
       PYTHONPATH=. ./venv/bin/python scripts/_diag_ojama_fall_exit_timing_2026-07-24.py"
 """
 from __future__ import annotations

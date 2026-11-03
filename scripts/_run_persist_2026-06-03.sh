@@ -2,7 +2,7 @@
 # (a) 持続corruption指標で16動画eval。真の持続精度(1fr点滅除外)を測定。
 # default(採用スタック=機能D ON含む)。persist閾値はライブラリ既定(CORRUPTION_PERSIST_MIN_FRAMES=3)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}"
 V="v29_match01,v29_match02,v40_match01,v40_match02,v51_match01,v51_match02,v57_match01,v57_match02,v70_match01,v70_match02,v89_match01,v89_match02,v95_match01,v95_match02,v97_match01,v97_match02"
 H="v29_match01,v29_match02,v40_match01,v40_match02,v89_match01,v89_match02"
 OUTDIR="data/verify/stable_cell_acc"; LOGDIR="logs/fix_v70_eval"

@@ -1,7 +1,7 @@
 #!/bin/bash
 # baseline_videos_v3 8 動画で current default モデルの強化アナリスト評価を取得。
 # 自律 cycle で改善幅算出の anchor になる。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health baseline_v3_eval

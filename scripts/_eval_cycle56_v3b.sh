@@ -1,6 +1,6 @@
 #!/bin/bash
 # cycle 56_v3b (= KA2、 最終 2 層 baseline 復元) の baseline_v3 8 動画 eval.
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health cycle56_v3b_eval

@@ -5,7 +5,7 @@
 # t=66  : 1P 撃ち切り・2P 窒息寸前 (勝利ほぼ確定)
 # t=62/70: 62%→50% のノコギリ波が見えた帯
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 DEMO=data/verify/youtube_demo_2026-08-07
 OUT="$DEMO/perside_check"

@@ -2,7 +2,7 @@
 # 99.99%再測定: 物差し52盤面のv4構成再認識 (2026-08-05)
 # 使い方: setsid -f bash scripts/_run_yardstick_v4_2026-08-05.sh [MAXPAR=4]
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1

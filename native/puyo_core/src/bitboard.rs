@@ -207,6 +207,15 @@ fn get_mask_pop(plane: &ColPlanes) -> ColPlanes {
 /// `keep_mask` のうち立っているビット位置の `value` ビットを、LSB側へ
 /// 順に詰めて返す (`chain_bitboard._pext_batch` のスカラー等価版)。
 fn pext16(value: u16, keep_mask: u16) -> u16 {
+    #[cfg(all(feature = "ama-bmi2", target_arch = "x86_64"))]
+    if std::arch::is_x86_feature_detected!("bmi2") {
+        // 既存ループは13bitだけを走査する。上位bitは同様に無視する。
+        return unsafe { std::arch::x86_64::_pext_u32(value as u32, (keep_mask & FULL_MASK) as u32) as u16 };
+    }
+    pext16_scalar(value, keep_mask)
+}
+
+fn pext16_scalar(value: u16, keep_mask: u16) -> u16 {
     let mut result: u16 = 0;
     let mut out_pos: u32 = 0;
     for bit in 0..BOARD_ROWS as u32 {
@@ -219,6 +228,17 @@ fn pext16(value: u16, keep_mask: u16) -> u16 {
         }
     }
     result
+}
+
+#[cfg(all(test, feature = "ama-bmi2", target_arch = "x86_64"))]
+#[test]
+fn bmi2_matches_all_thirteen_bit_value_mask_pairs() {
+    for value in 0..=FULL_MASK {
+        for mask in 0..=FULL_MASK {
+            assert_eq!(pext16(value, mask), pext16_scalar(value, mask));
+        }
+    }
+    assert_eq!(pext16(u16::MAX, u16::MAX), FULL_MASK);
 }
 
 fn pext_plane(value: &ColPlanes, keep_mask: &ColPlanes) -> ColPlanes {
@@ -370,6 +390,7 @@ fn compute_step_pop(
     colors: &[ColPlanes; NUM_TRACKED_COLORS],
     ojama: &ColPlanes,
     pop_mask: u16,
+    ojama_pop_mask: u16,
 ) -> Option<StepPopResult> {
     let mut color_pop_masks: [ColPlanes; NUM_TRACKED_COLORS] = Default::default();
     for i in 0..NUM_TRACKED_COLORS {
@@ -384,7 +405,7 @@ fn compute_step_pop(
         return None;
     }
 
-    let ojama_cleared = plane_and(&expand(&color_union), ojama);
+    let ojama_cleared = plane_mask(&plane_and(&expand(&color_union), ojama), ojama_pop_mask);
     let num_colors_step = color_pop_masks
         .iter()
         .filter(|m| plane_any_nonzero(m))
@@ -416,7 +437,7 @@ fn compute_step_pop(
 ///         (false の場合は空 `Vec` を返す、既存 `simulate_chain` の呼び出し元
 ///         [ビームサーチ・MC反撃計算等の高頻度経路] に余計な収集コストを
 ///         負わせないための分岐)。
-fn simulate_chain_core(
+fn simulate_chain_core<const PROTECT_HIDDEN_OJAMA: bool>(
     board: &BitBoard,
     exclude_hidden_row_from_pop: bool,
     collect_steps: bool,
@@ -437,7 +458,8 @@ fn simulate_chain_core(
     let mut step_infos: Vec<ChainStepInfo> = Vec::new();
 
     for step in 0..MAX_CHAIN_STEPS {
-        let pop = match compute_step_pop(&colors, &ojama, pop_mask) {
+        let ojama_pop_mask = if PROTECT_HIDDEN_OJAMA { pop_mask } else { FULL_MASK };
+        let pop = match compute_step_pop(&colors, &ojama, pop_mask, ojama_pop_mask) {
             Some(p) => p,
             None => break,
         };
@@ -489,11 +511,159 @@ fn simulate_chain_core(
     (result, step_infos)
 }
 
+/// 監査用の重力単独適用。消去せず、色とおじゃまを共通の占有マスクで詰める。
+pub fn review_gravity(board: &BitBoard) -> BitBoard {
+    let mut work = *board;
+    let mut occupied = work.ojama;
+    for plane in &work.colors { occupied = plane_or(&occupied, plane); }
+    for plane in &mut work.colors { *plane = pext_plane(plane, &occupied); }
+    work.ojama = pext_plane(&work.ojama, &occupied);
+    work
+}
+
 /// 連鎖シミュレーション (`chain_bitboard.simulate_batch_with_approx_score` の
 /// 1 盤面版とビット一致)。既存 API・戻り値は無変更 (`simulate_chain_core` へ
 /// 委譲する内部リファクタのみ、2026-08-13)。
 pub fn simulate_chain(board: &BitBoard, exclude_hidden_row_from_pop: bool) -> ChainSimResult {
-    simulate_chain_core(board, exclude_hidden_row_from_pop, false).0
+    simulate_chain_core::<false>(board, exclude_hidden_row_from_pop, false).0
+}
+
+#[cfg(feature = "ama-fast-chain")]
+#[path = "ama_chain.rs"]
+mod ama_chain;
+
+#[cfg(feature = "ama-fast-connected")]
+pub fn connected_ama_four(plane: &ColPlanes, x: usize, y: usize) -> u32 {
+    ama_chain::connected_four(plane, x, y)
+}
+
+/// ama 専用の既定OFF経路。B3等の共用シミュレータには配線しない。
+pub fn simulate_chain_ama(board: &BitBoard, hidden: bool) -> ChainSimResult {
+    #[cfg(feature = "ama-profile-detail")]
+    let _timer = crate::ama_profile_clock::Timer::new(6);
+    #[cfg(feature = "ama-fast-chain")]
+    { ama_chain::simulate(board, hidden) }
+    #[cfg(not(feature = "ama-fast-chain"))]
+    { simulate_chain(board, hidden) }
+}
+
+/// 起点補完のPython版と同じ、消去後に元から存在した空隙も詰める段別計算。
+/// 通常の探索用シミュレーションの物理規則・戻り値には影響しない。
+pub fn b3_origin_completion(board: &BitBoard, hidden: bool)
+    -> (Vec<i64>, Vec<Vec<u8>>, i64, Vec<u8>) {
+    let mut work = *board;
+    let (mut prefix, mut erased_colors, mut total) = (Vec::new(), Vec::new(), 0);
+    let pop_mask = if hidden { POP_MASK_12BIT } else { FULL_MASK };
+    for step in 0..MAX_CHAIN_STEPS {
+        let pop = match compute_step_pop(&work.colors, &work.ojama, pop_mask, FULL_MASK) {
+            Some(pop) => pop,
+            None => break,
+        };
+        let connection: i64 = pop.step_groups.iter().map(|&n| connection_bonus(n)).sum();
+        let bonus = (chain_power(step + 1) + connection + COLOR_BONUS_LUT[pop.num_colors_step])
+            .clamp(MIN_BONUS_MULTIPLIER, MAX_BONUS_MULTIPLIER);
+        total += pop.erased_count * BASE_SCORE_PER_PUYO * bonus;
+        prefix.push(total);
+        erased_colors.push(work.colors.iter().enumerate().filter_map(|(i, plane)|
+            if plane_any_nonzero(&plane_and(plane, &pop.color_union)) { Some(i as u8 + 1) }
+            else { None }).collect());
+        let mut occupied = work.ojama;
+        for plane in &work.colors { occupied = plane_or(&occupied, plane); }
+        let erased = plane_or(&pop.color_union, &pop.ojama_cleared);
+        let keep = plane_and(&occupied, &plane_not_masked(&erased, FULL_MASK));
+        for plane in &mut work.colors { *plane = pext_plane(plane, &keep); }
+        work.ojama = pext_plane(&work.ojama, &keep);
+    }
+    (prefix, erased_colors, total, board_to_grid(&work).to_vec())
+}
+
+// レビュー/B3の配列版互換トレース。物理更新は全てbitboardで行う。
+pub type TraceGroup = (u8, Vec<(usize, usize)>, Vec<(usize, usize)>);
+pub type TraceStep = (Vec<u8>, Vec<u8>, Vec<TraceGroup>, i64, i64);
+
+fn plane_cells(plane: &ColPlanes) -> Vec<(usize, usize)> {
+    (0..BOARD_ROWS).flat_map(|row| (0..BOARD_COLS).filter_map(move |col|
+        if plane[col] & (1 << (BOARD_ROWS - 1 - row)) != 0 { Some((row, col)) } else { None })).collect()
+}
+
+fn trace_groups(work: &BitBoard, mask: &ColPlanes) -> Vec<TraceGroup> {
+    let mut groups = Vec::new();
+    for (color, plane) in work.colors.iter().enumerate() {
+        let mut remaining = plane_and(plane, mask);
+        while plane_any_nonzero(&remaining) {
+            let col = remaining.iter().position(|&v| v != 0).unwrap();
+            let mut group = [0; BOARD_COLS];
+            group[col] = 1 << remaining[col].trailing_zeros();
+            loop {
+                let next = plane_or(&group, &plane_and(&expand(&group), &remaining));
+                if next == group { break; }
+                group = next;
+            }
+            let adjacent = plane_and(&expand(&group), &work.ojama);
+            groups.push((color as u8 + 1, plane_cells(&group), plane_cells(&adjacent)));
+            remaining = plane_and(&remaining, &plane_not_masked(&group, FULL_MASK));
+        }
+    }
+    groups.sort_by_key(|g| g.1[0]);
+    groups
+}
+
+pub fn simulate_chain_trace(board: &BitBoard, hidden: bool) -> Vec<TraceStep> {
+    let mut work = *board;
+    let mut rows = Vec::new();
+    let pop_mask = if hidden { POP_MASK_12BIT } else { FULL_MASK };
+    for step in 0..MAX_CHAIN_STEPS {
+        let pop = match compute_step_pop(&work.colors, &work.ojama, pop_mask, FULL_MASK) {
+            Some(pop) => pop, None => break,
+        };
+        let before = board_to_grid(&work);
+        let groups = trace_groups(&work, &pop.color_union);
+        let connection: i64 = pop.step_groups.iter().map(|&n| connection_bonus(n)).sum();
+        let bonus = (chain_power(step + 1) + connection + COLOR_BONUS_LUT[pop.num_colors_step])
+            .clamp(MIN_BONUS_MULTIPLIER, MAX_BONUS_MULTIPLIER);
+        let mut occupied = work.ojama;
+        for plane in &work.colors { occupied = plane_or(&occupied, plane); }
+        let erased = plane_or(&pop.color_union, &pop.ojama_cleared);
+        let keep = plane_and(&occupied, &plane_not_masked(&erased, FULL_MASK));
+        for plane in &mut work.colors { *plane = pext_plane(plane, &keep); }
+        work.ojama = pext_plane(&work.ojama, &keep);
+        rows.push((before, board_to_grid(&work), groups, pop.ojama_count,
+                   pop.erased_count * BASE_SCORE_PER_PUYO * bonus));
+    }
+    rows
+}
+
+/// 修復探索用: traceと同じ段別得点・消去数・最終盤面だけを返す。
+#[cfg(feature = "compact-chain-summary")]
+pub fn simulate_chain_summary(board: &BitBoard, hidden: bool) -> (Vec<i64>, Vec<i64>, Vec<u8>) {
+    // traceと同じ物理。途中盤面とセル座標のPython変換を省き、段別集計だけを返す。
+    let mut work = *board;
+    let (mut erased_counts, mut scores) = (Vec::new(), Vec::new());
+    let pop_mask = if hidden { POP_MASK_12BIT } else { FULL_MASK };
+    for step in 0..MAX_CHAIN_STEPS {
+        let Some(pop) = compute_step_pop(&work.colors, &work.ojama, pop_mask, FULL_MASK) else { break; };
+        let connection: i64 = pop.step_groups.iter().map(|&n| connection_bonus(n)).sum();
+        let bonus = (chain_power(step + 1) + connection + COLOR_BONUS_LUT[pop.num_colors_step])
+            .clamp(MIN_BONUS_MULTIPLIER, MAX_BONUS_MULTIPLIER);
+        erased_counts.push(pop.erased_count);
+        scores.push(pop.erased_count * BASE_SCORE_PER_PUYO * bonus);
+        let mut occupied = work.ojama;
+        for plane in &work.colors { occupied = plane_or(&occupied, plane); }
+        let erased = plane_or(&pop.color_union, &pop.ojama_cleared);
+        let keep = plane_and(&occupied, &plane_not_masked(&erased, FULL_MASK));
+        for plane in &mut work.colors { *plane = pext_plane(plane, &keep); }
+        work.ojama = pext_plane(&work.ojama, &keep);
+    }
+    (erased_counts, scores, board_to_grid(&work))
+}
+
+/// B3専用: 隠し段の色ぷよ・おじゃまをともに消去対象から除外する。
+/// 本番指標の既存経路は従来の隠し段おじゃま消去を維持する。
+pub fn simulate_chain_b3(board: &BitBoard) -> ChainSimResult {
+    #[cfg(feature = "b3-fast-chain")]
+    { ama_chain::simulate_b3(board) }
+    #[cfg(not(feature = "b3-fast-chain"))]
+    { simulate_chain_core::<true>(board, true, false).0 }
 }
 
 /// `simulate_chain` の拡張版: 連鎖シミュレーション結果に加え、ステップごとの
@@ -507,7 +677,7 @@ pub fn simulate_chain_with_steps(
     board: &BitBoard,
     exclude_hidden_row_from_pop: bool,
 ) -> (ChainSimResult, Vec<ChainStepInfo>) {
-    simulate_chain_core(board, exclude_hidden_row_from_pop, true)
+    simulate_chain_core::<false>(board, exclude_hidden_row_from_pop, true)
 }
 
 // ============================

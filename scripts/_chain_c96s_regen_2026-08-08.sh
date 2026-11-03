@@ -8,7 +8,7 @@
 #   wsl -d Ubuntu -- bash -c "cd <PROJ> && \
 #     setsid -f bash scripts/_chain_c96s_regen_2026-08-08.sh < /dev/null"
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 # 1 プロセス = 1 コア厳守 (matchTemplate のスレッド競合防止)

@@ -1,7 +1,7 @@
 #!/bin/bash
 # c113 (403) を更新済みyt-dlpで単独再試行
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
-FF=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+FF=<home>/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
 out="data/frames/video_c113.mp4"
 rm -f data/frames/video_c113.*.part "$out"
 nice -n 15 ./venv/bin/python -m yt_dlp --no-update --ffmpeg-location "$FF" \

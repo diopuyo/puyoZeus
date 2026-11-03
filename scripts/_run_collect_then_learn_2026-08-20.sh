@@ -14,7 +14,7 @@
 #   npz ディレクトリ名は診断コマンドや他の監視ジョブのコマンドラインにも現れる
 #   ため、それらを収集プロセスと誤検出して待機ループから抜けられなくなった
 #   (実際に 48本収集で 55分ロスした)。オーケストレータのモジュール名だけを見る。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 exec >> logs/collect_then_learn_2026-08-21.log 2>&1
 echo "=== 待機開始 $(date +%F_%T) ==="
 

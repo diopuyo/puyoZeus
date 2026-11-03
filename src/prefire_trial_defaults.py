@@ -1,0 +1,8 @@
+"""未採用の撃ち合い試作の既定値。本番採用設定には登録しない。"""
+
+PREFIRE_V4_ENABLED_DEFAULT: bool = False
+PREFIRE_V4_POST_ENABLED_DEFAULT: bool = False
+PREFIRE_V4_CORRECTION_DEFAULT: bool = False
+PREFIRE_V49_ENABLED_DEFAULT: bool = False
+PREFIRE_V49B_ENABLED_DEFAULT: bool = False
+PREFIRE_V49C_ENABLED_DEFAULT: bool = False

@@ -1,0 +1,22 @@
+diff --git a/src/phase_j/live_memory.py b/src/phase_j/live_memory.py
+--- a/src/phase_j/live_memory.py
++++ b/src/phase_j/live_memory.py
+@@ -15,6 +15,7 @@ TOP_ALLOCATIONS = 25
+ CONTAINER_TYPES = frozenset({'ChainSimulator', 'RecognitionAudit', 'StableTransitionMonitor',
+     'PuyoErasureMonitor', '_ColorStats', 'ExchangeEventRecorder', 'CellPatchFingerprint',
+-    'VideoChainTracker', 'OnlineHsvCalibrator', 'ExchangeRecord'})
++    'VideoChainTracker', 'OnlineHsvCalibrator', 'ExchangeRecord',
++    'PostCounterDeathBound', 'MatchHistoryIntegrity'})
+
+
+ def retained_counts(roots: dict[str, Any]) -> dict[str, int]:
+@@ -110,7 +111,9 @@ def evaluation_roots(local: dict[str, Any], bridge: Any) -> dict[str, Any]:
++    from src.exchange_integrity_memory import integrity_memory_roots
+     overlay = local.get('event_overlay')
+     sink = getattr(bridge.callback, '__self__', None)
+     publisher = getattr(sink, 'publisher', None)
+     return dict(bridge=bridge, overlay=overlay, tracker=getattr(overlay, 'tracker', None),
+         sink=sink, publisher=publisher, server=getattr(publisher, 'server', None),
++        **integrity_memory_roots(overlay),
+         meter=bridge.meter, **{k: local.get(k) for k in ('tracker', 'hcache', 'fctracker')
+                              if k != 'tracker'})

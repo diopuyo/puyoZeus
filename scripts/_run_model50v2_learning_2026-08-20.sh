@@ -12,7 +12,7 @@
 #   品質ゲート  数分
 #   CSVビルド   148本で4.4時間 -> 48本で約1.5時間
 #   再学習      約32分
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 exec >> logs/model50v2_learning_2026-08-20.log 2>&1
 
 NPZ_DIR=data/indicators_v2/boards_lean_model50v2_2026-08-20

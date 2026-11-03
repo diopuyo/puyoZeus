@@ -28,6 +28,14 @@ import してはならない制約のため、この差は解消できない)。
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import argparse
 import csv
 import json
@@ -50,7 +58,7 @@ from src.score_ocr import ScoreOcr, _crop_score_roi, compute_score_roi_ink_ratio
 # 定数
 # =============================================================================
 
-MAIN_ROOT: Path = Path("/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer")
+MAIN_ROOT: Path = Path(_public_dev_text('<repo>'))
 LABELS_DIR: Path = MAIN_ROOT / "data" / "verify" / "board_labels_general_2026-08-17"
 LABELS_TSV: Path = LABELS_DIR / "labels.tsv"
 ANCHOR_PLAN_TSV: Path = LABELS_DIR / "anchor_plan.tsv"

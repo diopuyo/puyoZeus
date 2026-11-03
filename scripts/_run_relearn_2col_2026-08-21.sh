@@ -12,7 +12,7 @@
 # 注意: match_progress は side 対称 (両者同値) なので単独では勝敗を識別
 # できない。単独 permutation が小さくても「効いていない」とは判定できず、
 # 効果は交互作用経由でのみ現れる。判定は中盤 AUC の変化を主に見る。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 exec >> logs/relearn_3col_2026-08-21.log 2>&1
 
 NPZ_DIR=data/indicators_v2/boards_lean_model50v2_2026-08-20

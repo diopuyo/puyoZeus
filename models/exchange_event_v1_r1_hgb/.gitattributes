@@ -1,0 +1,2 @@
+# 監査で記録したmanifestのSHA-256をWindowsでも保つ。
+manifest.json text eol=lf

@@ -9,7 +9,7 @@
 # enable_formula_step_interlude=True を足す。
 # 出力先は別ディレクトリで、先行の成果物は一切上書きしない。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 PY="./venv/bin/python"
 OUT=logs/_probe_formula_interlude_2026-08-24
 mkdir -p "$OUT"

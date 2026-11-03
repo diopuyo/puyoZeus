@@ -2,8 +2,8 @@
 # data/_dl_expand2_2026-08-07.tsv (name<TAB>id<TAB>title) を H.264強制で直列DL。
 # 既存はskip。scripts/_dl_expand.sh (Phase L step1) のパターンを踏襲、
 # 読み込み元のみ新TSVに変更 (Phase L step2、S級/A級補強、2026-08-07)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
-FF=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+FF=<home>/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
 ok=0; skip=0; fail=0
 while IFS=$'\t' read -r name id rest; do
   [ -z "$id" ] && continue

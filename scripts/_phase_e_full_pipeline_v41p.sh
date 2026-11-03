@@ -10,7 +10,7 @@
 # 利用例:
 #   bash scripts/_phase_e_full_pipeline_v41p.sh
 
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 LOG=data/phase_e_full_pipeline.log
 > "$LOG"

@@ -1,0 +1,122 @@
+/* 位置と情報量は既存レイアウトに委ね、面・輪郭・文字の質感だけを替える。 */
+#stage:not([data-theme="classic"]){--p1:#70ddff;--p2:#ff9bac}
+#stage:not([data-theme="classic"]) #panel{isolation:isolate;overflow:hidden}
+#stage:not([data-theme="classic"]) .number{font-family:"Bahnschrift",Arial,sans-serif;font-weight:800}
+#stage:not([data-theme="classic"]) .brand{font-weight:900;letter-spacing:2px}
+#stage:not([data-theme="classic"]) .state{font-weight:600}
+#stage:not([data-theme="classic"]) .name{border-bottom:3px solid currentColor;padding-bottom:3px}
+#stage:not([data-theme="classic"]) .right .name{border-bottom-style:dashed}
+#stage:not([data-theme="classic"]) .bar{height:10px;border:1px solid #ffffff40}
+#stage:not([data-theme="classic"]) #trace{stroke:var(--p1)}
+#stage:not([data-theme="classic"]) #whole-trace{stroke:var(--p1)}
+#stage:not([data-theme="classic"]) .trend{border-top:1px solid #ffffff20;padding-top:7px}
+#stage:not([data-theme="classic"]) .trend-meta{color:#d2deef}
+#stage:not([data-theme="classic"]) #panel:after{content:"";position:absolute;inset:0;pointer-events:none;
+  z-index:5;opacity:0;background:linear-gradient(110deg,transparent 20%,#ffffff65 48%,transparent 76%)}
+
+/* NEON：青と赤の光を面の内側に閉じ込め、ゲームへ発光をはみ出させない。 */
+#stage[data-theme="neon"] #panel,#stage[data-theme="neon"] #band{
+  background:linear-gradient(125deg,#12364bef,#13182bf5 46%,#371d36f2);
+  border-color:#8eddff9e;border-radius:22px 5px 22px 5px;
+  box-shadow:inset 0 1px #c2f7ffb0,inset 4px 0 22px #2fcfff24,inset -4px 0 22px #ff528b24}
+#stage[data-theme="neon"] .number{color:#fff;text-shadow:0 0 18px #5acaff65}
+#stage[data-theme="neon"] .right .number{text-shadow:0 0 18px #ff639965}
+#stage[data-theme="neon"] .one{background:linear-gradient(90deg,#248bff,#83f3ff)}
+#stage[data-theme="neon"] .two{background-color:#ff7d9a}
+#stage[data-theme="neon"] #trend{background-image:linear-gradient(180deg,#69dfff18,transparent);border-radius:4px}
+
+/* ARENA：太い色面と直線。斜めの切り込みは装飾だけで情報を切らない。 */
+#stage[data-theme="esports"] #panel,#stage[data-theme="esports"] #band{
+  background:linear-gradient(115deg,#193251 0 19%,#101927 19% 81%,#472635 81%);
+  border-radius:2px;border-color:#aab8ca;border-top:5px solid #f2f5fa;
+  box-shadow:inset 0 -5px #62728a}
+#stage[data-theme="esports"] .brand{color:white;letter-spacing:3px}
+#stage[data-theme="esports"] .number{font-style:italic;color:white;text-shadow:3px 3px #030913}
+#stage[data-theme="esports"] .scores{background:linear-gradient(110deg,#2461a675,transparent 49%,#b7405775);border-radius:2px}
+#stage[data-theme="esports"] .bar{border-radius:0;height:12px}
+#stage[data-theme="esports"] .one{background:#55c8ff}
+#stage[data-theme="esports"] .two{background-color:#ff8496}
+
+/* POP：大人向けのインク色に、ぷよを連想する丸い面と二重輪郭。 */
+#stage[data-theme="pop"] #panel,#stage[data-theme="pop"] #band{
+  --p1:#8ae8ff;--p2:#ffafc1;background:radial-gradient(ellipse at 0 0,#316785 0,transparent 46%),
+    radial-gradient(ellipse at 100% 100%,#764163 0,transparent 43%),#1c2039;
+  border:3px solid #e7ddff;border-radius:30px;box-shadow:inset 0 0 0 5px #7770af50}
+#stage[data-theme="pop"] .number{color:#fff6ff;text-shadow:2px 3px #594374}
+#stage[data-theme="pop"] .name{border:0!important;border-radius:20px;background:#8ae8ff22;padding:4px 6px}
+#stage[data-theme="pop"] .right .name{background:#ffafc122;outline:1px dashed #ffafc1}
+#stage[data-theme="pop"] .bar{border-radius:20px;height:12px}
+#stage[data-theme="pop"] #tip{r:5;fill:#fff3c9;stroke:#fff3c9}
+
+/* NOIR：彩度を抑えた黒と白金。側の区別は青・赤と実線・破線で残す。 */
+#stage[data-theme="noir"] #panel,#stage[data-theme="noir"] #band{
+  --p1:#a6d6ed;--p2:#e7adb4;background:linear-gradient(135deg,#24262bef,#0e1117fa 65%);
+  border:1px solid #d6c7a0;border-radius:3px;box-shadow:inset 0 3px #d6c7a0,inset 0 -1px #d6c7a050}
+#stage[data-theme="noir"] .brand{color:#eadcba;letter-spacing:4px}
+#stage[data-theme="noir"] .number{font-weight:600;color:#fff5df;text-shadow:none}
+#stage[data-theme="noir"] .bar{height:6px;border:0;border-radius:0}
+#stage[data-theme="noir"] .trend-meta{color:#d9d3c6}
+#stage:not([data-theme="classic"]) [data-layout="minimal"]{padding-top:8px;padding-bottom:8px}
+
+/* L字の面は矩形・内向き装飾に限定し、ゲーム部分の全画素透明を守る。 */
+#stage.l-layout:not([data-theme="classic"]) #panel,
+#stage.l-layout:not([data-theme="classic"]) #band{border:0;border-radius:0;box-shadow:inset 0 3px #ffffff60}
+#stage.l-layout:not([data-theme="classic"]) .trend{padding-top:0;border-top:0}
+#stage:not([data-theme="classic"])[data-winner="1P"] #panel{box-shadow:inset 0 0 0 3px var(--p1)}
+#stage:not([data-theme="classic"])[data-winner="2P"] #panel{box-shadow:inset 0 0 0 3px var(--p2)}
+#stage:not([data-theme="classic"])[data-winner] .state{color:#fff2ba}
+#stage[data-motion="swing"] #panel:after{animation:theme-sweep 650ms ease-out both}
+#stage[data-motion="result"] #panel:after{animation:theme-sweep 1000ms ease-out both}
+#stage[data-motion="swing"] .scores{animation:theme-lift 360ms ease-out both}
+@keyframes theme-sweep{0%{opacity:0;transform:translateX(-100%)}30%{opacity:.5}100%{opacity:0;transform:translateX(100%)}}
+@keyframes theme-lift{0%{transform:translateY(2px)}100%{transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){#stage #panel:after,#stage .scores{animation:none!important}}
+
+/* ノーマルは中立な紺色、ポップはゲームと馴染むミルク色のツヤ玉。 */
+#stage[data-theme="normal"] #panel,#stage[data-theme="normal"] #band{
+ background:linear-gradient(150deg,#25394af7,#152332fa);border:2px solid #c9d8e5;
+ border-radius:18px;box-shadow:inset 0 2px #ffffff35,0 3px 8px #0005}
+#stage[data-theme="normal"] .brand{letter-spacing:1px}
+#stage[data-theme="pop"]{--p1:#006c9b;--p2:#ac285c;--midline-outline:#edfaff}
+#stage[data-theme="pop"] #panel,#stage[data-theme="pop"] #band{
+ --p1:#006c9b;--p2:#ac285c;color:#233b56;text-shadow:none;
+ background:radial-gradient(ellipse at 15% 0,#fff 0,transparent 55%),linear-gradient(135deg,#e8faff,#fff1d9 65%,#f9ddf0);
+ border:4px solid #fff;border-radius:32px;box-shadow:inset 0 0 0 3px #97cad8,0 3px 0 #4c718c,0 5px 10px #14263c50}
+#stage[data-theme="pop"] .number{color:#233b56;text-shadow:0 2px white}
+#stage[data-theme="pop"] .brand,#stage[data-theme="pop"] .state,#stage[data-theme="pop"] .unit,
+#stage[data-theme="pop"] .trend-meta,#stage[data-theme="pop"] .whole-meta,
+#stage[data-theme="pop"] .contents-title,#stage[data-theme="pop"] #contents-model,
+#stage[data-theme="pop"] #margin-note,#stage[data-theme="pop"] .detail-row span,
+#stage[data-theme="pop"] .detail-note{color:#304b63}
+#stage[data-theme="pop"] .prediction{color:#785019}
+#stage[data-theme="pop"] .name{background:#006c9b12;outline:2px solid #006c9b}
+#stage[data-theme="pop"] .right .name{background:#ac285c10;outline:2px dashed #ac285c}
+#stage[data-theme="pop"] .trend{border-color:#708b9b50}
+#stage[data-theme="pop"] #tip{fill:#fff;stroke:#233b56}
+#stage[data-theme="pop"][data-winner] .state{color:#694005}
+#stage[data-theme="pop"] .one{background:var(--p1)}
+#stage[data-theme="pop"] .two{background-color:var(--p2)}
+#stage.l-layout #panel,#stage.l-layout #band{border-radius:0;border:0;box-shadow:inset 0 3px #ffffff60}
+/* ゼウスくんの専用席は横列の内側に確保し、データとは重ねない。 */
+#stage.l-layout[data-band="true"][data-mascot="true"] #band{padding-right:calc(var(--column-space) + 16px)}
+#stage.l-layout[data-band="true"][data-mascot="true"][data-corner$="right"] #band{
+ padding-right:24px;padding-left:calc(var(--column-space) + 16px)}
+#stage.l-layout #band .whole-meta{display:block;line-height:1.3}
+#stage.l-layout #band .whole-meta span{display:block}
+#stage:not(.l-layout) #panel:has(#details:not([hidden])){max-height:800px;overflow:auto}
+#stage:not(.l-layout) #panel:has(#details:not([hidden])){left:710px;width:500px}
+#stage:not(.l-layout) #panel:has(#details:not([hidden])) .detail-row,
+#stage:not(.l-layout) #panel:has(#details:not([hidden])) .detail-note{display:none}
+#stage:not(.l-layout) #panel #contents-main,#stage:not(.l-layout) #panel #contents-extra{grid-template-columns:1fr;gap:8px}
+#stage:not(.l-layout) #panel .contents-title,#stage:not(.l-layout) #panel #margin-note,
+#stage:not(.l-layout) #panel #contents-model{font-size:22px;line-height:1.2}
+#stage:not(.l-layout) #panel .content-row{font-size:28px;line-height:1.15;grid-template-columns:1.5fr 1.15fr 1.15fr}
+#stage:not(.l-layout) #panel .content-row span:first-child,#stage:not(.l-layout) #panel .content-head{font-size:22px}
+#stage:not(.l-layout) #details,#stage:not(.l-layout) #contents-extra{padding-bottom:3px}
+/* 候補の差は見本だけで比較でき、通常の設定には出さない。 */
+#stage[data-pop-variant="pastel"] #panel,#stage[data-pop-variant="pastel"] #band{
+ background:linear-gradient(135deg,#e8f6ff,#f7e6ff);border-color:#a1c4fa;box-shadow:inset 0 0 0 3px white}
+#stage[data-pop-variant="sticker"] #panel,#stage[data-pop-variant="sticker"] #band{
+ background:#fff9e7;border:5px solid #314562;border-radius:30px 30px 30px 8px;box-shadow:5px 5px #d9a2d1}
+#stage[data-pop-variant="arcade"] #panel,#stage[data-pop-variant="arcade"] #band{
+ background:linear-gradient(#faffdd,#dcf6ff);border:5px solid #5b83ad;border-radius:16px;box-shadow:inset 0 0 0 4px white}

@@ -6,7 +6,7 @@
 #   scene4: match_04.mp4 相対(21.0,48.0)  [絶対3084.9-3111.9(試合終端)、27.0秒、旧durationと一致]
 #   scene5: match_05.mp4 相対(44.7,66.7)  [絶対3150.0-3172.0、22.0秒、旧durationと一致]
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 FF="$(PYTHONPATH=. ./venv/bin/python -c "from src.video_compositer import VideoCompositor; print(VideoCompositor._resolve_ffmpeg_bin())")"
 DIR="data/verify/advantage_videos_olRyxDGacbg_2026-08-03"
 

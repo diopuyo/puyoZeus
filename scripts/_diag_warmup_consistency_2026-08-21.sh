@@ -1,7 +1,7 @@
 #!/bin/bash
 # 分割レンダ+ウォームアップの一致検証 (2026-08-21)。
 # scripts/visualize_advantage_overlay.py は変更しない。CLI 呼び出しのみ。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 mkdir -p data/verify/zenchi_warmup_2026-08-21
 LOG=logs/_diag_warmup_consistency_2026-08-21.log
 { date; cat /proc/loadavg; } > "$LOG"

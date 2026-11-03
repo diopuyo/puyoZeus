@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # unknown1-5 で FIX_E viz を並列生成 (slide motion 抑制版)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 mkdir -p logs
 for tag in "" 2 3 4 5; do
     video=data/test_unknown/unknown${tag}_match_120s.mp4

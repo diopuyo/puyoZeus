@@ -2,7 +2,7 @@
 # 5 動画から HSV-only 信頼判定で seed dataset を並列抽出する。
 # GPU 8GB 制約のため parallel=3 (CYCLE_FINDINGS.md ルール)。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 mkdir -p logs
 
 MAX=500

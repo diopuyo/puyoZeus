@@ -4,7 +4,7 @@
 #   A: --no-online-hsv (= 純粋 baseline)
 #   B: 通常 (= online_hsv 学習 active)
 # 既存 baseline_v3_eval (= --hsv-state あり + online_hsv suppressed) を参考値とする。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/verify/online_hsv_off_eval
 mkdir -p data/verify/online_hsv_on_eval

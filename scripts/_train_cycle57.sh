@@ -9,7 +9,7 @@
 #
 # 期待: 5 色精度改善 + ojama 認識完全維持
 # リスク: cycle 56 系と類似の「ぎりぎり改善 or 逆効果」 (= ただし新軸 = 凍結)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p logs
 

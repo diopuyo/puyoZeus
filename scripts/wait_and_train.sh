@@ -12,7 +12,7 @@ while kill -0 $BULK_PID 2>/dev/null; do
 done
 echo "[$(date)] bulk_train finished" >> $LOG
 
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 source venv/bin/activate
 
 # 最新の bulk_patches_balanced_through_vNN.npz を特定

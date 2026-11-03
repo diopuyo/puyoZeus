@@ -2,7 +2,7 @@
 # 強化アナリスト遡及適用 (2026-05-19): cycle 32d/e/g/baseline を 3 動画で
 # board log JSONL 生成 → evaluator で評価 → cycle 失敗を自動 reject できるか検証
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p logs/board_logs
 mkdir -p data/verify/retrospective_eval

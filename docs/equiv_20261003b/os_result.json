@@ -1,0 +1,93 @@
+{
+  "left": "D:\\puyo_analyzer\\packaging\\equiv\\fixed_20261003b_win_torch",
+  "right": "D:\\puyo_analyzer\\packaging\\equiv\\fixed_20261003b_wsl_torch",
+  "complete": true,
+  "pixels": {
+    "left": 3450,
+    "right": 3450,
+    "identical": true
+  },
+  "recognition_config_equal": true,
+  "settings_equal": {
+    "seed": true,
+    "production_flags": true,
+    "manifest_sha256": true
+  },
+  "backends": [
+    "torch",
+    "torch"
+  ],
+  "frames": [
+    3420,
+    3420
+  ],
+  "dropped": [
+    0,
+    0
+  ],
+  "missing": [],
+  "total_mismatches": 10372,
+  "files": {
+    "display.npz": {
+      "rows_a": 3420,
+      "rows_b": 3420,
+      "mismatched_columns": [
+        "adv_raw_last",
+        "display_adv",
+        "display_p1"
+      ],
+      "missing_columns": [],
+      "mismatched_rows_any_column": 1338
+    },
+    "settled.npz": {
+      "rows_a": 2249,
+      "rows_b": 2249,
+      "mismatched_columns": [
+        "adv_ema",
+        "adv_raw",
+        "p1",
+        "p1_raw"
+      ],
+      "missing_columns": [],
+      "mismatched_rows_any_column": 206
+    },
+    "events.jsonl": {
+      "lines_a": 6,
+      "lines_b": 6,
+      "compared": 6,
+      "mismatched": 4,
+      "mismatched_excluding_path_separator": 4,
+      "path_separator_only": 0,
+      "length_diff": 0
+    },
+    "inputs.jsonl.gz": {
+      "lines_a": 9174,
+      "lines_b": 9174,
+      "compared": 9174,
+      "mismatched": 1545,
+      "mismatched_excluding_path_separator": 1544,
+      "path_separator_only": 1,
+      "length_diff": 0
+    },
+    "review_data.csv": {
+      "rows_a": 3420,
+      "rows_b": 3420,
+      "compared_rows": 3420,
+      "length_diff": 0,
+      "compared_cells": 680580,
+      "header_equal": true,
+      "mismatched_cells": 7280,
+      "mismatched_rows": 1598,
+      "numeric_mismatched_cells": 7280,
+      "max_abs_diff_numeric": 3.34698432169489e-05
+    }
+  },
+  "first_display_difference": {
+    "row": 0,
+    "column": "display_adv",
+    "t_sec": 226.0,
+    "left": -3.5042638091317158,
+    "right": -3.5042628192997762
+  },
+  "first_recognition_difference": null
+}

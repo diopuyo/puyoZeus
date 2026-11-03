@@ -4,7 +4,7 @@
 #   game9開始 score0 = t=872.4s (game8終値8805/4360 -> 872.2-872.3 None(遷移) -> 872.4 で0/0)
 #   game10開始 score0 = t=949.5s (game9終値68444/84997 -> 949.3-949.4 None(遷移) -> 949.5 で0/0)
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 RAW="data/indicators_v2/overlay/advantage_recog_c62_game9_full_score0to0.mp4"
 H264="data/indicators_v2/overlay/advantage_recog_c62_game9_full_score0to0_h264.mp4"
 

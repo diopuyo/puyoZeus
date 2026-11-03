@@ -1,7 +1,7 @@
 #!/bin/bash
 # S級3本 + チャレンジャー3本をDL(較正のティア多様化)。
 # yt-dlpのremux用にimageio-ffmpeg同梱バイナリをffmpegとしてsymlink(システムffmpeg無いため)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 BIN="$(pwd)/venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"
 ln -sf "$BIN" "$(pwd)/venv/bin/ffmpeg"
 FF="$(pwd)/venv/bin"

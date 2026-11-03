@@ -1,0 +1,24 @@
+{
+  "c": 0.4608258505895786,
+  "objective": "game_log_loss",
+  "episodes": 898,
+  "locked": true,
+  "videos": [
+    29,
+    32,
+    34,
+    39,
+    51,
+    61,
+    65,
+    79,
+    92,
+    94
+  ],
+  "excluded_videos": [
+    80,
+    52
+  ],
+  "b3_sha256": "6113e42b8d3aadad6251f0749ad09281d7c63a65fc09a4cc659e68694ee2903c",
+  "protocol_sha256": "1aa18893b8da4ce94eaf7520859f5c262a7dc532d54d335f6cd0fca6d489273c"
+}

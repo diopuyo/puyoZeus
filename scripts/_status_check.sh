@@ -1,7 +1,7 @@
 #!/bin/bash
 # 不慮の Claude 切断後、 1 コマンドで現状把握。
 # 使い方: wsl -d Ubuntu -- bash scripts/_status_check.sh
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 echo "================================================================"
 echo "  自律実行 status check @ $(date)"

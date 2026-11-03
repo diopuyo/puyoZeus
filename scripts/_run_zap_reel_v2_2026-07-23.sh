@@ -2,7 +2,7 @@
 # 認識レビュー用ザッピング動画 v2 (2026-07-23): 20-30本規模に拡大。
 # c20/c40 は既にレンダー済(v1で完了)のためコピー再利用、残り26本を2波で並列レンダー。
 set -u
-PROJ="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "$PROJ" || exit 1
 
 RAW_DIR="data/indicators_v2/overlay/zap/raw"

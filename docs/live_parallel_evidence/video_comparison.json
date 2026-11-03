@@ -1,0 +1,95 @@
+[
+  {
+    "base": "video_0",
+    "candidate": "video_1",
+    "notices_before": 900,
+    "notices_after": 900,
+    "mismatches": [],
+    "logits_input_keys_equal": true,
+    "logits_calls": 2710,
+    "patches": 99200,
+    "logits_mismatch_calls": 0,
+    "argmax_mismatch": 0,
+    "logits_max_abs_diff": 0.0,
+    "boards": {
+      "raw_cnn_board": {
+        "cells": 140400,
+        "differences": 0,
+        "missing_mismatch": 0
+      },
+      "cnn_board": {
+        "cells": 140400,
+        "differences": 0,
+        "missing_mismatch": 0
+      },
+      "confirmed_board": {
+        "cells": 140088,
+        "differences": 0,
+        "missing_mismatch": 0
+      }
+    },
+    "both_stable_frames": 438
+  },
+  {
+    "base": "video_0",
+    "candidate": "video_2",
+    "notices_before": 900,
+    "notices_after": 900,
+    "mismatches": [],
+    "logits_input_keys_equal": true,
+    "logits_calls": 2710,
+    "patches": 99200,
+    "logits_mismatch_calls": 0,
+    "argmax_mismatch": 0,
+    "logits_max_abs_diff": 0.0,
+    "boards": {
+      "raw_cnn_board": {
+        "cells": 140400,
+        "differences": 0,
+        "missing_mismatch": 0
+      },
+      "cnn_board": {
+        "cells": 140400,
+        "differences": 0,
+        "missing_mismatch": 0
+      },
+      "confirmed_board": {
+        "cells": 140088,
+        "differences": 0,
+        "missing_mismatch": 0
+      }
+    },
+    "both_stable_frames": 438
+  },
+  {
+    "base": "video_0",
+    "candidate": "video_3",
+    "notices_before": 900,
+    "notices_after": 900,
+    "mismatches": [],
+    "logits_input_keys_equal": true,
+    "logits_calls": 2710,
+    "patches": 99200,
+    "logits_mismatch_calls": 0,
+    "argmax_mismatch": 0,
+    "logits_max_abs_diff": 0.0,
+    "boards": {
+      "raw_cnn_board": {
+        "cells": 140400,
+        "differences": 0,
+        "missing_mismatch": 0
+      },
+      "cnn_board": {
+        "cells": 140400,
+        "differences": 0,
+        "missing_mismatch": 0
+      },
+      "confirmed_board": {
+        "cells": 140088,
+        "differences": 0,
+        "missing_mismatch": 0
+      }
+    },
+    "both_stable_frames": 438
+  }
+]

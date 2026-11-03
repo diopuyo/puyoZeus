@@ -1,7 +1,7 @@
 #!/bin/bash
 # 2試合(1試合単位)を新レイアウトでレンダ→h264化。並列2・cv2デフォルト(2プロセスなら競合軽微)。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 OUTDIR=data/indicators_v2/overlay
 mkdir -p "$OUTDIR"

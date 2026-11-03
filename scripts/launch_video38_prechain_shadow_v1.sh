@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project_root="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+project_root="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 output_root="${1:?新規shadow出力directoryを指定してください}"
 log_path="${output_root}.log"
 if [[ -e "$output_root" || -e "$log_path" ]]; then

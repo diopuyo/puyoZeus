@@ -1,96 +1,51 @@
-# PuyoZeus
+# puyoZeus Live
 
-ぷよぷよ eスポーツ動画から盤面を画像認識し、 有利不利を判定するシステム。
+ぷよぷよ eスポーツの配信画面から盤面を読み取り、推定勝率を OBS に重ねて表示する Windows 用ソフトです。上級者の対戦を対象に作られています。表示する勝率は画像認識とモデルによる推定で、実際の勝敗を保証するものではありません。
 
-最終目標: 配信オーバーレイ + 機械学習による戦略評価。
+## 動作環境
 
-## 主要機能
+- Windows の64ビット（x64）環境と OBS Studio（仮想カメラ機能を使用）。同梱の計算部品は AVX2 などのCPU命令を使うため、古いCPUでは動作しない場合があります。
+- ゲーム全体が見える16:9、1920×1080の入力映像。盤面・得点・勝敗表示を隠さないでください。720pでの認識精度は未測定です。
+- 配布zipには Python と必要な部品を同梱します。Python や CUDA の別途インストールは不要です。
+- Microsoft Visual C++ ランタイムが必要です。起動時に `msvcp140.dll` などが見つからない場合は、[Microsoft 公式の Visual C++ 再頒布可能パッケージ](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist/)から X64 版をダウンロードして実行し、インストール後に本アプリを起動し直してください。Windows の System32 から取り出した DLL は配布zipに同梱していません。
+- 性能の目安は、OBS の配信・録画と同時にゲーム映像を滑らかに取り込めることです。CPU・メモリの最低仕様はまだ確定していません。短い対戦で映像のコマ落ちと表示の遅れを確認してから配信に使用してください。
 
-- **画像認識 pipeline**: HSV + CNN ハイブリッド方式 (= 1920×1080 動画 → 6×13 盤面)
-- **state machine**: STABLE / TSUMO_FALL / CHAIN / OJAMA_FALL / EFFECT の 5 状態遷移
-- **物理推論ベース評価フレーム** (= recognition_evaluator): 12 メトリクスで fail-silent 検知
-- **45 指標** ベース有利不利スコア (= scorer.py)
+## 入れ方と起動
 
-## 必要環境
+1. このリポジトリの Releases から配布zipを入手し、書き込み可能なフォルダへすべて展開します。zip内から直接実行しないでください。配布zipは署名なしです。
+2. OBS を起動し、ゲームのキャプチャを用意します。OBS の「設定 → 映像」で出力解像度を1920×1080にします。
+3. OBS 仮想カメラの出力を「ソース」にし、ゲームのキャプチャを選んで仮想カメラを開始します。認識に使う映像には、このアプリの重ね表示を含めないでください。
+4. 展開先の `puyoZeus Live.vbs` をダブルクリックします。`puyoZeus Live.bat` からも起動できます。初回に開く設定ページで入力を選び、入力テストと表示の配置を確認して設定を完了します。
+5. OBS に「ブラウザ」ソースを追加します。幅1920、高さ1080にし、設定ページに表示されたURLを貼り付けます。既定のURLは `http://127.0.0.1:8765/` です。ポートが使用中の場合や配置を変えた場合は、設定ページが示すURLを使ってください。
+6. 既存のブラウザソースを使う場合は、アプリ起動後に再読み込みします。「画面調整中 N%」が終わるまで待ち、対戦中の表示を確認します。
 
-- Python 3.11+ (= 開発実環境 3.12)
-- CUDA 12.x + NVIDIA GPU 8GB+ VRAM 推奨
-- 主要 dep: `opencv-python`, `numpy`, `torch`, `scikit-learn`, `imageio-ffmpeg`
+起動後の設定は、通知領域のアイコンを右クリックして「設定を開く / Settings」を選びます。既定ポートなら `http://127.0.0.1:8765/settings` でも開けます。表示の配置を変えたら設定ページのURLをコピーし直してください。
 
-## セットアップ
+起動時の更新確認は既定でオフです。以前にオンで保存した設定は引き継ぎます。設定ページで変更できます。
 
-```bash
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+## 止め方・アンインストール
 
-## データ準備 (= ユーザー自前)
+- 停止するには、通知領域のアイコンから「終了 / Exit」、または設定ページの「アプリを終了」を選びます。設定ページを閉じるだけでは常駐アプリは終了しません。
+- zip版を削除するには、アプリを終了して展開先の `アンインストール.bat` または `Uninstall.bat` を実行します。データ削除の質問は Enter / N で保存、Y で削除です。
+- ショートカットと自動起動の登録を解除したら画面を閉じ、必要な設定・ログを別の場所へ退避してから展開フォルダを削除します。
 
-**本リポジトリには版権関連データ (= ぷよぷよ動画、 学習済 model 等) は含まれません。**
-以下を自前で準備:
+## 分かっている制約
 
-1. **動画ファイル** (= マスター級以上の対戦動画):
-   ```
-   data/frames/video_01.mp4
-   data/frames/video_02.mp4
-   ...
-   ```
-2. **試合境界 TSV** (= 試合切り出し用):
-   ```
-   data/verify/match_boundaries_v5/video_NN/matches.tsv
-   ```
-   `scripts/_list_match_boundaries.py` 等で自動生成可能。
+- コマ落ちや入力の乱れがあると、盤面や得点を読み違え、勝率が揺れたり表示が遅れたりすることがあります。
+- セットの最初の数秒など、開始を認識するまで「試合待ち」になることがあります。対戦中も続く場合は、入力の選択と仮想カメラの映像を確認してください。
+- 演出で盤面が隠れる場面や得点の読み取りに誤りがある場面では、判定が実際の状況と合わないことがあります。解像度・色・配置の異なる映像でも認識が不安定になる可能性があります。
+- 上級者以外の対戦や、対応するゲーム画面以外での推定精度は保証していません。
 
-## 推論実行 (= 認識デモ)
+## ライセンスと画像素材
 
-```bash
-PYTHONPATH=. python -m scripts.visualize_recognition \
-    --video data/your_video.mp4 \
-    --output data/output.mp4 \
-    --cnn-model models/your_model.pt \
-    --dump-board-log logs/board_log.jsonl
-```
+本プロジェクトのコードは [MIT License](LICENSE) です。著作者は diopuyo、年は2026です。同梱する第三者の部品にはそれぞれのライセンスが適用されます。原文の場所と配布前の確認項目は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。
 
-## 評価 (= 強化アナリスト)
+認識用に、ゲーム画面から切り抜いた得点の数字・勝敗のロゴ・×の印・全消しのテロップのテンプレートを同梱しています。これらのゲーム素材に MIT ライセンスを付与するものではありません。ゲームおよび素材に関する著作権・商標などの権利は各権利者に帰属します。本ソフトは非公式であり、ゲームの権利者による提供・承認を示すものではありません。
 
-```bash
-PYTHONPATH=. python -m scripts.evaluate_recognition \
-    --board-log logs/board_log.jsonl \
-    --report-out data/verify/your_eval.json
-```
+ゲーム画面の切り出し画像・検証用画像は、上記の認識用テンプレートとは区別し、公開リポジトリと配布物へ含めない方針です。アプリ独自のマスコット (ゼウスくん)・ロゴの画像も、コードと同じ [MIT License](LICENSE) です。
 
-12 メトリクスで物理推論ベース自動評価。 verdict が REJECT / REVIEW / ACCEPT。
+## 問い合わせ・開発
 
-## CNN 学習
+不具合や要望は、このリポジトリの GitHub Issues へお願いします。アプリの版、Windows の版、入力方法、再現手順を添えてください。ログを添付する場合は、パス・アカウント名などの個人情報が残っていないか確認してください。
 
-詳細は `docs/INDICATOR_ROADMAP.md` 参照。
-
-主要 pipeline:
-1. 動画から試合切り出し (= 15 秒バッファ必須、 重要ノウハウ)
-2. seed 抽出 (= `scripts/extract_hsv_seed_dataset.py`)
-3. CNN fine-tune (= `scripts/phase_i_fine_tune.py`)
-4. viz 評価 + 強化アナリスト
-
-## 主要設計思想
-
-- **「形は手段、 機能が本質」**: GTR / サブマリン等の形分類は二次、 機能・能力指標が一次
-- **STABLE 確定盤面のみで評価**: NON-STABLE 中は前回 STABLE 凍結
-- **viz 目視併用必須**: 数値だけで採否決めない (= 強化アナリスト + ユーザー目視)
-- **試合切り出し 15 秒バッファ必須**: state machine 初期化のため
-
-## ドキュメント
-
-- `CLAUDE.md`: コアルール (= プロジェクト全体方針)
-- `docs/CYCLE_FINDINGS.md`: cycle 検証で確定したルール
-- `docs/PROJECT_STATE.md`: 進捗状態
-- `docs/INDICATOR_REFERENCE.md`: 45 指標フル定義
-- `docs/INDICATOR_ROADMAP.md`: Phase I-L 詳細ロードマップ
-
-## ライセンス
-
-(= 後で追記)
-
-## 補足
-
-ぷよぷよ™ eスポーツ は SEGA / Compile の登録商標。 本プロジェクトは個人研究目的で、 SEGA / Compile の公式プロジェクトではありません。
+開発環境や認識処理の説明は [開発者向け案内](docs/DEVELOPMENT.md) に分けています。

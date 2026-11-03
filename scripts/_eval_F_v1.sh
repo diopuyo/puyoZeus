@@ -2,7 +2,7 @@
 # F 検証 (= STABLE 復帰ゲート、 cycle 56)。
 # 既存 default model (= cnn_phase_b_large_v2.pt) に F 適用済の state machine で評価。
 # F は model でなく state machine 挙動修正なので model 不変、 認識結果のみ変化。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health F_v1_eval

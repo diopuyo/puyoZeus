@@ -7,7 +7,7 @@
 #   - focal+logit: noise + imbalance 両対処
 #   - augment: 4 色 permutation
 #   - epochs 10: CPU/GPU リソース活用方針 (default 5 から増加)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 PYTHONPATH=. ./venv/bin/python -m scripts.phase_i_fine_tune \
     --component cell_color --all \
     --store-root data/pseudo_labels_hsv_seed_with_empty \

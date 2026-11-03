@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # v89 動画 AV1 → H.264 再エンコード (= opencv の AV1 decode 非対応対策).
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 FFMPEG="venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2"
 SRC="data/test_unknown/v89_match1_75s_720p.mp4"

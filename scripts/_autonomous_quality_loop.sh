@@ -9,7 +9,7 @@
 #   2. baseline_videos_v3 viz + 強化アナリスト評価
 #   3. critical 比較 → JSON に結果保存
 #   4. 採用 = parameter 維持、 revert = 元に戻す
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health autonomous_quality_loop

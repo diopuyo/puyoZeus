@@ -3,7 +3,7 @@
 # 「試合開始+1〜3秒の空盤面」のはずが非空と判定された時刻に、
 # 実際は何が写っているか (試合中盤 / 前試合の終局 / 演出画面) を目視確認する。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 OUT=data/verify/phase_l_quality_gate_2026-08-07/triage_frames
 mkdir -p "$OUT"

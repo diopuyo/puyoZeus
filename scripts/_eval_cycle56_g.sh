@@ -2,7 +2,7 @@
 # cycle 56 G: 小手先 (= state machine 定数 N=5→8、 votes=3→5) + KC metric (= 静止中色ブレ) 効果確認.
 # c56_v3b model + 定数変更を反映した viz を 3 動画 + 8 動画 eval で生成。
 # 比較対象: c56_v3b 単独 (= 定数 N=5 時代の eval) vs cycle 56 G (= 定数拡張)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health cycle56_g_eval

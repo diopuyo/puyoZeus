@@ -5,7 +5,7 @@
 # --game-event-chain-exit --landing-observed-color --no-per-video-hsv) に
 # #51 フラグ2種のみ追加する。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 VIDEOS="v29_match2_156s,v40_match7_125s,v51_match2_97s,v57_match2_100s,v70_match2_113s,v89_match3_95s,v95_match15_99s,v97_match11_96s,v29m2_buf15s,v30_5min_90s,v30_match11_89s,v30_match11_buf15s,v40m7_buf15s,v51m2_buf15s,v57m2_buf15s,v70m2_buf15s,v89m3_buf15s,v95m15_buf15s,v97_match11_buf15s"
 

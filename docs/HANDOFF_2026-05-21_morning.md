@@ -64,10 +64,10 @@
 ### cycle 50b 4 動画 (= 末尾 skip 拡張効果)
 
 ```
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50b_diff_v86m17.png
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50b_diff_v52m5.png
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50b_diff_v89m7.png
-C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50b_diff_v34m13.png
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50b_diff_v86m17.png
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50b_diff_v52m5.png
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50b_diff_v89m7.png
+<home>\.gemini\antigravity\scratch\puyo_analyzer\data\seed_review\cycle50b_diff_v34m13.png
 ```
 
 各 PNG: 上段 = cycle 50 改修済 / 下段 = cycle 50b 末尾 skip 拡張版。
@@ -81,7 +81,7 @@ v86m17 で「やった」 文字消失していれば **完全 clean 達成** �
 ### 4-1. 状態確認
 
 ```bash
-wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && bash scripts/_status_check.sh"
+wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && bash scripts/_status_check.sh"
 ```
 
 = 走行中プロセス / 完了 flag / dashboard / 直近 judgments を 1 コマンドで把握。
@@ -110,7 +110,7 @@ wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo
 PC 再起動で全プロセス停止。 再開時は:
 
 ```bash
-wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && setsid -f bash scripts/_autonomous_master.sh > logs/autonomous_master.log 2>&1 < /dev/null"
+wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && setsid -f bash scripts/_autonomous_master.sh > logs/autonomous_master.log 2>&1 < /dev/null"
 ```
 
 冪等。 既起動済 cycle は started.flag で skip。 ただし sweep は 19/19 完了済なので再起動不要。

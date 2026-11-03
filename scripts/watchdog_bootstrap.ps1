@@ -3,7 +3,7 @@
 # If an existing watchdog pid is alive, exits quietly. Otherwise spawns a fresh watchdog.
 
 $ErrorActionPreference = 'Continue'
-$PROJECT = 'C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer'
+$PROJECT = '<home>\.gemini\antigravity\scratch\puyo_analyzer'
 $PIDFILE = Join-Path $PROJECT 'data\watchdog.pid'
 $SCRIPT  = Join-Path $PROJECT 'scripts\watchdog.ps1'
 $BOOTLOG = Join-Path $PROJECT 'data\watchdog_bootstrap.log'

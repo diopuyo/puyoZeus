@@ -1,6 +1,6 @@
 #!/bin/bash
 # cycle_19 (真 baseline) vs cycle_27 (= A1+A2+A4+案X 統合) を 5 動画 side-by-side
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 OUT_DIR=data/test_unknown
 
 for tag in v50 v70 v89m3 v91 v97; do

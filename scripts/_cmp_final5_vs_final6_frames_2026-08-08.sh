@@ -3,7 +3,7 @@
 # 目視比較用に並べる。抽出時刻は baseline 診断で視覚由来の誤 OJAMA_FALL が
 # 出ていた t=56.3 / 57.7 と、対照として t=61.7。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 DEMO=data/verify/youtube_demo_2026-08-07
 OUT="$DEMO/final5_vs_6"

@@ -429,7 +429,7 @@ total_score = clamp(total_score, -100, +100)
 このレポートの数値を再現するには:
 
 ```bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 ./venv/bin/python scripts/validate_indicators_live.py
 ```
 

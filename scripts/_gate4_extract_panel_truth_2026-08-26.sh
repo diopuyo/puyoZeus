@@ -1,7 +1,7 @@
 #!/bin/bash
 # 条件1の密displayからWIN★勝者根拠を作る。既存成果物は上書きしない。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 ROOT=data/verify/gate4_formal_dense_2026-08-26
 for i in $(seq 1 8); do

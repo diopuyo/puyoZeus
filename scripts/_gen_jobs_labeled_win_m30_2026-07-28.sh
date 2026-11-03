@@ -17,7 +17,7 @@
 # chain-tsumo-undershoot クランプ(同ファイル5144-5156行)が未検出分を0に
 # ゼロ化してしまうこと。ユーザー判断待ち(現状は間引き無しのまま維持)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 
 VIDEO_LIST="${1:?selected_videos_m30.txt (1行1 video_id) が必要}"
 OUT_STUDY_DIR="data/verify/labeled_win_m30_2026-07-28/study"

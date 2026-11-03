@@ -2,7 +2,7 @@
 # cycle 46: 全 8 動画 (= evaluation_videos) を 15 秒バッファ付き再切り出し + 評価
 # user 承認済 (= 2026-05-20、 試合切り出し境界 detector の精度問題確定 後)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/holdout_videos
 mkdir -p data/review_videos/cycle46

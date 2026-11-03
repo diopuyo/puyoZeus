@@ -5,7 +5,7 @@
 # t=54.5/58/62 : 同時連鎖中 (「どんどん2P有利へ寄る」症状の帯)
 # t=66  : 1P 撃ち切り・2P 窒息寸前
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 DEMO=data/verify/youtube_demo_2026-08-07
 OUT="$DEMO/no_score_lead_check"

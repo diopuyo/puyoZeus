@@ -1,7 +1,7 @@
 #!/bin/bash
 # C-6 完成形バックアップ (E-1 着手前)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 BACKUP="data/snapshots/phase_c_c6_2026-05-04"
 mkdir -p "$BACKUP/src" "$BACKUP/scripts" "$BACKUP/docs" "$BACKUP/review_videos" "$BACKUP/models"

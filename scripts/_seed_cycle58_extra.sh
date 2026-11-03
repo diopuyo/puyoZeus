@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle 58 seed 採取 追加並列 3 (= 既存 3 並列と合わせて 6 並列).
 # 既存 script は alphabet 順、 本 script は逆順で重複削減。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/phase_l/seeds_cycle58
 mkdir -p logs/cycle58_seed

@@ -10,7 +10,7 @@
 # 再起動の主目的は速度ではなく**検証の前倒し**: 2.5時間経過して完了0本という
 # のは「2本ごとに確認して進める」(user方針) を満たせない軌道であり、
 # 短い動画から処理すれば約1.5時間で検証2本が手に入る。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 echo "=== 停止 ==="
 pkill -f _regen_model50v2_2026-08-20

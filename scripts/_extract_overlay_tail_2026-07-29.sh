@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 FF=./venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2
 OUTDIR=/tmp/overlay_frames2
 mkdir -p "$OUTDIR"

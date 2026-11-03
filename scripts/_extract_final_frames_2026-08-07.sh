@@ -1,6 +1,6 @@
 #!/bin/bash
 # 最終版vizの検収フレーム抽出
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 OUT=data/verify/youtube_demo_2026-08-07/stills
 for t in 35 39.2 64; do
   nice -n 19 ./venv/bin/ffmpeg -y -loglevel error -ss "$t" \

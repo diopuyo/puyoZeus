@@ -9,7 +9,7 @@
 #   demo_final_C_recognition.mp4      映像C: 認識のみ (色記号 + 状態 + 連鎖数)
 #   demo_final_D_no_cell_overlay.mp4  映像D: 色記号なし (状態 + 連鎖数のみ)
 # いずれも同一試合 (dio vs TS m01)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 

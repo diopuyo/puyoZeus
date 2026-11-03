@@ -7,7 +7,7 @@
 #
 # 30fps 1本 + 60fps 1本を全長で回す (fable 設計の T2)。動画間で状態を持たない
 # ので 48本フル比較は不要 — 動画内の区間の多様性が被覆されれば検証力は増えない。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 exec >> logs/t2_native_parity_2026-08-20.log 2>&1
 echo "=== T2 start $(date +%F_%T) ==="
 

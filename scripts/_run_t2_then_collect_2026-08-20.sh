@@ -10,7 +10,7 @@
 # 不合格時に「フラグ無しで収集を始める」自動フォールバックは**入れない**。
 # 不一致が出たなら原因を調べるのが先で、黙って別構成の収集を 15 時間走らせる
 # のは事故 (今日の配線漏れ事故と同じ構図になる)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 exec >> logs/t2_then_collect_2026-08-20.log 2>&1
 echo "=== 待機開始 $(date +%F_%T) ==="
 

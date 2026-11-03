@@ -11,6 +11,14 @@ Phase 5: Mixup / Label Smoothing 等の高度技法
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[1])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import gc
 import os
 import subprocess
@@ -63,7 +71,7 @@ PLAYLISTS = [
 
 _VENV_BIN = Path(sys.executable).parent
 YT_DLP = str(_VENV_BIN / "yt-dlp") if (_VENV_BIN / "yt-dlp").exists() else "yt-dlp"
-NODE_PATH = "/home/ryouj/.nvm/versions/node/v20.20.1/bin/node"
+NODE_PATH = _public_dev_text('<home>/.nvm/versions/node/v20.20.1/bin/node')
 
 
 def log(msg: str) -> None:

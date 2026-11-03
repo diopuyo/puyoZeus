@@ -87,13 +87,13 @@ RED_GREEN_DIFF_FOR_RED: 80
 
 ```bash
 # 全テスト走行 (約 3 分)
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q --ignore=tests/test_video_processor.py"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q --ignore=tests/test_video_processor.py"
 
 # 最新 CNN 評価
 wsl -- bash -c "cd /mnt/c/.../puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m scripts.phase_u_eval_classifiers"
 
 # レビュー済シート確認
-ls "C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\verify\phase_u_batch4\"
+ls "<home>\.gemini\antigravity\scratch\puyo_analyzer\data\verify\phase_u_batch4\"
 ```
 
 ## 推奨次手順 (優先順)

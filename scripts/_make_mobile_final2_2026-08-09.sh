@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 最終2本のスマホ視聴用 (720p / 音声なし / faststart)。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 D=data/verify/youtube_demo_2026-08-07/release
 OUT="$D/mobile"

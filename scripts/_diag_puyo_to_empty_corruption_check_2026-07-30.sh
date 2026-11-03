@@ -1,6 +1,6 @@
 #!/bin/bash
 set -x
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 export PYTHONPATH=.
 mkdir -p logs
 

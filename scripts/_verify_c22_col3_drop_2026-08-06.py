@@ -38,6 +38,14 @@ Usage:
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import csv
 import sys
 from collections import defaultdict
@@ -61,7 +69,7 @@ from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 # 定数
 # =============================================================================
 
-VIDEO_DIR: Path = Path("/home/ryouj/frames")
+VIDEO_DIR: Path = Path(_public_dev_text('<home>/frames'))
 OUT_DIR: Path = Path("data/verify/c22_col3_drop_2026-08-06")
 VIDEO_STEM: str = "c22"
 TARGET_SIDE: str = "2P"

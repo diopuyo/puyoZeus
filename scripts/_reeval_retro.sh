@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 for cycle in baseline cycle32d cycle32e cycle32g; do
   PYTHONPATH=. ./venv/bin/python -m scripts.evaluate_recognition \
     --board-log "logs/board_logs/${cycle}_v89m3.jsonl" \

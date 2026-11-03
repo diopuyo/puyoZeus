@@ -1,0 +1,2 @@
+# 重みファイルの版印をOSの改行変換で変えない。
+ama_weights.json -text whitespace=trailing-space,space-before-tab,cr-at-eol

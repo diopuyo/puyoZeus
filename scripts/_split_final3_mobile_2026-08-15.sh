@@ -2,7 +2,7 @@
 # 最終デモ (final3, 指摘13込み) を試合ごとに分割し720pスマホ用mp4を作る。
 # 分割点は _split_final2_mobile_2026-08-14.sh と同一 (0-56/56-116/116-148秒)。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 SRC=data/verify/demo_fixed_2026-08-13/demo_final3_3match.mp4
 OUT=data/verify/demo_fixed_2026-08-13
 FF=$(./venv/bin/python -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())")

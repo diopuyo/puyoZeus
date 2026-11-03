@@ -3,7 +3,7 @@
 # --download-sections はネットワークdownloader経由のffmpeg呼び出しで
 # exit -11 (segfault) する既知の罠のため使わない (全体DL→ローカルtrim方式)。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 FF="$(pwd)/venv/bin"
 OUT="data/frames/video_olRyxDGacbg.mp4"
 if [ -s "$OUT" ]; then echo "[skip] already exists: $OUT"; ls -la "$OUT"; exit 0; fi

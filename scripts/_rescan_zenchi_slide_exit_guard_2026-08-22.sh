@@ -13,7 +13,7 @@
 #
 # 出力は元の本番dump (data/verify/zenchi_render_2026-08-21) を一切上書き
 # しない別ディレクトリに書く (before/after 比較を保持するため)。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1

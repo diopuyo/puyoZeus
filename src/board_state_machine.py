@@ -15,12 +15,16 @@ OJAMA_FALL / EFFECT / MENU) を保持し、各状態で「認識を信用する�
 """
 
 from __future__ import annotations
+from src.live_speed_c import resolve_hsv
 
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol
 
 from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, Board
+from src.media_tick import (
+    TickShadow, TickStamp, append_weighted, audit_note, tick_reached, votes_reached,
+)
 
 # ============================
 # 定数
@@ -118,6 +122,7 @@ STABLE_RECOVERY_ADD_MIN_FRAMES: int = 4
 # 復旧ゲートの「合意値」として無効な色 = UNKNOWN(10) のみ。
 # EMPTY(0) / OJAMA(9) は方向2の除去ターゲットなので含めない。
 RECOVERY_EXCLUDED_COLORS: frozenset[int] = frozenset({10})
+FALLING_PUYO_COLORS: frozenset[int] = frozenset({1, 2, 3, 4, 5})
 
 # 列ゲート緩和 (enable_column_partial_support, 2026-07-25):
 # _check_recovery_column の浮き判定で「下のセルが空」でも stable_recovery_counters
@@ -299,6 +304,18 @@ class StateContext:
     # backwards compat: stable_majority_window=False (default) の間は
     # 一切書き込まれない (常に空リストのまま)。
     confirm_window_history: "list[Board]" = field(default_factory=list)
+    # コマ落ちに強い数え方 (2026-10-23、DESIGN.md 型 A・C、既定 OFF)。
+    # signals.media_tick が None (既定) の間は一切書き込まれない (= 従来と同一)。
+    # R01: pending_count に並べる刻みの影。
+    pending_tick: TickShadow = field(default_factory=TickShadow)
+    # R02・R03: non_stable_cnn_history の各観測の重み (刻み) と、最後に積んだ刻み。
+    # 長さが履歴と食い違ったら (他経路のクリア・強制投入)、重み 1 として揃え直す。
+    non_stable_cnn_weights: list[int] = field(default_factory=list)
+    non_stable_last_append_tick: int | None = None
+    # R04: stable_recovery_counters の各セルに並べる刻みの影。
+    recovery_tick_shadows: "dict[tuple[int, int], TickShadow]" = field(
+        default_factory=dict,
+    )
 
     def is_stable(self) -> bool:
         """STABLE 確定中か (= 認識結果を盤面確定に使う)。"""
@@ -416,6 +433,11 @@ class DetectorSignals:
     # 滞在短縮ロジックを一切適用しない (= 従来相当のフレーム数で判定)。
     # backwards compat: default None で既存動作と完全同一。
     own_pending_ojama_forecast: int | None = None
+    # コマ落ちに強い数え方 (2026-10-23、DESIGN.md §4.1、既定 OFF): この呼び出しの
+    # 仮想 30Hz の刻み (今の刻みと前回のパイプライン呼び出しの刻み)。
+    # RecognitionPipeline が enable_media_tick_counters=True のときだけ渡す。
+    # None (default) なら状態機械は今のコードの経路をそのまま通る (要件 E5)。
+    media_tick: "TickStamp | None" = None
 
 
 class StateTransitionDetector(Protocol):
@@ -519,6 +541,57 @@ def _vote_majority_board(
     return result
 
 
+def history_weights_or_none(
+    history: "list[Board]", weights: "list[int]",
+) -> "list[int] | None":
+    """重みが履歴と同じ長さなら返す。食い違えば None (= 重み 1、回数どおりの多数決)。"""
+    return list(weights) if history and len(weights) == len(history) else None
+
+
+def _vote_majority_board_weighted(
+    history: "list[Board]", weights: "list[int]", min_votes: int,
+    *, fallback: "Board | None" = None,
+    corroborated_colors: "frozenset[int] | None" = None,
+    corroborated_min_votes: int | None = None,
+    audit_site: str = 'vote',
+) -> Board:
+    """`_vote_majority_board` の刻み版 (型 C、2026-10-23、DESIGN.md R02・R03).
+
+    票は観測の重み (刻み) の合計で数え、勝者の色を決める。採用には
+    `votes_reached` (別々の観測 ≥ 必要票、または 観測 ≥ m かつ 重み ≥ 必要票) を求める。
+    全コマでは重みがすべて 1 なので、色の選び方 (同点は履歴の先に出た色) も採否も
+    `_vote_majority_board` と同じになる (要件 E1)。audit_site は診断の数えの鍵
+    (色のセルごとに母数と「重みで初めて通った」件数を数える。判定には使わない)。
+    """
+    result = Board()
+    if not history:
+        return fallback.copy() if fallback is not None else result
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            weight_by: dict[int, int] = {}
+            seen_by: dict[int, int] = {}
+            for b, w in zip(history, weights):
+                v = b.get(r, c)
+                weight_by[v] = weight_by.get(v, 0) + w
+                seen_by[v] = seen_by.get(v, 0) + 1
+            max_v, max_w = max(weight_by.items(), key=lambda x: x[1])
+            need = min_votes
+            if (
+                corroborated_colors is not None
+                and corroborated_min_votes is not None
+                and max_v in corroborated_colors
+            ):
+                need = corroborated_min_votes
+            passed = votes_reached(seen_by[max_v], max_w, need)
+            if max_v != COLOR_EMPTY:
+                audit_note(audit_site, passed and seen_by[max_v] < need)
+            if passed and max_v != COLOR_EMPTY:
+                result.set(r, c, max_v)
+            elif fallback is not None:
+                result.set(r, c, fallback.get(r, c))
+    return result
+
+
 def _majority_window_vote(
     history: "list[Board]", min_votes: int,
 ) -> "Board | None":
@@ -561,6 +634,7 @@ def _build_initial_confirmed_board(
     new_cnn: Board,
     initial_confirm_history: list[Board] | None,
     initial_confirm_min_votes: int,
+    initial_confirm_weights: "list[int] | None" = None,
 ) -> Board:
     """初回STABLE確定 (baseline is None) の盤面を組み立てる (2026-07-27).
 
@@ -574,11 +648,18 @@ def _build_initial_confirmed_board(
         initial_confirm_history: 直前 NON-STABLE 滞在中に蓄積した
             cnn_board 履歴。 None または空リストなら従来挙動。
         initial_confirm_min_votes: 多数決の最低観測 frame 数。
+        initial_confirm_weights: コマ落ちに強い数え方 (2026-10-23、R03) の各観測の
+            重み (刻み)。None (default) なら従来の回数の多数決 (bit-identical)。
 
     Returns:
         初回 confirmed_board (浮きぷよ ban 適用済み)。
     """
-    if initial_confirm_history:
+    if initial_confirm_history and initial_confirm_weights is not None:
+        new = _vote_majority_board_weighted(
+            initial_confirm_history, initial_confirm_weights,
+            initial_confirm_min_votes, fallback=new_cnn, audit_site='R03',
+        )
+    elif initial_confirm_history:
         new = _vote_majority_board(
             initial_confirm_history, initial_confirm_min_votes,
             fallback=new_cnn,
@@ -636,6 +717,7 @@ def _merge_diff_only(
     hsv_board: Board | None = None,
     enable_puyo_to_empty_hsv_guard: bool = False,
     history_board: Board | None = None,
+    initial_confirm_weights: "list[int] | None" = None,
 ) -> Board:
     """baseline をベースに、CNN との差分 cell のみ new_cnn 値で上書き.
 
@@ -687,6 +769,8 @@ def _merge_diff_only(
             from_state スコープ判定 (色→空 が物理的に説明可能な遷移か) を
             済ませた上で渡す前提。 default None = 従来挙動完全維持
             (backwards compat)。
+        initial_confirm_weights: コマ落ちに強い数え方 (2026-10-23、R03)。
+            `_build_initial_confirmed_board` へそのまま渡す。default None = 従来挙動。
 
     Returns:
         merged: baseline + 物理整合性 filter 後の差分のみ更新された盤面
@@ -696,6 +780,7 @@ def _merge_diff_only(
     if baseline is None:
         return _build_initial_confirmed_board(
             new_cnn, initial_confirm_history, initial_confirm_min_votes,
+            initial_confirm_weights,
         )
 
     from src.board import COLOR_UNKNOWN
@@ -715,6 +800,7 @@ def _merge_diff_only(
             # (allow_puyo_to_empty=False) に加え、HSV 照合ガード
             # (enable_puyo_to_empty_hsv_guard) で HSV が色を裏付ける単一
             # フレーム CNN の空誤読 (光沢→空) を退ける。
+            hsv_board = resolve_hsv(hsv_board)
             hsv_v = hsv_board.get(r, c) if hsv_board is not None else None
             if _should_keep_puyo_over_empty(
                 base_v, cnn_v, hsv_v, allow_puyo_to_empty,
@@ -979,7 +1065,9 @@ class BoardStateMachine:
         # 効果を確認しやすいため)。default False = 従来挙動完全維持・
         # bit-identical (backwards compat、user承認前の savepoint 実装)。
         enable_ojama_column_stack_fix: bool = False,
+        enable_falling_puyo_integrity: bool = False,
     ) -> None:
+        self._enable_falling_puyo_integrity = enable_falling_puyo_integrity
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
         # ネクスト裏付け確定 (2026-07-31)。default OFF = bit-identical。
@@ -1256,20 +1344,10 @@ class BoardStateMachine:
         ):
             # F (cycle 56): NON-STABLE 中の cnn_board 履歴から多数決 board を生成。
             # EMPTY → 色 遷移ガードに渡し、 瞬間的な背景誤認の焼き付きを防ぐ。
-            empty_guard: Board | None = None
-            if (
-                self._enable_stable_resume_gate
-                and self._ctx.non_stable_cnn_history
-            ):
-                empty_guard = _vote_majority_board(
-                    self._ctx.non_stable_cnn_history,
-                    min_votes=self._empty_to_color_min_votes,
-                    corroborated_colors=self._next_corroborated_colors(),
-                    corroborated_min_votes=(
-                        self._next_corroborated_min_votes
-                        if self._enable_next_corroborated_confirm else None
-                    ),
-                )
+            # コマ落ちに強い数え方 (2026-10-23、R02・R03): 刻みモードのときだけ
+            # 履歴の重みで票を数える (OFF・重みの食い違いでは None = 従来どおり)。
+            resume_weights = self._resume_vote_weights(signals)
+            empty_guard = self._resume_empty_guard(resume_weights)
             # 初回STABLE確定の多数決ガード (enable_initial_confirm_vote,
             # 2026-07-27): baseline is None (初回確定) 時のみ使われる
             # (baseline あり時は _merge_diff_only 側で無視される)。
@@ -1324,6 +1402,9 @@ class BoardStateMachine:
                     self._enable_puyo_to_empty_hsv_guard
                 ),
                 history_board=_floating_restore_history,
+                initial_confirm_weights=(
+                    resume_weights if initial_history is not None else None
+                ),
             )
             self._ctx.last_stable_idx = self._ctx.frame_idx
             self._ctx.pending_board = self._ctx.confirmed_board.copy()
@@ -1350,6 +1431,48 @@ class BoardStateMachine:
             self._handle_recovery_clear_on_non_stable_entry(
                 old_state, signals.time_sec,
             )
+
+    def _resume_vote_weights(
+        self, signals: DetectorSignals,
+    ) -> "list[int] | None":
+        """R02・R03 (型 C): 刻みモードなら NON-STABLE 履歴の重みを返す.
+
+        OFF (signals.media_tick is None) と、重みが履歴と食い違うとき (他経路の
+        クリア・強制投入の直後) は None を返し、従来の回数の多数決に倒す。
+        """
+        if signals.media_tick is None:
+            return None
+        return history_weights_or_none(
+            self._ctx.non_stable_cnn_history, self._ctx.non_stable_cnn_weights,
+        )
+
+    def _resume_empty_guard(
+        self, weights: "list[int] | None",
+    ) -> "Board | None":
+        """F (cycle 56) の EMPTY→色 ガード用の多数決 board (R02).
+
+        weights が None なら従来の `_vote_majority_board` (bit-identical)、
+        あれば刻みの重みで数える `_vote_majority_board_weighted` を使う。
+        """
+        history = self._ctx.non_stable_cnn_history
+        if not (self._enable_stable_resume_gate and history):
+            return None
+        corroborated_colors = self._next_corroborated_colors()
+        corroborated_min_votes = (
+            self._next_corroborated_min_votes
+            if self._enable_next_corroborated_confirm else None
+        )
+        if weights is None:
+            return _vote_majority_board(
+                history, min_votes=self._empty_to_color_min_votes,
+                corroborated_colors=corroborated_colors,
+                corroborated_min_votes=corroborated_min_votes,
+            )
+        return _vote_majority_board_weighted(
+            history, weights, self._empty_to_color_min_votes,
+            corroborated_colors=corroborated_colors,
+            corroborated_min_votes=corroborated_min_votes, audit_site='R02',
+        )
 
     def _handle_recovery_clear_on_non_stable_entry(
         self, old_state: BoardState, time_sec: float,
@@ -1393,7 +1516,44 @@ class BoardStateMachine:
             self._ctx.cnn_flicker_history.clear()
             self._ctx.non_stable_entry_time_sec = None
 
-    def _update_pending_confirmation(self, cnn_board: "Board") -> None:
+    def _pending_reached(self, media_tick: "TickStamp | None") -> bool:
+        """R01 (型 A): 初回STABLE確定窓が成立したか.
+
+        OFF (media_tick is None) と 3中2多数決 (stable_majority_window) では従来の
+        `pending_count >= stable_frame_count`。刻みモードでは「回数 ≥ N、または
+        回数 ≥ m かつ 刻み ≥ N」(m = max(2, ⌊N/4⌋))。全コマでは刻み = 回数なので同じ。
+        """
+        if media_tick is None or self._enable_stable_majority_window:
+            return self._ctx.pending_count >= self._stable_n
+        reached = tick_reached(
+            self._ctx.pending_count, self._ctx.pending_tick.ticks, self._stable_n,
+        )
+        audit_note('R01', reached and self._ctx.pending_count < self._stable_n)
+        return reached
+
+    def _append_non_stable_history_ticked(
+        self, cnn_board: "Board", media_tick: "TickStamp",
+    ) -> None:
+        """R02・R03 (型 C): NON-STABLE 履歴へ刻みの重みつきで積む (刻みモード専用).
+
+        重み = 前回のパイプライン呼び出しでも積んでいたら Δk、そうでなければ 1。
+        重みの合計が履歴の大きさ (既定 5 刻み) を超えた分を古い側から削る。
+        重みが履歴と食い違っていたら (他経路のクリア・強制投入)、重み 1 で揃え直す。
+        """
+        ctx = self._ctx
+        if len(ctx.non_stable_cnn_weights) != len(ctx.non_stable_cnn_history):
+            ctx.non_stable_cnn_weights = [1] * len(ctx.non_stable_cnn_history)
+            ctx.non_stable_last_append_tick = None
+        weight = media_tick.weight_after(ctx.non_stable_last_append_tick)
+        append_weighted(
+            ctx.non_stable_cnn_history, ctx.non_stable_cnn_weights,
+            cnn_board.copy(), weight, self._non_stable_history_size,
+        )
+        ctx.non_stable_last_append_tick = media_tick.now
+
+    def _update_pending_confirmation(
+        self, cnn_board: "Board", media_tick: "TickStamp | None" = None,
+    ) -> None:
         """初回STABLE確定窓の pending_board/pending_count を1frame分更新する.
 
         盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認):
@@ -1407,6 +1567,9 @@ class BoardStateMachine:
 
         Args:
             cnn_board: 現フレームの raw CNN 観測盤面。
+            media_tick: コマ落ちに強い数え方 (2026-10-23、R01) の刻み。None (default)
+                なら従来どおり回数だけを数える。あれば pending_count に並べて刻みを数える
+                (pending_count 自体の値は OFF と同じ)。
         """
         if self._enable_stable_majority_window:
             self._ctx.confirm_window_history.append(cnn_board.copy())
@@ -1430,6 +1593,8 @@ class BoardStateMachine:
         else:
             self._ctx.pending_board = cnn_board.copy()
             self._ctx.pending_count = 1
+        if media_tick is not None:
+            self._ctx.pending_tick.observe(self._ctx.pending_count, media_tick)
 
     def _update_within_current_state(
         self, signals: DetectorSignals,
@@ -1450,6 +1615,12 @@ class BoardStateMachine:
             # (保守的: 連鎖後は全 cell を新規 STABLE で直接評価)。
             if self._ctx.state == BoardState.GRAVITY_SETTLE:
                 # アクション中: 認識結果は盤面確定に使わない
+                return
+            # コマ落ちに強い数え方 (2026-10-23、R02・R03): 刻みモードでは重みつきで積む。
+            if signals.media_tick is not None:
+                self._append_non_stable_history_ticked(
+                    signals.cnn_board, signals.media_tick,
+                )
                 return
             # F (cycle 56): NON-STABLE 中の cnn_board 履歴を保持。
             # STABLE 復帰時の多数決ガードに使う。 最大 N frame 保持。
@@ -1475,9 +1646,9 @@ class BoardStateMachine:
         # MENU (試合復帰直後) または STABLE: 連続多数決で confirmed を更新。
         # MENU から N 連続一致で STABLE へ自動遷移する。
         cnn_board = signals.cnn_board
-        self._update_pending_confirmation(cnn_board)
+        self._update_pending_confirmation(cnn_board, signals.media_tick)
 
-        if self._ctx.pending_count >= self._stable_n:
+        if self._pending_reached(signals.media_tick):
             # Phase C-7 (E-1): CNN を盤面更新ソースから完全排除
             # 初回 STABLE 確定 (= 試合開始時) は連続 N frame 観測の
             # pending_board を採用 (= 試合開始時の初期盤面確定)。
@@ -1525,6 +1696,7 @@ class BoardStateMachine:
                 enable_effect_gate=self._enable_effect_gate,
                 effect_gate_persist_sec=self._effect_gate_persist_sec,
                 effect_gate_hard_freeze=self._effect_gate_hard_freeze,
+                falling_puyo_integrity=self._enable_falling_puyo_integrity,
             )
 
 
@@ -1738,6 +1910,7 @@ def _recovery_or_effect_gate_pass(
     effect_gate_active_rows: "frozenset[int] | None",
     effect_gate_persist_sec: float,
     effect_gate_hard_freeze: bool = False,
+    media_tick: "TickStamp | None" = None,
 ) -> bool:
     """1 cell 分の発火判定 (通常フレームカウント or エフェクト時間ゲート).
 
@@ -1750,7 +1923,7 @@ def _recovery_or_effect_gate_pass(
     effect_gate_hard_freeze=True (2026-08-05 バーストガード再設計 §3):
     ゲート対象 cell は持続確認を一切行わず、Window ON の間は無条件で発火
     させない (persist逆転の構造的排除)。既定 False では従来動作と
-    bit-identical。
+    bit-identical。media_tick (2026-10-23、R04) は None なら従来の回数判定。
     """
     r, c = cell
     is_gated = (
@@ -1769,12 +1942,34 @@ def _recovery_or_effect_gate_pass(
         ctx.effect_gate_hold.pop(cell, None)
     new_count = recovery_counters.get(cell, 0) + 1
     recovery_counters[cell] = new_count
-    if confirmed_v == COLOR_EMPTY:
-        effective_min = (
-            add_min_frames if add_min_frames is not None else min_frames
-        )
-        return new_count >= effective_min
-    return new_count >= min_frames
+    use_add = confirmed_v == COLOR_EMPTY and add_min_frames is not None
+    effective_min = int(add_min_frames) if use_add else min_frames  # type: ignore[arg-type]
+    if media_tick is not None:  # コマ落ちに強い数え方 (R04): 回数に並べて刻みも数える
+        return _recovery_count_reached(ctx, cell, new_count, effective_min, media_tick)
+    return new_count >= effective_min
+
+
+def _recovery_count_reached(
+    ctx: "StateContext",
+    cell: "tuple[int, int]",
+    new_count: int,
+    min_frames: int,
+    media_tick: "TickStamp",
+) -> bool:
+    """R04 (型 A、2026-10-23): 復旧カウンタの成立を刻みで判定する (刻みモード専用).
+
+    セルごとの影 (ctx.recovery_tick_shadows) が回数に並べて刻みを数える。回数が 1 だけ
+    増えたとき (同じ合意が続いたとき) だけ刻みを足すので、既存のリセット箇所
+    (pop・clear・carryover) には手を入れなくても、リセット後は回数どおりに戻る。
+    成立 = 回数 ≥ N、または 回数 ≥ m かつ 刻み ≥ N (m = max(2, ⌊N/4⌋))。
+    """
+    shadow = ctx.recovery_tick_shadows.get(cell)
+    if shadow is None:
+        shadow = ctx.recovery_tick_shadows[cell] = TickShadow()
+    ticks = shadow.observe(new_count, media_tick)
+    reached = tick_reached(new_count, ticks, min_frames)
+    audit_note('R04', reached and new_count < min_frames)
+    return reached
 
 
 def _collect_recovery_candidates(
@@ -1790,6 +1985,7 @@ def _collect_recovery_candidates(
     effect_gate_active_rows: "frozenset[int] | None" = None,
     effect_gate_persist_sec: float = EFFECT_PERSIST_SEC,
     effect_gate_hard_freeze: bool = False,
+    media_tick: "TickStamp | None" = None,
 ) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
     """各セルの合意値チェックとカウンタ更新を行い、候補を方向別に返す.
 
@@ -1828,6 +2024,8 @@ def _collect_recovery_candidates(
         effect_gate_hard_freeze: 2026-08-05 バーストガード再設計 §3。True で
             ゲート対象 cell の持続確認を無効化し、Window ON 中は無条件で
             発火させない。既定 False = 従来動作と bit-identical。
+        media_tick: コマ落ちに強い数え方 (2026-10-23、R04) の刻み。
+            None (default) なら従来の回数判定 (bit-identical)。
 
     Returns:
         (add_candidates, fix_candidates) のタプル。
@@ -1888,7 +2086,7 @@ def _collect_recovery_candidates(
                 ctx, (r, c), confirmed_v, agreed_v, recovery_counters,
                 min_frames, add_min_frames,
                 effect_gate_active_rows, effect_gate_persist_sec,
-                effect_gate_hard_freeze,
+                effect_gate_hard_freeze, media_tick=media_tick,
             )
             if not passed:
                 continue
@@ -1947,6 +2145,7 @@ def _apply_stable_recovery_gate(
     enable_effect_gate: bool = False,
     effect_gate_persist_sec: float = EFFECT_PERSIST_SEC,
     effect_gate_hard_freeze: bool = False,
+    falling_puyo_integrity: bool = False,
 ) -> None:
     """設計C 事後復旧ゲート本体 (in-place で confirmed_board を更新).
 
@@ -1991,7 +2190,7 @@ def _apply_stable_recovery_gate(
     if ctx.confirmed_board is None:
         return
     # 安全弁A: hsv_board が None → 発火しない
-    hsv_board = signals.hsv_board
+    hsv_board = resolve_hsv(signals.hsv_board)
     if hsv_board is None:
         return
 
@@ -2015,8 +2214,16 @@ def _apply_stable_recovery_gate(
         effect_gate_active_rows=_effect_gate_rows,
         effect_gate_persist_sec=effect_gate_persist_sec,
         effect_gate_hard_freeze=effect_gate_hard_freeze,
+        media_tick=signals.media_tick,
     )
 
+    if falling_puyo_integrity and not (signals.slide_motion and signals.placement_validated):
+        # 色一致の継続だけでは操作ぷよと区別できない。新規占有は置き完了に限定する。
+        for r, c, target in add_candidates:
+            if target in FALLING_PUYO_COLORS:
+                ctx.stable_recovery_counters.pop((r, c), None)
+                ctx.effect_gate_hold.pop((r, c), None)
+        add_candidates = [v for v in add_candidates if v[2] not in FALLING_PUYO_COLORS]
     if not add_candidates and not fix_candidates:
         return
 
@@ -2122,4 +2329,8 @@ __all__ = [
     # バーストガード Stage1.5 (2026-08-05 アーキ追補)
     "_TRANSITION_MERGE_GUARD_SCOPE",
     "_filter_transition_new_cnn_for_burst_guard",
+    # コマ落ちに強い数え方 (2026-10-23、型 A・C)
+    "_recovery_count_reached",
+    "_vote_majority_board_weighted",
+    "history_weights_or_none",
 ]

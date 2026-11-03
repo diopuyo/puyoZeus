@@ -1,0 +1,18 @@
+{
+  "live_disable_power_throttling": {
+    "obs": false,
+    "release": true
+  },
+  "live_verify_entry_fast_retry": {
+    "obs": false,
+    "release": true
+  },
+  "live_chain_forecast_recheck": {
+    "obs": false,
+    "release": true
+  },
+  "live_chain_end_formula": {
+    "obs": false,
+    "release": true
+  }
+}

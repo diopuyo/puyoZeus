@@ -2,7 +2,7 @@
 # アブレーション1 本走行: 148 npz を14シャードに分けて並列 extract
 # 完了後に per_row_values.tsv を結合し auc モードを1回実行する
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 SRC=data/indicators_v2/boards_lean_phase_l_2026-08-07
 OUT=data/verify/ablate_exact_k12_2026-08-09
 NSHARD=14

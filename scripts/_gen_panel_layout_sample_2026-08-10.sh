@@ -1,7 +1,7 @@
 #!/bin/bash
 # パネルレイアウト (--layout panel、2026-08-10 user指示) の確認用60秒サンプル生成。
 # 構成は src/production_config.py の採用フラグ (デモ本番と同一) + counter-reach。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/frames/video_c96.mp4

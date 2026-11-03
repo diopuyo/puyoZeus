@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle_16 = A1: cycle_15 seed のまま --class-balance OFF で fine-tune し直し
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 LOG=logs/cycle16_pipeline.log
 exec > >(tee -a "$LOG") 2>&1
 echo "=== START cycle16 $(date) ==="

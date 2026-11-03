@@ -10,7 +10,7 @@
 # 検証: 開始時刻を揃え間引きの有無のみを変える。c60 の t=1467.4 付近(2P col3が20.8秒消失と
 # 報告された箇所)を含む 1398〜1508秒で比較する。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 OUT=data/indicators_v2/sampling_ab_2026-07-30
 LOG=logs/ab_sampling_2026-07-30.log
 log() { echo "[ab-sampling] $(date) $*" >> "$LOG"; }

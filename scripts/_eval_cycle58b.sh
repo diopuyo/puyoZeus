@@ -1,6 +1,6 @@
 #!/bin/bash
 # cycle 58b 評価 並列 3 (= class_balance なし、 cycle 58 と同 seed、 model 別).
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/verify/cycle58b_viz
 mkdir -p data/verify/cycle58b_eval

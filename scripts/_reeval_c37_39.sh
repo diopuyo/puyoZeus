@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 for c in cycle37 cycle38 cycle39; do
   for v in v89m3 v97m11 v70m2; do
     PYTHONPATH=. ./venv/bin/python -m scripts.evaluate_recognition \

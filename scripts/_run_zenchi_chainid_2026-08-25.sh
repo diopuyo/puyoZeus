@@ -4,7 +4,7 @@
 # (memory feedback_msys_pipe_escape)。
 # 使い方: wsl bash scripts/_run_zenchi_chainid_2026-08-25.sh <t0> <t1> <prefix>
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 T0="$1"
 T1="$2"
 PREFIX="$3"

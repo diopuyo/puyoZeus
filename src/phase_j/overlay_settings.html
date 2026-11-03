@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/favicon.ico"><title>puyoZeus Live 表示設定</title>
+<script>window.overlayDefaults=/*OVERLAY_DEFAULTS*/{};</script>
+<script src="overlay_options.js"></script>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:#0b1423;color:#eef4ff;font:16px/1.6 "Yu Gothic UI",Meiryo,sans-serif}
+main{max-width:1500px;margin:auto;padding:28px}h1{margin:0;font-size:30px}p{color:#bbcadf}
+.columns{display:grid;grid-template-columns:300px 1fr;gap:24px;margin-top:24px}
+form,.output{background:#142238;padding:20px;border-radius:14px}label{display:block;margin-bottom:12px}
+select,input,button,textarea{font:inherit;color:inherit;background:#0b1423;border:1px solid #758ba8;border-radius:6px;padding:8px}
+select,input[type=range],input[type=text],textarea{width:100%}input[type=checkbox]{accent-color:#60d4ff;width:18px;height:18px}
+button{cursor:pointer;background:#184762}fieldset{border:0;padding:12px 0;margin:0}legend{font-weight:bold}
+#preview{position:relative;aspect-ratio:16/9;background:#24324a;overflow:hidden;border:1px solid #526783}
+#frame{position:absolute;object-fit:fill}iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+#empty{padding:18px;color:#b9c8da}#url{height:100px;word-break:break-all}#json{height:180px}
+.output{margin-top:16px}#placement{white-space:pre-line;color:#d7eaff}small{display:block;color:#b9c8da}
+@media(max-width:850px){.columns{grid-template-columns:1fr}main{padding:14px}}
+#overlay{pointer-events:none}#drag-handle{position:absolute;cursor:grab;touch-action:none;border:2px dashed #fff9;background:transparent;padding:0;min-width:0;z-index:5}
+#drag-handle:focus{outline:3px solid #ffd166}#overlap-warning{color:#ffdc93}
+#theme-samples{display:flex;gap:6px;margin-bottom:16px}#theme-samples button{flex:1;font-size:13px;padding:10px 2px;min-width:0;border:2px solid #b9d2e0}
+#theme-samples [data-theme=normal]{background:#253344;border-color:#d9ac79;border-radius:10px}#theme-samples [data-theme=esports]{background:#101d29;border-color:#d5b478;border-radius:5px}#theme-samples [data-theme=battle-a]{background:linear-gradient(115deg,#2f5bff 50%,#ff8a1f 50%);border-radius:0}
+#theme-samples [data-theme=pop]{background:linear-gradient(135deg,#e8faff,#fff1d9,#f9ddf0);color:#233b56;border-radius:22px}
+#theme-samples [aria-pressed=true]{outline:3px solid #68cfea}
+</style>
+<style>
+#theme-samples,#design-samples{display:flex;gap:8px;flex-wrap:wrap}
+[hidden]{display:none!important}
+#theme-samples button[data-theme],#design-samples button[data-theme]{position:relative;min-width:130px;flex:1;padding:12px 8px 82px;font-weight:bold}
+#theme-samples button[data-theme]::after,#design-samples button[data-theme]::after{content:"68%    32%";position:absolute;left:10px;right:10px;bottom:12px;padding:8px 2px 22px;font:900 22px "Segoe UI",sans-serif;color:white;border:3px double #d9a520;border-radius:12px;background:linear-gradient(90deg,#2b7bff 50%,#ff7b1c 50%) center 7px/calc(100% - 12px) 30px no-repeat,#0e0d14;box-shadow:3px 3px #4a3608}
+#theme-samples button[data-theme=stylish]::after,#design-samples button[data-theme=stylish]::after{color:#111;background:#fbfbf9;border:2px solid #111;border-radius:2px;box-shadow:none;font-weight:600}
+#theme-samples button[data-theme=plain]::after,#design-samples button[data-theme=plain]::after{border:2px solid #b8c4d6;border-radius:8px;box-shadow:none;background:linear-gradient(90deg,#2f6bff 50%,#ff8a1f 50%) center 7px/calc(100% - 12px) 30px no-repeat,#101826}
+#theme-samples button[data-theme="pop-cream"]::after,#design-samples button[data-theme="pop-cream"]::after{background-color:#fffaf0;border-color:#1f1a3d;box-shadow:3px 3px #1f1a3d}
+</style>
+<main><img class="app-logo" src="/brand/app_logo.png" width="64" height="72" alt="puyoZeus Live" style="object-fit:contain;float:left;margin:0 18px 12px 0"><h1>puyoZeus Live 表示設定</h1><p>配置と表示内容を選んで、OBSに貼るURLを作成します。既定は真ん中の柱・ポップ (黒) です。</p>
+<p id="app-notice" role="status"></p>
+<div class="columns"><form id="controls">
+<label>表示言語<select name="language"><option value="auto">OSの言語</option><option value="ja">日本語</option><option value="en">English</option></select></label>
+<fieldset><legend>ゼウスくん</legend>
+<label><input name="mascot" type="checkbox"> ゼウスくんを表示</label>
+
+<label>大きさ<select name="mascot_size"><option value="small">小</option><option value="medium">中</option><option value="large">大</option></select></label>
+<label><input name="mascot_eyes" type="checkbox"> 目を動かす</label>
+<label><input name="mascot_motion" type="checkbox"> ドーパミンの動きを有効にする</label>
+<label><input name="mascot_expressions" type="checkbox"> 表情を変える</label>
+<small>1P視点の5段階。通常の表情は最低1.5秒保持し、決着・待機はすぐ反映します。</small>
+<label>表情の境界（1P勝率%、昇順4値）<input name="mascot_band_edges" type="text" value="10,30,70,90"></label>
+<label>ゼウスくんのドーパミン<select name="mascot_dopamine"><option value="low">普通</option><option value="normal">高い</option><option value="high">エレクション</option></select></label>
+<label><input name="mascot_bloodshot" type="checkbox">目の充血</label>
+<small>起動から30分・45分・60分で充血が強くなります。再起動でリセット。</small>
+<label>目のスピード<select name="mascot_speed"><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+<label><input name="mascot_flip_right" type="checkbox"> 右側に置いたゼウスくんを左右反転する</label>
+</fieldset>
+<label>デザイン<select name="theme"></select></label>
+<div id="theme-samples" aria-label="テーマの見本"></div><label hidden>50%の示し方<select name="midline"><option value="split">A 上下の淡い塗り分け</option><option value="line">B 細い実線＋50目盛り</option><option value="glow">C 柔らかな光帯</option><option value="adaptive" selected>D 勝率線の上下色分け（既定）</option></select></label>
+<label>配置<select name="layout"></select></label>
+<fieldset id="position-controls"><legend>表示の位置</legend>
+<small>見本の表示をドラッグ。端に吸着します。座標はパネル左上です。</small>
+<label>X<input name="x" type="number" min="0" max="1920" placeholder="自動"></label>
+<label>Y<input name="y" type="number" min="0" max="1080" placeholder="自動"></label>
+<button type="button" data-position="center">中央に戻す</button>
+<button type="button" data-position="top-left">左上に戻す</button>
+<button type="button" data-position="top-right">右上に戻す</button>
+<button type="button" data-position="bottom-left">左下に戻す</button>
+<button type="button" data-position="bottom-right">右下に戻す</button>
+</fieldset><fieldset id="l-controls"><legend>L字型の配置</legend>
+<label>ゲームを寄せる隅<select name="corner"><option value="top-left">左上（データは右と下）</option><option value="top-right">右上（データは左と下）</option><option value="bottom-left">左下（データは右と上）</option><option value="bottom-right">右下（データは左と上）</option></select></label>
+<label>ゲーム縮小率 <output id="scale-value">80%</output><input name="scale" type="range" min="70" max="85" step="0.5"></label>
+<label><input name="band" type="checkbox"> 横帯を表示（下寄せ時は上側）</label>
+</fieldset>
+<label hidden>文字の大きさ<select name="font"><option value="small">小</option><option value="medium">中</option><option value="large">大</option></select></label>
+<fieldset><legend>表示する内容</legend>
+<label><input name="numbers" type="checkbox"> 勝率の数字</label>
+<label><input name="recent" type="checkbox"> 直近30秒の推移</label>
+<label><input name="full" type="checkbox"> 試合全体の推移</label>
+<div hidden><label><input name="status" type="checkbox"> 状態</label>
+<label><input name="details" type="checkbox"> 判定の中身</label>
+<small>おじゃまは「個」、連鎖は「連鎖」、猶予は「手」で表示。不明な値は「—」。猶予と返し火力は受ける側の予想です。「(目安)」は予想できないときの返し火力の上限を示します。</small>
+<label><input name="content_pending" type="checkbox"> 予告ぷよ</label>
+<label><input name="content_sent" type="checkbox"> 送ったおじゃま（合計）</label>
+<label><input name="content_offset" type="checkbox"> 相殺（合計）</label>
+<label><input name="content_rate" type="checkbox"> おじゃまレート</label>
+<label><input name="content_hands" type="checkbox"> 猶予（N手）</label>
+<label><input name="content_return" type="checkbox"> 返し火力</label>
+<label><input name="content_margin" type="checkbox"> 返しの過不足 (＋なら返せる・−なら足りない)</label>
+<label><input name="content_bound" type="checkbox"> (目安) の印</label>
+<label><input name="content_unknown" type="checkbox"> 予想できずの印</label>
+<label><input name="content_active" type="checkbox"> 連鎖中の印</label>
+<label><input name="content_step" type="checkbox"> 連鎖の進み（N連鎖目）</label>
+<label><input name="content_length" type="checkbox"> 予想 N連鎖</label>
+<label><input name="content_remaining" type="checkbox"> 残り N連鎖</label>
+<label><input name="content_seconds" type="checkbox"> 残り時間（秒）</label>
+<label><input name="content_k1" type="checkbox"> すぐ撃てる火力</label>
+<label><input name="content_colors" type="checkbox"> 色ぷよ数</label>
+<label><input name="content_ojama" type="checkbox"> おじゃま数</label>
+<label><input name="content_model" type="checkbox"> 判定方法（通常判定 / 撃ち合い判定）</label>
+</div></fieldset><button id="reset" type="button">設定ファイルの既定に戻す</button>
+</form><div>
+<label>見本用の実フレーム（1920×1080推奨）<input id="image" type="file" accept="image/*" hidden></label><button id="choose-image" type="button">画像を選ぶ</button> <span id="image-name">未選択</span>
+<small>画像はこのブラウザ内だけで使用し、送信・保存しません。</small>
+<label>見本の数値<select id="scene"><option value="early">序盤（サンプル）</option><option value="exchange">撃ち合い（サンプル）</option><option value="result">決着（サンプル）</option><option value="live">現在の対戦データ</option></select></label>
+<div id="preview"><div id="empty">実フレームを選ぶと、ゲーム画面を含めた配置を確認できます。</div><img id="frame" alt="選択したゲームの実フレーム" hidden><iframe id="overlay" title="表示の見本"></iframe><button id="drag-handle" type="button" aria-label="表示をドラッグして移動"></button></div>
+<p id="overlap-warning" role="status"></p><small id="sample-label">数値と推移は見本用のサンプルです。</small>
+<div class="output"><strong>OBSの配置</strong><p id="placement"></p>
+<label>OBSブラウザソース用URL<textarea id="url" readonly></textarea></label><button id="copy" type="button">URLをコピー</button><span id="copied" role="status"></span>
+<details><summary>設定ファイルの既定値として使う</summary><p>puyo_live.json の最上位に以下の overlay を追加・置換し、次回起動時に反映します。他の設定は残してください。</p><textarea id="json" readonly></textarea></details>
+</div><div class="output" data-distribution-only hidden><button id="save-settings" type="button">設定を保存</button> <button id="send-logs" type="button">ログを送る</button> <a href="/setup">初期設定</a> <button id="stop-app" type="button">アプリを終了</button><p id="save-status" role="status"></p></div>
+<div class="output" data-distribution-only hidden><h2>アンインストール</h2><p id="uninstall-help">インストーラー版は下のボタン、スタートメニュー、または Windows の「アプリ」から削除できます。zip版は下のボタンか同梱の Uninstall.bat（アンインストール.bat）を実行し、登録解除後に展開フォルダを削除してください。設定・ログ・記録は既定で残します。削除を選んだ場合だけ消します。</p><button id="uninstall-app" type="button">アンインストールを開始</button><p id="uninstall-status" role="status"></p></div>
+<section class="output" data-distribution-only hidden><h2>いまの状態</h2><pre id="live-diagnostics" style="white-space:pre-wrap"></pre>
+<button id="rescan-input" type="button">入力を自動判定して起動</button><p id="input-reason" role="status"></p></section>
+<section class="output" data-distribution-only hidden><h2>OBS 自動連携（任意）</h2>
+<label><input id="obs-enabled" type="checkbox">OBS 連携をオンにする</label>
+<label>WebSocket ポート<input id="obs-port" type="number" value="4455" min="1024" max="65535"></label>
+<label>OBS パスワード<input id="obs-password" type="password" autocomplete="new-password"></label>
+<small>空欄なら保存済みのパスワードを使います。パスワードはこのPCだけに保存し、ログには含めません。</small>
+<button id="obs-check" type="button">接続・シーンを確認</button>
+<button id="obs-apply" type="button">今のシーンに表示を追加・仮想カメラ開始</button>
+<p id="obs-result" role="status"></p>
+<h3>仮想カメラの出力</h3>
+<ol><li>OBS の「仮想カメラ開始」の横の歯車を開く</li><li>出力の種類を「ソース」にする</li><li>ゲーム映像のキャプチャを選ぶ（表示用ブラウザは選ばない）</li></ol>
+<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span>🎮 ゲーム映像</span><b>→</b><span>⚙ ソース</span><b>→</b><span>仮想カメラ</span><b>→</b><span>puyoZeus Live</span></div>
+<small>WebSocket では出力の種類を確認・変更できません。シーンにブラウザがある場合は映り込みに注意してください。</small></section>
+<dialog id="log-dialog"><h2>puyoZeus Live — 送信内容の確認</h2><p>自動送信はしません。保存済みの未送信ログも含みます。</p><pre id="log-preview"></pre><button id="confirm-logs">確認して送信</button> <button id="cancel-logs">キャンセル</button><p id="log-status" role="status"></p></dialog>
+</div></div></main><script src="overlay_i18n.js"></script><script src="overlay_settings.js"></script><script src="overlay_position.js"></script><script src="distribution_settings.js"></script></html>

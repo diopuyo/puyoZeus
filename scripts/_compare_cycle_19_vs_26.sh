@@ -2,7 +2,7 @@
 # cycle_19 (真 baseline) vs cycle_26 (= A1+A2+A4) を 5 動画 side-by-side 比較
 # 完走後すぐ目視レビュー可能にする。
 # 出力: data/test_unknown/compare_19_vs_26_<tag>.mp4 × 5
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 OUT_DIR=data/test_unknown
 
 for tag in v50 v70 v89m3 v91 v97; do

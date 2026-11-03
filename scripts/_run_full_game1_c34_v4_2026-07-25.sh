@@ -12,7 +12,7 @@
 # → v4 は 465.6s (スコアリセット・空盤面) 起点で冒頭を隠さず映す。
 # 構成は v3 と同一: 着地色補正ON + Driftガード2種ON。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 OUT_DIR="data/verify/review_video_new_2026-07-25"
 mkdir -p "${OUT_DIR}"
 RAW="${OUT_DIR}/advantage_recog_c34_game1_full_score0to0_v4.mp4"

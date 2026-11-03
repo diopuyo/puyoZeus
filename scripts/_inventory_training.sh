@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 echo "video / boundaries / winners / 試合数 / 学習可能"
 echo "----------------------------------------------------"
 total_matches=0

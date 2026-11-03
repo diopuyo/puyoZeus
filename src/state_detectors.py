@@ -28,6 +28,7 @@ from src.board_state_machine import (
     GRAVITY_SETTLE_PHYSICS_CLEAR_MIN_SEC,
     GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD,
 )
+from src.media_tick import TickShadow, TickStamp, audit_note, site_enabled, tick_reached
 # フェーズ A 精緻化: OjamaVisualDetector を同一モジュールから利用可能にする。
 # 個別 import でも動作するが、 state_detectors パッケージとして一括参照できるよう
 # re-export する (既存 import パターン `from src.state_detectors import ...` 維持)。
@@ -496,6 +497,9 @@ class GravitySettleDetector:
     _settle_start_frame: int = field(default=-1, init=False, repr=False)
     _stable_consec: int = field(default=0, init=False, repr=False)
     _prev_puyo_count: int = field(default=-1, init=False, repr=False)
+    # コマ落ちに強い数え方 (2026-10-23、R06 型 A、既定 OFF): _stable_consec に並べる刻みの影。
+    # signals.media_tick が None (既定) の間は一切書き込まれない。
+    _stable_tick: TickShadow = field(default_factory=TickShadow, init=False, repr=False)
 
     def reset(self) -> None:
         """settle 内部 state をリセット (試合切替・sm.reset() 呼び出し時)。"""
@@ -567,11 +571,29 @@ class GravitySettleDetector:
             self._stable_consec = 0
 
         # 安定フレーム数到達 → STABLE 復帰
-        if self._stable_consec >= GRAVITY_SETTLE_MIN_FRAMES:
+        # (コマ落ちに強い数え方 R06: 刻みモードでは回数に並べて刻みも数える)
+        stamp = getattr(signals, "media_tick", None)
+        if stamp is not None and site_enabled('R06'):
+            settled = self._settle_reached_ticked(stamp)
+        else:
+            settled = self._stable_consec >= GRAVITY_SETTLE_MIN_FRAMES
+        if settled:
             self._reset_settle()
             return BoardState.STABLE
 
         return None  # 継続
+
+    def _settle_reached_ticked(self, stamp: TickStamp) -> bool:
+        """R06 (型 A、2026-10-23): 落下が収まった連続を刻みで判定する (刻みモード専用).
+
+        成立 = 回数 ≥ N、または 回数 ≥ m かつ 刻み ≥ N (N = GRAVITY_SETTLE_MIN_FRAMES、
+        m = max(2, ⌊N/4⌋))。1 回あたりのしきい値 (差 2 未満) は誤読のゆれの幅なので変えない。
+        全コマでは刻み = 回数なので従来と同じ。
+        """
+        ticks = self._stable_tick.observe(self._stable_consec, stamp)
+        reached = tick_reached(self._stable_consec, ticks, GRAVITY_SETTLE_MIN_FRAMES)
+        audit_note('R06', reached and self._stable_consec < GRAVITY_SETTLE_MIN_FRAMES)
+        return reached
 
     def _update_puyo_count(self, signals: DetectorSignals) -> None:
         """最低待機中のぷよ数更新 (安定カウンタはリセット)."""

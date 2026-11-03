@@ -2,7 +2,7 @@
 # cycle 36 (2026-05-20): boost 中間値 sweep
 # c34 (0.4 弱すぎ) と c35 (1.0 強すぎ) の中間 = boost 0.6 で再試行
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle36
 mkdir -p logs/board_logs

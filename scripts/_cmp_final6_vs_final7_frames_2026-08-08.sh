@@ -3,7 +3,7 @@
 # 抽出時刻は診断で 2P が連鎖中に gravity_settle -> ojama_fall へ抜けていた
 # 区間の中央 (56.2 / 57.6 / 59.0 / 60.35 / 61.7 / 63.0)。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 DEMO=data/verify/youtube_demo_2026-08-07
 OUT="$DEMO/final6_vs_7"

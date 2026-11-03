@@ -2,7 +2,7 @@
 # cycle 35 (2026-05-20): cycle 34 boost 強化版
 # BOOST_MAX 0.4→1.0、 SCALE 30→50 で soft prior 効果を強める
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle35
 mkdir -p logs/board_logs

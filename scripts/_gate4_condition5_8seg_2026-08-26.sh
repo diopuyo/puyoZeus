@@ -1,7 +1,7 @@
 #!/bin/bash
 # 条件5: 交換台帳 + 未解決hard overrideゲート + chain_id置換会計。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 SEG_START="${1:-1}"
 SEG_END="${2:-8}"

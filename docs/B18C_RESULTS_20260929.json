@@ -1,0 +1,371 @@
+{
+  "baseline_commit": "9bf9837",
+  "nice": 10,
+  "paired_alternating_order": true,
+  "sources": {
+    "review": {
+      "source": "review",
+      "windows": {
+        "total": 27,
+        "exact": 26,
+        "boards": 27,
+        "reasons": 27,
+        "missing": 0
+      },
+      "acceptance": {
+        "total": 27,
+        "decisions": 27,
+        "accepted_total": 15,
+        "accepted_boards": 15,
+        "new_total": 27,
+        "new_accepted": 15,
+        "missing": 0,
+        "extra": 0,
+        "hidden_distributions": 15,
+        "old_reasons": {
+          "None": 15,
+          "missing_first_formula": 5,
+          "first_score": 4,
+          "origin_difference": 3
+        },
+        "new_reasons": {
+          "None": 15,
+          "missing_first_formula": 5,
+          "first_score": 4,
+          "origin_difference": 3
+        }
+      },
+      "same_input_replay": {
+        "probabilities": {
+          "equal": 6848,
+          "total": 6848,
+          "first_mismatch": null
+        },
+        "display": {
+          "reference_frames": 397,
+          "candidate_frames": 397,
+          "compared_frames": 397,
+          "mismatched_frames": 0,
+          "first_mismatch": null,
+          "columns": [
+            "adv_raw_last",
+            "display_adv",
+            "display_p1",
+            "game_idx",
+            "resolved_active",
+            "score1",
+            "score2",
+            "settled_ran",
+            "source",
+            "state1",
+            "state2",
+            "t_sec",
+            "video_id"
+          ]
+        }
+      },
+      "b18b_inputs": {
+        "equal": 6731,
+        "total": 6848,
+        "first_mismatch": {
+          "index": 2543
+        },
+        "different_fields": {
+          ".args.tuple.0.namespace.p2.namespace.prefire_snapshot.frames": 97,
+          ".args.tuple.0.namespace.p2.namespace.prefire_snapshot.start_sec": 97,
+          ".args.tuple.0.namespace.p1.namespace.prefire_snapshot.board": 20,
+          ".args.tuple.0.namespace.p1.namespace.prefire_snapshot.end_sec": 20,
+          ".args.tuple.0.namespace.p1.namespace.prefire_snapshot.frames": 20,
+          ".args.tuple.0.namespace.p1.namespace.prefire_snapshot.reason": 20,
+          ".args.tuple.0.namespace.p1.namespace.prefire_snapshot.start_sec": 20
+        }
+      },
+      "b18b_probabilities": {
+        "equal": 6848,
+        "total": 6848,
+        "first_mismatch": null
+      },
+      "b18b_display": {
+        "reference_frames": 397,
+        "candidate_frames": 397,
+        "compared_frames": 397,
+        "mismatched_frames": 0,
+        "first_mismatch": null,
+        "columns": [
+          "adv_raw_last",
+          "display_adv",
+          "display_p1",
+          "game_idx",
+          "resolved_active",
+          "score1",
+          "score2",
+          "settled_ran",
+          "source",
+          "state1",
+          "state2",
+          "t_sec",
+          "video_id"
+        ]
+      },
+      "paired_observation": {
+        "total": 6848,
+        "equal": 6848,
+        "first_mismatch": null
+      },
+      "saved_input": {
+        "probabilities": {
+          "equal": 6848,
+          "total": 6848,
+          "first_mismatch": null
+        },
+        "display": {
+          "reference_frames": 5948,
+          "candidate_frames": 5948,
+          "compared_frames": 5948,
+          "mismatched_frames": 0,
+          "first_mismatch": null,
+          "columns": [
+            "adv_raw_last",
+            "display_adv",
+            "display_p1",
+            "game_idx",
+            "resolved_active",
+            "score1",
+            "score2",
+            "settled_ran",
+            "source",
+            "state1",
+            "state2",
+            "t_sec",
+            "video_id"
+          ]
+        }
+      },
+      "directory": "logs/live_b18c/final/video/review",
+      "input_sha256": "0a43c3d5999303bb0b93786de5818efa4276b4e1daaca617e71d0b2c6bba0adc"
+    },
+    "zenchi": {
+      "source": "zenchi",
+      "windows": {
+        "total": 96,
+        "exact": 95,
+        "boards": 96,
+        "reasons": 96,
+        "missing": 0
+      },
+      "acceptance": {
+        "total": 96,
+        "decisions": 96,
+        "accepted_total": 42,
+        "accepted_boards": 42,
+        "new_total": 96,
+        "new_accepted": 42,
+        "missing": 0,
+        "extra": 0,
+        "hidden_distributions": 42,
+        "old_reasons": {
+          "None": 42,
+          "missing_first_formula": 27,
+          "first_score": 16,
+          "origin_difference": 7,
+          "no_landed_window": 2,
+          "palette": 2
+        },
+        "new_reasons": {
+          "None": 42,
+          "missing_first_formula": 27,
+          "first_score": 16,
+          "origin_difference": 7,
+          "no_landed_window": 2,
+          "palette": 2
+        }
+      },
+      "same_input_replay": {
+        "probabilities": {
+          "equal": 26298,
+          "total": 26298,
+          "first_mismatch": null
+        },
+        "display": {
+          "reference_frames": 1694,
+          "candidate_frames": 1694,
+          "compared_frames": 1694,
+          "mismatched_frames": 0,
+          "first_mismatch": null,
+          "columns": [
+            "adv_raw_last",
+            "display_adv",
+            "display_p1",
+            "game_idx",
+            "resolved_active",
+            "score1",
+            "score2",
+            "settled_ran",
+            "source",
+            "state1",
+            "state2",
+            "t_sec",
+            "video_id"
+          ]
+        }
+      },
+      "b18b_inputs": {
+        "equal": 26298,
+        "total": 26298,
+        "first_mismatch": null
+      },
+      "b18b_probabilities": {
+        "equal": 26298,
+        "total": 26298,
+        "first_mismatch": null
+      },
+      "b18b_display": {
+        "reference_frames": 1694,
+        "candidate_frames": 1694,
+        "compared_frames": 1694,
+        "mismatched_frames": 0,
+        "first_mismatch": null,
+        "columns": [
+          "adv_raw_last",
+          "display_adv",
+          "display_p1",
+          "game_idx",
+          "resolved_active",
+          "score1",
+          "score2",
+          "settled_ran",
+          "source",
+          "state1",
+          "state2",
+          "t_sec",
+          "video_id"
+        ]
+      },
+      "paired_observation": {
+        "total": 26298,
+        "equal": 26298,
+        "first_mismatch": null
+      },
+      "saved_input": {
+        "probabilities": {
+          "equal": 26298,
+          "total": 26298,
+          "first_mismatch": null
+        },
+        "display": {
+          "reference_frames": 25398,
+          "candidate_frames": 25398,
+          "compared_frames": 25398,
+          "mismatched_frames": 0,
+          "first_mismatch": null,
+          "columns": [
+            "adv_raw_last",
+            "display_adv",
+            "display_p1",
+            "game_idx",
+            "resolved_active",
+            "score1",
+            "score2",
+            "settled_ran",
+            "source",
+            "state1",
+            "state2",
+            "t_sec",
+            "video_id"
+          ]
+        }
+      },
+      "directory": "logs/live_b18c/final/video/zenchi",
+      "input_sha256": "a069e4ae3af98957d26e9455ad162ce8965b5d7c3ae8d51e127f8873167eb1d3"
+    }
+  },
+  "cost": {
+    "hsv_sec": {
+      "count": 33146,
+      "P50_ms": 0.0,
+      "P95_ms": 0.0
+    },
+    "quality_sec": {
+      "count": 33146,
+      "P50_ms": 0.7772999815642834,
+      "P95_ms": 1.1315254960209131
+    },
+    "buffer_sec": {
+      "count": 33146,
+      "P50_ms": 0.011875992640852928,
+      "P95_ms": 0.016901729395613074
+    },
+    "snapshot_sec": {
+      "count": 33146,
+      "P50_ms": 0.8998853736557066,
+      "P95_ms": 1.3355769333429635
+    },
+    "total_sec": {
+      "count": 33146,
+      "P50_ms": 15.542704961262643,
+      "P95_ms": 20.240234589437023
+    },
+    "before_hsv_sec": {
+      "count": 33146,
+      "P50_ms": 0.15238497871905565,
+      "P95_ms": 1.8955451087094843
+    },
+    "before_snapshot_sec": {
+      "count": 33146,
+      "P50_ms": 6.634274497628212,
+      "P95_ms": 9.701521514216438
+    },
+    "stage_crop_copy": {
+      "count": 33146,
+      "P50_ms": 0.22226799046620727,
+      "P95_ms": 0.3194068849552423
+    },
+    "stage_animation": {
+      "count": 33146,
+      "P50_ms": 4.093586001545191,
+      "P95_ms": 5.75689465040341
+    },
+    "stage_glow": {
+      "count": 33146,
+      "P50_ms": 1.4518285170197487,
+      "P95_ms": 2.4698367051314563
+    },
+    "stage_eligibility": {
+      "count": 33146,
+      "P50_ms": 0.12499198783189058,
+      "P95_ms": 0.21402921993285418
+    },
+    "stage_hsv_read": {
+      "count": 33146,
+      "P50_ms": 0.010975985787808895,
+      "P95_ms": 1.7325937515124679
+    },
+    "stage_pack_append": {
+      "count": 33146,
+      "P50_ms": 0.021626008674502373,
+      "P95_ms": 0.03357118112035096
+    },
+    "recognition_sec": {
+      "count": 33146,
+      "P50_ms": 59.13989606779069,
+      "P95_ms": 79.16341800591908
+    },
+    "before_retention_sec": {
+      "count": 33146,
+      "P50_ms": 5.970441561657935,
+      "P95_ms": 8.613229845650494
+    }
+  },
+  "tests": {
+    "passed": 2289,
+    "skipped": 1,
+    "failed": 0,
+    "reports": [
+      "logs/live_b18c/tests.xml",
+      "logs/live_b18c/final-unit.xml",
+      "logs/live_b18c/limits.xml"
+    ]
+  },
+  "target_p95_ms": 1.5,
+  "production_config_sha256": "8b48cb0fb89b0251fa3d73c5550fe1053df2491c3ddb21aaffad8a6e2c646135"
+}

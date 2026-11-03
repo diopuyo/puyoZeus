@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import queue
+import socket
 import threading
 import time
 from dataclasses import dataclass, field
@@ -216,7 +217,7 @@ class _OverlayRequestHandler(BaseHTTPRequestHandler):
         q = self.state.subscribe()
         try:
             self._pump_events(q)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
         finally:
             self.state.unsubscribe(q)
@@ -270,16 +271,20 @@ class StreamOverlayServer:
         state: StreamState | None = None,
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
+        exclusive_bind: bool = False,
     ) -> None:
         """
         Args:
             state: 共有状態 (None なら新規作成)。
             host: バインドアドレス。
             port: ポート番号。
+            exclusive_bind: True なら同じ port の 2 つ目の bind を失敗させる (Windows は SO_EXCLUSIVEADDRUSE)。
+                既定 False = 従来どおり。Windows の既定 bind (SO_REUSEADDR) は二重 bind が黙って成功する。
         """
         self.state: StreamState = state or StreamState()
         self._host = host
         self._port = port
+        self._exclusive_bind = exclusive_bind
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -287,14 +292,31 @@ class StreamOverlayServer:
     # 公開メソッド
     # ============================
 
+    def bind(self) -> None:
+        """待受 socket を bind して listen する (配信はしない)。bind 済みなら何もしない。
+        失敗は OSError。認識などの重い処理を始める前に port を確保したい呼び出し側が使う。"""
+        if self._server is not None:
+            return
+        handler_cls = self._make_handler_class()
+        if not (self._exclusive_bind and hasattr(socket, "SO_EXCLUSIVEADDRUSE")):
+            self._server = ThreadingHTTPServer((self._host, self._port), handler_cls)
+            return
+        server = ThreadingHTTPServer((self._host, self._port), handler_cls, bind_and_activate=False)
+        try:
+            server.allow_reuse_address = False
+            server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            server.server_bind()
+            server.server_activate()
+        except BaseException:
+            server.server_close()
+            raise
+        self._server = server
+
     def start(self) -> None:
         """サーバをバックグラウンドスレッドで起動する。"""
-        if self._server is not None:
+        if self._thread is not None:
             raise RuntimeError("サーバは既に起動中です")
-        handler_cls = self._make_handler_class()
-        self._server = ThreadingHTTPServer(
-            (self._host, self._port), handler_cls,
-        )
+        self.bind()
         self._thread = threading.Thread(
             target=self._server.serve_forever,
             name="StreamOverlayServer",
@@ -308,7 +330,8 @@ class StreamOverlayServer:
             return
         # 既存 SSE 接続を解除するためシグナル送信
         self._broadcast_shutdown()
-        self._server.shutdown()
+        if self._thread is not None:  # bind だけで配信前なら shutdown は待ち続けるため呼ばない
+            self._server.shutdown()
         self._server.server_close()
         if self._thread is not None:
             self._thread.join(timeout=timeout)

@@ -11,7 +11,7 @@ while pgrep -f "scripts/bulk_train" > /dev/null 2>&1; do
 done
 echo "[$(date)] Both finished" >> $LOG
 
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 source venv/bin/activate
 
 # 最新のPL1, PL2 データセットを merge

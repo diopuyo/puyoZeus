@@ -1,7 +1,7 @@
 #!/bin/bash
 # フェーズ2 コストゲート: --with-next 有無の実wall時間比較 (60秒クリップ)
 set -e
-PROJ=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+PROJ=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$PROJ"
 export OMP_NUM_THREADS=3 OPENBLAS_NUM_THREADS=3 MKL_NUM_THREADS=3
 

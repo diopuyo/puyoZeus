@@ -26,7 +26,7 @@
 # 演出区間(511.8-518.0 相当、winners_probe game_abs_idx=2 start=518.0) が始まる前で
 # 切れており、末尾側は元から安全 (対称バグの再発なし)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 OUT_DIR="data/verify/review_video_new_2026-07-25"
 mkdir -p "${OUT_DIR}"
 RAW="${OUT_DIR}/advantage_recog_c34_game1_full_score0to0_v2.mp4"

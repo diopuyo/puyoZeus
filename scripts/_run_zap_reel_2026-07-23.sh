@@ -2,7 +2,7 @@
 # 認識レビュー用ザッピング動画 (2026-07-23): チャレンジャー/マスター/S級から11本を
 # 各~25秒切り出し + --show-recognition + ラベル焼き + h264 化 + 最終concat。
 set -u
-PROJ="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "$PROJ" || exit 1
 
 RAW_DIR="data/indicators_v2/overlay/zap/raw"

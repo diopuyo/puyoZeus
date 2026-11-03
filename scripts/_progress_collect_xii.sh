@@ -1,6 +1,6 @@
 #!/bin/bash
 # 30窓再収集の進捗スナップショット (10分ごとの報告用)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 sleep "${1:-600}"
 done_n=$(grep -l "rows" logs/collect_xii_v*.log 2>/dev/null | wc -l)
 running=$(pgrep -c -f "scripts._collect_1t")

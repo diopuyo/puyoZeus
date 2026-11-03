@@ -1,7 +1,7 @@
 #!/bin/bash
 # Gate 4 条件5専用snapshot。条件1〜4の固定snapshotは変更しない。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 SNAP=data/verify/gate4_condition5_2026-08-26/_snapshot_cond5_codex_20260827_v12
 if [[ -e "$SNAP" ]]; then

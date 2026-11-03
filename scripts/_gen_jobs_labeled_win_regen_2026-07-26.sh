@@ -16,7 +16,7 @@
 #   mid  = 1200-1560s (--start-sec 1200 --max-sec 360)
 # --board-npz は付与しない (今回は指標CSV比較が目的、npz再生成は別タスク)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 
 OUT_STUDY_DIR="data/verify/labeled_win_regen_2026-07-26/study"
 mkdir -p "${OUT_STUDY_DIR}"

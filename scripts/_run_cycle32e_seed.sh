@@ -7,7 +7,7 @@
 # 効率化のため、 既存 cell.jsonl を退避 (= cycle 32c 用) して
 # 新規 cell.jsonl (= cycle 32e 用、 EMPTY+5色) を作る。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 VIDEOS=(
   "v29_match2_156s.mp4:v29m2"

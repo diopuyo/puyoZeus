@@ -4,10 +4,10 @@
 # §3.4 に倣い、引用符ネスト事故を避けるためスクリプトファイル経由で detach する)。
 #
 # 使い方 (WSL detach、長時間放置前提、CLAUDE.md プロセス管理ルール):
-#   wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \
+#   wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \
 #     setsid -f bash scripts/_run_regen148_2026-08-11.sh < /dev/null"
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 # 1プロセス=1コアを厳守 (matchTemplate 系スレッド競合防止、

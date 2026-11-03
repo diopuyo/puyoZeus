@@ -1,7 +1,7 @@
 #!/bin/bash
 # 検収最終確認フレーム抽出。data/verify/demo_fixed_2026-08-13/frames_final_accept/ へ保存。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 OUT=data/verify/demo_fixed_2026-08-13/frames_final_accept
 mkdir -p "$OUT"
 FF=$(./venv/bin/python -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())")

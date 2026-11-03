@@ -1,0 +1,91 @@
+{
+  "schema_version": "puyo-overlay-snapshot/v1",
+  "identity": {
+    "session_id": "session-example",
+    "stream_seq": 15,
+    "reducer_revision": 21,
+    "match_id": "match-1",
+    "match_state_seq": 10,
+    "input_generation": 4
+  },
+  "timing": {
+    "source_available_frame": 916,
+    "source_available_ms": 30533,
+    "published_at_utc": "2026-09-02T07:00:30.533Z",
+    "capture_to_publish_latency_ms": 12,
+    "calculation_age_ms": null,
+    "last_confirmed_age_ms": 533
+  },
+  "display": {
+    "visibility": "hidden",
+    "status": "integrity_fault",
+    "update_reason": "integrity_fault",
+    "primary_hold_reason": null,
+    "all_hold_reasons": [],
+    "hold_started_ms": null,
+    "hold_elapsed_ms": null
+  },
+  "integrity": {"status": "fault", "fault_codes": ["sequence_gap"]},
+  "mode": {"evaluation_mode": "practical", "practical_basis": "board_baseline"},
+  "evaluations": {
+    "practical": {
+      "availability": "unavailable",
+      "request_id": null,
+      "input_generation": null,
+      "input_digest": null,
+      "calculation_latency_ms": null,
+      "calculation_age_ms": null,
+      "p1_win_probability": null,
+      "p2_win_probability": null,
+      "advantage_score": null,
+      "is_even": null,
+      "origin": null,
+      "calibration_id": null,
+      "evaluated_positions": null
+    },
+    "best_action": {
+      "availability": "unavailable",
+      "request_id": null,
+      "input_generation": null,
+      "input_digest": null,
+      "calculation_latency_ms": null,
+      "calculation_age_ms": null,
+      "p1_position_value": null,
+      "p1_position_value_low": null,
+      "p1_position_value_high": null,
+      "scale": "advantage_score",
+      "aggregation_profile_id": null,
+      "search_profile_id": null,
+      "searched_depth": null,
+      "searched_nodes": null
+    },
+    "player_adjusted": null
+  },
+  "input": {
+    "event_seq": 47,
+    "p1_board_provenance": "unknown",
+    "p2_board_provenance": "unknown",
+    "recognition_quality": {"status": "untrusted", "reason_codes": ["capture_gap"]},
+    "unresolved_physics": [],
+    "physical_prediction_used": false
+  },
+  "terminal": {"state": "none", "winner": null, "evidence_kind": null, "result_code": null},
+  "runtime": {
+    "status": "degraded",
+    "tier": "standard",
+    "tier_profile_id": "standard-v1",
+    "practical_queue_depth": 0,
+    "best_action_queue_depth": 0,
+    "practical_worker_health": "degraded",
+    "best_action_worker_health": "disabled",
+    "discarded_jobs_since_match_start": 2,
+    "telemetry_health": "healthy"
+  },
+  "assets": {
+    "app_build_id": "dev",
+    "recognition_model_hash": "sha256:recognition",
+    "recognition_config_hash": "sha256:config",
+    "prediction_model_hash": "sha256:prediction",
+    "calibration_hash": "sha256:calibration"
+  }
+}

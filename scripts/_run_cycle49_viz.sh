@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle 49: state machine 側で 4 連結必須 gate (= アーキ案 C)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle49
 mkdir -p logs/board_logs

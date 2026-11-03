@@ -10,7 +10,7 @@
 #    platt撤回自体は user 判断待ち、8/11からの継続論点)
 # 入力 = data/frames/review_demo_2026-08-12.mp4 (video_100 の退避コピー。
 #   学習63本に不使用・過去レビュー/デモにも未使用の新規動画 = ホールドアウト)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/frames/review_demo_2026-08-12.mp4

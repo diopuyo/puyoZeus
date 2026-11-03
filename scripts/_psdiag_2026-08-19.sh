@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 echo "== recollect runner =="
 pgrep -af "_recollect_lockfix_2026-08-19.py" | head -3
 echo "== collect_lean_1t =="

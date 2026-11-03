@@ -1,8 +1,8 @@
 #!/bin/bash
 # S級3+チャレンジャー3を H.264(avc1)強制で再DL。
 # 前回 AV1 で落ちた(OpenCVがAV1デコード不可)。avc1ならOpenCVで確実に読める。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
-FF=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+FF=<home>/.gemini/antigravity/scratch/puyo_analyzer/venv/bin
 names=(s1 s2 s3 c1 c2 c3)
 ids=(04Lb9BZCpP0 UpnGj22itdA GDfVPnyrfwU kETyIUk_Vb8 Lw6Z8Nzguo4 fIIDFPCD2w0)
 for i in "${!names[@]}"; do

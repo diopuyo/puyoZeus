@@ -3,7 +3,7 @@
 # (c5 はテスト実行済のため除く) を boards_lean_fixed_regen_2026-07-28/ に
 # 再収集する。並列4本・nice 15 (m30 収集との競合回避、userタスク指定)。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 mkdir -p data/indicators_v2/boards_lean_fixed_regen_2026-07-28 logs
 export PYTHONPATH=.
 JOBLOG=logs/lean_fixed_regen_2026-07-28_joblog.txt

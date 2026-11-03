@@ -2,7 +2,7 @@
 # user 指摘「29秒は 1P のほうが色ぷよの量が多く有利なはず、 連鎖も 1P のほうが
 # 組めている」の確認用。 中盤の推移も併せて抜く。
 set -u
-ROOT=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+ROOT=<home>/.gemini/antigravity/scratch/puyo_analyzer
 cd "$ROOT" || exit 1
 DEMO=data/verify/youtube_demo_2026-08-07
 OUT="$DEMO/midgame_check"

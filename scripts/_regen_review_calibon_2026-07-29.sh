@@ -8,7 +8,7 @@
 #
 # 本スクリプトは --platt-calibration を明示して c56_g3 の校正ON版のみ作り直す。
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 export PYTHONPATH=.
 
 LOG=logs/regen_review_calibon_2026-07-29.log

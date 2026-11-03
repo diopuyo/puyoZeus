@@ -1,0 +1,71 @@
+{
+  "tests_wsl.xml": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "4",
+    "skipped": "1",
+    "tests": "694",
+    "time": "1079.428",
+    "timestamp": "2026-10-03T20:12:52.116306+09:00",
+    "hostname": "MSI"
+  },
+  "tests_assets.xml": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "4",
+    "time": "10.514",
+    "timestamp": "2026-10-03T20:33:21.323900+09:00",
+    "hostname": "MSI"
+  },
+  "tests_windows.xml": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "1",
+    "time": "28.519",
+    "timestamp": "2026-10-03T20:32:59.245134+09:00",
+    "hostname": "MSI"
+  },
+  "tests_pipeline.xml": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "3",
+    "time": "5.461",
+    "timestamp": "2026-10-03T20:18:17.352568+09:00",
+    "hostname": "MSI"
+  },
+  "smoke": {
+    "command": [
+      "D:\\puyo_analyzer\\packaging\\build\\PuyoLive\\python\\python.exe",
+      "-m",
+      "src.phase_j.launcher",
+      "--config",
+      "D:\\puyo_analyzer\\packaging\\obs_test_2026-10-03b\\smoke.json",
+      "--require-manifest"
+    ],
+    "transitions": [
+      {
+        "t": 17.04,
+        "input_status": "verifying",
+        "message": "入力確認中",
+        "availability": "unavailable"
+      },
+      {
+        "t": 22.72,
+        "input_status": "no_puyo_screen",
+        "message": "ぷよ画面なし",
+        "availability": "unavailable"
+      }
+    ],
+    "http_ready": 17.04,
+    "first_hold": 17.04,
+    "exit_code_before_stop": null,
+    "elapsed_sec": 45.57
+  },
+  "unique_passed_after_asset_retry": 697
+}

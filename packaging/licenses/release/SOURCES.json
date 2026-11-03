@@ -1,0 +1,7 @@
+{
+  "flatbuffers": {
+    "url": "https://raw.githubusercontent.com/google/flatbuffers/v25.9.23/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "note": "同梱は25.12.19、原文は上流v25.9.23のLICENSE (Apache-2.0)。版によらない原文としてPC1が2026-11-02に採用を承認。"
+  }
+}

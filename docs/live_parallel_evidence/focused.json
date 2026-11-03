@@ -1,0 +1,512 @@
+[
+  {
+    "tag": "pair_spin2_0",
+    "returncode": 0,
+    "start": 1791856119.6431785,
+    "end": 1791856135.4292474,
+    "free_bytes": 18003451904,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin2_0"
+    ]
+  },
+  {
+    "tag": "pair_spin2_1",
+    "returncode": 0,
+    "start": 1791856135.4297514,
+    "end": 1791856150.9065328,
+    "free_bytes": 17997082624,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin2_1",
+      "--intra",
+      "2",
+      "--no-spin"
+    ]
+  },
+  {
+    "tag": "pair_spin2_2",
+    "returncode": 0,
+    "start": 1791856150.9080431,
+    "end": 1791856166.201828,
+    "free_bytes": 17991114752,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin2_2",
+      "--intra",
+      "2",
+      "--no-spin"
+    ]
+  },
+  {
+    "tag": "pair_spin2_3",
+    "returncode": 0,
+    "start": 1791856166.2031517,
+    "end": 1791856181.5539734,
+    "free_bytes": 17992585216,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin2_3"
+    ]
+  },
+  {
+    "tag": "pair_spin3_0",
+    "returncode": 0,
+    "start": 1791856181.555552,
+    "end": 1791856196.700835,
+    "free_bytes": 19384344576,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin3_0"
+    ]
+  },
+  {
+    "tag": "pair_spin3_1",
+    "returncode": 0,
+    "start": 1791856196.7013614,
+    "end": 1791856212.1054673,
+    "free_bytes": 18615992320,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin3_1",
+      "--intra",
+      "3",
+      "--no-spin"
+    ]
+  },
+  {
+    "tag": "pair_spin3_2",
+    "returncode": 0,
+    "start": 1791856212.1070187,
+    "end": 1791856227.102785,
+    "free_bytes": 18619334656,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin3_2",
+      "--intra",
+      "3",
+      "--no-spin"
+    ]
+  },
+  {
+    "tag": "pair_spin3_3",
+    "returncode": 0,
+    "start": 1791856227.104321,
+    "end": 1791856242.562057,
+    "free_bytes": 16848662528,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin3_3"
+    ]
+  },
+  {
+    "tag": "pair_spin4_0",
+    "returncode": 0,
+    "start": 1791856242.5635936,
+    "end": 1791856258.1167192,
+    "free_bytes": 18605834240,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin4_0"
+    ]
+  },
+  {
+    "tag": "pair_spin4_1",
+    "returncode": 0,
+    "start": 1791856258.1182675,
+    "end": 1791856273.1545541,
+    "free_bytes": 18624286720,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin4_1",
+      "--intra",
+      "4",
+      "--no-spin"
+    ]
+  },
+  {
+    "tag": "pair_spin4_2",
+    "returncode": 0,
+    "start": 1791856273.1545541,
+    "end": 1791856288.247617,
+    "free_bytes": 18518188032,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin4_2",
+      "--intra",
+      "4",
+      "--no-spin"
+    ]
+  },
+  {
+    "tag": "pair_spin4_3",
+    "returncode": 0,
+    "start": 1791856288.247617,
+    "end": 1791856303.4787707,
+    "free_bytes": 18585444352,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_spin4_3"
+    ]
+  },
+  {
+    "tag": "pair_cv2_0",
+    "returncode": 0,
+    "start": 1791856303.4803042,
+    "end": 1791856318.8554683,
+    "free_bytes": 18575007744,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_cv2_0"
+    ]
+  },
+  {
+    "tag": "pair_cv2_1",
+    "returncode": 0,
+    "start": 1791856318.8554683,
+    "end": 1791856334.1654263,
+    "free_bytes": 18584244224,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_cv2_1",
+      "--cv",
+      "2"
+    ]
+  },
+  {
+    "tag": "pair_cv2_2",
+    "returncode": 0,
+    "start": 1791856334.166447,
+    "end": 1791856349.358022,
+    "free_bytes": 18568257536,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_cv2_2",
+      "--cv",
+      "2"
+    ]
+  },
+  {
+    "tag": "pair_cv2_3",
+    "returncode": 0,
+    "start": 1791856349.358022,
+    "end": 1791856365.3499637,
+    "free_bytes": 18425188352,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_cv2_3"
+    ]
+  },
+  {
+    "tag": "pair_cv4_0",
+    "returncode": 0,
+    "start": 1791856365.3499637,
+    "end": 1791856381.8217175,
+    "free_bytes": 18376380416,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_cv4_0"
+    ]
+  },
+  {
+    "tag": "pair_cv4_1",
+    "returncode": 0,
+    "start": 1791856381.8232589,
+    "end": 1791856399.0989802,
+    "free_bytes": 18320691200,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_cv4_1",
+      "--cv",
+      "4"
+    ]
+  },
+  {
+    "tag": "pair_cv4_2",
+    "returncode": 0,
+    "start": 1791856399.0989802,
+    "end": 1791856415.7246637,
+    "free_bytes": 18388893696,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_cv4_2",
+      "--cv",
+      "4"
+    ]
+  },
+  {
+    "tag": "pair_cv4_3",
+    "returncode": 0,
+    "start": 1791856415.7261777,
+    "end": 1791856432.343057,
+    "free_bytes": 18375905280,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_cv4_3"
+    ]
+  },
+  {
+    "tag": "pair_sides_0",
+    "returncode": 0,
+    "start": 1791856432.3445702,
+    "end": 1791856449.4562821,
+    "free_bytes": 18340859904,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_sides_0"
+    ]
+  },
+  {
+    "tag": "pair_sides_1",
+    "returncode": 0,
+    "start": 1791856449.4578018,
+    "end": 1791856467.5462074,
+    "free_bytes": 18337968128,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_sides_1",
+      "--sides"
+    ]
+  },
+  {
+    "tag": "pair_sides_2",
+    "returncode": 0,
+    "start": 1791856467.5477245,
+    "end": 1791856485.1918645,
+    "free_bytes": 18334470144,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_sides_2",
+      "--sides"
+    ]
+  },
+  {
+    "tag": "pair_sides_3",
+    "returncode": 0,
+    "start": 1791856485.1918645,
+    "end": 1791856502.1757212,
+    "free_bytes": 18326228992,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_sides_3"
+    ]
+  },
+  {
+    "tag": "pair_idle_0",
+    "returncode": 0,
+    "start": 1791856502.1767352,
+    "end": 1791856519.2217205,
+    "free_bytes": 18327216128,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_idle_0"
+    ]
+  },
+  {
+    "tag": "pair_idle_1",
+    "returncode": 0,
+    "start": 1791856519.2232335,
+    "end": 1791856536.796666,
+    "free_bytes": 18301906944,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_idle_1",
+      "--idle"
+    ]
+  },
+  {
+    "tag": "pair_idle_2",
+    "returncode": 0,
+    "start": 1791856536.7981815,
+    "end": 1791856553.5433476,
+    "free_bytes": 18303614976,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_idle_2",
+      "--idle"
+    ]
+  },
+  {
+    "tag": "pair_idle_3",
+    "returncode": 0,
+    "start": 1791856553.5448596,
+    "end": 1791856570.8150215,
+    "free_bytes": 18293628928,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_idle_3"
+    ]
+  },
+  {
+    "tag": "pair_sets4_0",
+    "returncode": 0,
+    "start": 1791856570.817062,
+    "end": 1791856587.4298592,
+    "free_bytes": 18291822592,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_sets4_0"
+    ]
+  },
+  {
+    "tag": "pair_sets4_1",
+    "returncode": 0,
+    "start": 1791856587.4298592,
+    "end": 1791856604.086205,
+    "free_bytes": 18268147712,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_sets4_1",
+      "--cpu-sets",
+      "4"
+    ]
+  },
+  {
+    "tag": "pair_sets4_2",
+    "returncode": 0,
+    "start": 1791856604.087726,
+    "end": 1791856622.498914,
+    "free_bytes": 18253713408,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_sets4_2",
+      "--cpu-sets",
+      "4"
+    ]
+  },
+  {
+    "tag": "pair_sets4_3",
+    "returncode": 0,
+    "start": 1791856622.4999642,
+    "end": 1791856640.0696,
+    "free_bytes": 18253107200,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "pair_sets4_3"
+    ]
+  },
+  {
+    "tag": "prep_serial_0",
+    "returncode": 0,
+    "start": 1791856640.0711114,
+    "end": 1791856657.9654744,
+    "free_bytes": 18207977472,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "prep_serial_0",
+      "--prepare",
+      "serial"
+    ]
+  },
+  {
+    "tag": "prep_overlap_0",
+    "returncode": 0,
+    "start": 1791856657.9654744,
+    "end": 1791856675.2889812,
+    "free_bytes": 18191859712,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "prep_overlap_0",
+      "--prepare",
+      "overlap"
+    ]
+  },
+  {
+    "tag": "prep_reuse_0",
+    "returncode": 0,
+    "start": 1791856675.2894871,
+    "end": 1791856693.1311424,
+    "free_bytes": 18193108992,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "prep_reuse_0",
+      "--prepare",
+      "reuse"
+    ]
+  },
+  {
+    "tag": "prep_reuse_1",
+    "returncode": 1,
+    "start": 1791856693.1328757,
+    "end": 1791856710.3665054,
+    "free_bytes": 18194165760,
+    "command": [
+      "C:\\PuyoLive_20261012a\\PuyoLive\\python\\python.exe",
+      "<work>\\wt_live_par\\scripts\\live_parallel_probe.py",
+      "--tag",
+      "prep_reuse_1",
+      "--prepare",
+      "reuse"
+    ]
+  }
+]

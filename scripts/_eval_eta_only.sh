@@ -4,7 +4,7 @@
 # baseline_v3 critical 合計 1512 との比較基準で退行有無を判定する。
 # 並列上限 3 (= CLAUDE.md / CYCLE_FINDINGS.md ルール準拠)。
 # 出力: data/verify/eta_only_eval/ (= eta_stage1_eval/ を絶対上書きしない)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health eta_only_eval

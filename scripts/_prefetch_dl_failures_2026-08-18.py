@@ -33,6 +33,14 @@
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import csv
 import shutil
 import subprocess
@@ -47,7 +55,7 @@ MANIFEST_TSV = PROJECT_ROOT / "data" / "verify" / "regen_2026-08-11_manifest.tsv
 STATUS_TSV = PROJECT_ROOT / "data" / "verify" / "regen_2026-08-18" / "status.tsv"
 FRAMES_DIR = PROJECT_ROOT / "data" / "frames"
 FFMPEG_LOCATION = PROJECT_ROOT / "venv" / "bin"
-NODE24_PATH = "/home/ryouj/.nvm/versions/node/v24.19.0/bin/node"
+NODE24_PATH = _public_dev_text('<home>/.nvm/versions/node/v24.19.0/bin/node')
 
 # パイプライン本体と同一のフォーマット指定 (AV1 は OpenCV でデコード不可)。
 YT_DLP_FORMAT = (
@@ -62,9 +70,7 @@ YT_DLP_FORMAT = (
 # scratchpad にのみ置き、git 管理下には絶対に置かない**。
 # 存在しなければ Cookie 無しで動作する (後方互換)。
 COOKIES_LIVE = Path(
-    "/mnt/c/Users/ryouj/AppData/Local/Temp/claude/"
-    "C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/"
-    "22abd085-8e57-4d2a-857e-8516be642774/scratchpad/yt_cookies_live.txt"
+    _public_dev_text('<work>/scratchpad/yt_cookies_live.txt')
 )
 
 

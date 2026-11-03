@@ -8,6 +8,14 @@
 - 3並列 (帯域律速のため)。ディスク安全弁 40GB。
 """
 from __future__ import annotations
+
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
 import subprocess
 import shutil
 import sys
@@ -29,7 +37,7 @@ FFMPEG_LOCATION = _orch.FFMPEG_LOCATION
 YT_DLP_FORMAT = _orch.YT_DLP_FORMAT
 load_manifest = _orch.load_manifest
 
-JS_RUNTIME = "node:/home/ryouj/.nvm/versions/node/v20.20.1/bin/node"
+JS_RUNTIME = _public_dev_text('node:<home>/.nvm/versions/node/v20.20.1/bin/node')
 MIN_FREE_GB = 40.0
 PARALLEL = 3
 

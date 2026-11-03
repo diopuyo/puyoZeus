@@ -26,7 +26,7 @@ puyo_analyzer プロジェクトの引き継ぎセッションです。
 
 Step A: Step 4-2 BC regen を再開
 ========================================
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 PYTHONPATH=. ./venv/bin/python -m scripts.phase_e_collect_indicator_dataset \
   --videos 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,40,43,48,49,50,51,52,54,57,61,63,64,65,66,70,73,74,75,77,78,79,80,81,84,86,89,91,92,93 \
   --max-matches 0 --fps 3 --workers 8 \

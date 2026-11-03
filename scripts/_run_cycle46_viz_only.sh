@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle 46 viz only (= ffmpeg は完了済)
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p data/review_videos/cycle46
 mkdir -p logs/board_logs

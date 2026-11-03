@@ -17,7 +17,7 @@
 # crf20 を採る (視覚的にほぼ無劣化、サイズは1/3)。所要は全編18〜20分の見積もり。
 #
 # **音声は再エンコードしない** (`-c:a copy`)。既に aac 192k で載っているため。
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 
 OUT=data/verify/zenchi_delivery_2026-08-21
 CRF=20

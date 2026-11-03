@@ -1,0 +1,35 @@
+{
+  "scope": "PC1保存実画素128コマ・10Hz冷起動。elのf70734再走ではない。",
+  "frames": 128,
+  "mismatches": {
+    "internal": 0,
+    "prev_confirmed": 0,
+    "evaluation": 0,
+    "counts": 0,
+    "b3_input": 0,
+    "features": 0,
+    "display": 0,
+    "raw": 0
+  },
+  "public": {
+    "frames": 128,
+    "compared_cells": 19968,
+    "internal_frames": 0,
+    "inferred_sides": 0,
+    "cnn_sides": 0,
+    "states": 0,
+    "raw_prediction_different_frames": 0,
+    "target_cells": 0,
+    "outside_cells": 0,
+    "differences": [],
+    "display_different_frames": 0,
+    "display_max_pp": 0.0,
+    "display_p95_pp": 0.0,
+    "display_sign_flips": 0,
+    "display_differences": []
+  },
+  "baseline_off": {
+    "result_ignoring_added_none": 0,
+    "display": 0
+  }
+}

@@ -1,7 +1,7 @@
 #!/bin/bash
 # cycle 41 残り 2 動画 (v89m3, v70m2) viz 生成
 set -e
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 for entry in "v89_match3_95s.mp4:v89m3" "v70_match2_113s.mp4:v70m2"; do
   vid_file="${entry%%:*}"

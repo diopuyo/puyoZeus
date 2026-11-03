@@ -68,7 +68,7 @@ severity 座標逆引き、復旧ゲート A/B は本スクリプト独自実装
 - 本走行禁止: --smoke で 1動画・短窓のみ処理する。
 
 Usage (本走行、WSL 経由、CLAUDE.md プロセス管理ルール準拠。呼び出し元 = main Claude):
-    wsl -d Ubuntu -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && \\
+    wsl -d Ubuntu -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && \\
       setsid -f bash -c 'PYTHONPATH=. ./venv/bin/python \\
       scripts/_diag_confirmed_persist_gap_2026-07-24.py \\
       > logs/confirmed_persist_gap_2026-07-24.log 2>&1 < /dev/null'"

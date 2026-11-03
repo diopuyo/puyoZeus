@@ -8,17 +8,17 @@ v91 レベルの認識を **未学習動画** で再現できているか視覚�
 
 | 動画 | viz パス | 75s 内匂い |
 |---|---|---|
-| v51_match2_97s | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v51_match2_97s_viz_v2default.mp4` | 序盤 (2-8s) に constraint-mismatch 11 件 |
-| v70_match2_113s | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v70_match2_113s_viz_v2default.mp4` | 序盤 (1-9s) に constraint-mismatch 15 件、 末尾は menu 復帰あり |
-| v89_match3_95s | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v89_match3_95s_viz_v2default.mp4` | 終盤 (40-45s) に constraint-mismatch 8 件 |
+| v51_match2_97s | `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v51_match2_97s_viz_v2default.mp4` | 序盤 (2-8s) に constraint-mismatch 11 件 |
+| v70_match2_113s | `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v70_match2_113s_viz_v2default.mp4` | 序盤 (1-9s) に constraint-mismatch 15 件、 末尾は menu 復帰あり |
+| v89_match3_95s | `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v89_match3_95s_viz_v2default.mp4` | 終盤 (40-45s) に constraint-mismatch 8 件 |
 
 ## 比較 baseline (学習済 = v91 レベル基準)
 
 | 動画 | viz パス | 状態 |
 |---|---|---|
-| v91_match1_75s | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v91_match1_75s_viz_finetuned_v20.mp4` | constraint-mismatch **0** 件 (= 基準) |
-| v50_match1_75s | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v50_match1_75s_viz_finetuned_v20.mp4` | 0 件、 ただし 36s で 2 試合目に切替 (試合 2 のレビューもここから) |
-| v89_match1_75s | `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v89_match1_75s_viz_finetuned_v20.mp4` | 0 件、 36s 以降が「v89 試合 2」 (引継ぎ残課題の 1 cell 黄→EMPTY 誤認をここで確認) |
+| v91_match1_75s | `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v91_match1_75s_viz_finetuned_v20.mp4` | constraint-mismatch **0** 件 (= 基準) |
+| v50_match1_75s | `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v50_match1_75s_viz_finetuned_v20.mp4` | 0 件、 ただし 36s で 2 試合目に切替 (試合 2 のレビューもここから) |
+| v89_match1_75s | `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\test_unknown\v89_match1_75s_viz_finetuned_v20.mp4` | 0 件、 36s 以降が「v89 試合 2」 (引継ぎ残課題の 1 cell 黄→EMPTY 誤認をここで確認) |
 
 ## レビュー観点
 

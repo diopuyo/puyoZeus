@@ -4,7 +4,7 @@
 # cnn_phase_l.pt (= load_default) + per-video HSV inject (--hsv-state 省略) で実行。
 # 並列上限 3 (= CLAUDE.md / CYCLE_FINDINGS.md ルール準拠)。
 # 出力: data/verify/clean_baseline_eval/ (= 既存 eval ディレクトリを絶対上書きしない)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 source scripts/_lib_health.sh
 init_health clean_baseline_eval

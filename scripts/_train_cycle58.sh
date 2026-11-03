@@ -2,7 +2,7 @@
 # cycle 58 (= 案 A): 7 クラス seed (= ojama 7064 件含む) で CNN 学習.
 # base: baseline (= cnn_phase_b_large_v2.pt)、 軽量 fine-tune。
 # 期待: ojama 維持 + 5 色改善 両立 (= cycle 56-57 の罠回避)
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 mkdir -p logs
 

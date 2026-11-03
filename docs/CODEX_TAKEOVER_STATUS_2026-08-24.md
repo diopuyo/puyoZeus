@@ -9,7 +9,7 @@ Claude Code の制限到達後に、Codex が既存作業を**上書きせず**�
 ## 情報源と優先順位
 
 1. `CLAUDE.md` — 不変の設計・データ・運用制約。
-2. `C:\Users\ryouj\.claude\projects\C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer\memory\MEMORY.md`
+2. `<home>\.claude\projects\C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer\memory\MEMORY.md`
    と 2026-08-21〜24 の個別メモリ — user 決定・根因・受け入れ条件。
 3. `src/production_config.py` — 採用済みフラグの唯一の情報源。
 4. 実行中プロセス、ログ、`data/verify/` の成果物 — 現在の実行事実。

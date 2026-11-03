@@ -23,8 +23,9 @@ from __future__ import annotations
 
 import os
 import warnings
+from src.live_speed_c import boundary_detect, DeferredHsv, enabled as c_enabled
 from collections import Counter, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -32,6 +33,8 @@ from src.board import (
     BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN,
     HIDDEN_ROWS, Board,
 )
+from src import next_recolor_pair_guard
+from src.row1_guard import Row1Guard
 from src.hidden_row_inferrer import infer_hidden_row
 from src.probabilistic_board import ProbabilisticBoard
 from src.board_state_machine import (
@@ -148,6 +151,11 @@ from src.score_ocr import FORMULA_SESSION_RESET_SEC as CHAIN_FORMULA_QUIET_SEC  
 # 乖離していた。そのため「未採用だから配線すれば 1.3〜2 倍」という誤った
 # 期待が一度立った。既定値を変えたらこのコメントも必ず直すこと。
 LARGE_ROI_THROTTLE_FRAMES: int = 8
+
+# コマ落ちに強い数え方 R35 (型 H1、2026-10-23、DESIGN frame_drop_robust_20261023 §4.5):
+# 見逃した設置を補うのは、前回のパイプライン呼び出しからこの刻み数以上空いたときだけ。
+# 全コマでは常に 1 刻みなので補完は働かない (要件 E1)。2 = 「間に見ていない刻みが 1 つ以上ある」。
+R35_MIN_GAP_TICKS: int = 2
 
 # エフェクト時間ゲート (enable_effect_gate, 2026-08-03):
 # 満杯盤面 47 セル誤りの真因確定 (memory
@@ -354,12 +362,15 @@ from src.chain_detector import (
 from src.drift_detector import DriftDetector, DriftResult
 from src.effect_glow_detector import compute_effect_glow_score, is_effect_glow_active
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
+from src.recog_speed_py import read_hsv_only as _read_hsv_only_shared
 from src.inference_board import InferenceBoardGenerator
 from src.match_end_detector import MatchEndDetector
 from src.match_state import MatchState, MatchStateDetector
 from src.next_detector import NextDetector
 from src.online_hsv_calibrator import OnlineHsvCalibrator
-from src.score_zero import ScoreZeroDetector
+from src.score_zero import (
+    OcrScoreZeroDetector, ScoreZeroDetector, score_zero_from_ocr_enabled,
+)
 from src.telop_detector import TelopDetector, TelopResult
 from src.next_slide_detector import (
     NextSlideDetector,
@@ -519,6 +530,14 @@ class SideResult:
     # フィルタ後の観測を基準にしたために直せなかったものだった。
     # 既定 None = 従来挙動と bit-identical (誰も読まなければ影響しない)。
     raw_cnn_board: Board | None = None
+    # E26: 明示ON時だけ、予測専用読取器で補完。現在層の盤面には使用しない。
+    midchain_board: Board | None = None
+    # E31: 発火前画像の多数決。現在層には書き戻さない。
+    prefire_snapshot: dict | None = None
+    # E34: W48bを有効にした描画・補完だけが保存する。Noneは未取得。
+    prefire_origin_hold: bool | None = None
+    # v2.1: 公開盤を補正した時だけ保持する評価用の元盤。履歴へ公開補正を戻さない。
+    evaluation_confirmed_board: Board | None = None
 
 
 @dataclass(frozen=True)
@@ -537,6 +556,9 @@ class PipelineResult:
     # 幻盤面を個別に除外できるようにする、docs/KNOWN_WEAKNESSES.md W20)。
     # backwards compat のため default False (既存呼び出しは無指定で従来通り)。
     match_end_locked: bool = False
+    # E16専用の評価境界で追記する観測事実。既定は従来通り未供給。
+    confirmed_dead_sides: tuple[str, ...] = ()
+    terminal_evidence_available: bool = False
 
 
 # ============================
@@ -770,6 +792,26 @@ def _apply_placement_cnn_veto(
 # ============================
 
 
+def _build_score_zero_detector(
+    score_ocr: "ScoreOcr | None", from_ocr: bool,
+) -> "ScoreZeroDetector | OcrScoreZeroDetector | None":
+    """score_zero 判定器を作る。from_ocr=False は従来のテンプレート方式 (失敗は表示して None)。
+
+    from_ocr=True は ScoreOcr 由来。ScoreOcr が無ければ判定不能なので、黙って無効化せず
+    理由を表示して None を返す (score_zero_both は常に False になる)。
+    """
+    if not from_ocr:
+        try:
+            return ScoreZeroDetector.load_default()
+        except Exception as e:
+            print(f"[pipeline] score_zero load skipped: {e}")
+            return None
+    if score_ocr is None:
+        print("[pipeline] score_zero(OCR) unavailable: ScoreOcr not loaded -> score_zero disabled")
+        return None
+    return OcrScoreZeroDetector(score_ocr)
+
+
 class RecognitionPipeline:
     """frame 入力で 1P/2P 確定盤面を返す統合 pipeline.
 
@@ -821,6 +863,8 @@ class RecognitionPipeline:
     # (残像/連鎖後不一致率 0.09→0.28 悪化) を修正するため、適用は止めず
     # 事後の多数決比較で不一致なら補正する方式に変更。
     CHAIN_VERIFY_FRAMES: int = 5
+    # pending を失効させる状態 (新しい連鎖の開始を示す)。
+    VERIFY_EXPIRY_STATES = (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
     # 事後不一致とみなす cell 数閾値 (COLOR_UNKNOWN 除外)。
     # cycle 48 の大量 hallucination ガード基準 (6 cell) を流用。
     CHAIN_VERIFY_MISMATCH_CELLS: int = 6
@@ -924,6 +968,11 @@ class RecognitionPipeline:
     # 未特定。本タスク (解除信号置換) の対象範囲外の別問題であり、
     # 148再収集投入前に追加調査が必要 (user/アーキ判断待ち)。
     POST_MATCH_LOCKDOWN_MAX_SEC: float = 45.0
+
+    # R37 (2026-10-23): 試合前 (両者 0 点) を経た後の増加が「同じ値で連続して」読めた回数の下限。
+    # user 8/19・10/23 の決まり「得点が 0 同士なら試合前、動いた瞬間試合開始。増えた値が 2 回続けて
+    # 読めたら開始」。1 回だけの読み違い (単発の誤読) で試合開始にしないための最小の確認数。
+    LOCKDOWN_START_CONFIRM_READS: int = 2
 
     # cycle 71f (提案 A): score 動きで in_match 強制復帰判定の window と閾値.
     # SCORE_MOVE_WINDOW_FRAMES 内に SCORE_MOVE_MIN_DELTA 以上動いていれば
@@ -1843,7 +1892,42 @@ class RecognitionPipeline:
         # 既存の連鎖保持期限 (`_chain_until_Xp`) をそのまま使う。新しい定数は作らない。
         # default False = 従来挙動完全維持・bit-identical。
         enable_chain_active_record_hold: bool = False,
+        enable_placement_signal_reconcile: bool = False,
+        enable_placement_signal_ojama: bool = False,
+        # 2026-09-30: cycle65 NEXT履歴の色補正の対整合ガード。観測した新規2セルの色と
+        # 整合しない対では上書きしない (q第14試合1P 884秒の誤確定の根因A)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_next_recolor_pair_guard: bool = False,
+        # 2026-10-14: 3列目12段目 (row1 col2) の幻ぷよ抑止 (案2 物理ルール、src/row1_guard.py)。
+        # 公開する確定盤だけを直す。default False = 従来挙動完全維持・bit-identical。
+        enable_row1_col2_guard: bool = False,
+        # 2026-09-30: 答え合わせ pending の連鎖失効。pending 作成後に同じ側で新しい連鎖
+        # (CHAIN/GRAVITY_SETTLE) が始まったら、連鎖前の履歴が混ざるため破棄する
+        # (q第14試合1P 881.967秒の幻おじゃま9,9,9の根因B)。default False = bit-identical。
+        enable_verification_pending_chain_expiry: bool = False,
+        enable_falling_puyo_integrity: bool = False,
+        enable_score_roi_alignment: bool = False,
+        # 2026-10-23: コマ落ちに強い数え方 (<work>/frame_drop_robust_20261023/DESIGN.md)。
+        # True のとき、set_media_tick_step() で刻みの幅を受けた後の update() から、状態機械へ
+        # 仮想 30Hz の刻み (DetectorSignals.media_tick) を渡す。全コマでは出力が OFF と同じ。
+        # default False = 従来挙動完全維持・bit-identical (配信だけ ON、学習の収集は OFF のまま)。
+        enable_media_tick_counters: bool = False,
+        # R37 (2026-10-23): 試合開始の判定を「試合終了 → 両者 0 点 (試合前) → どちらかの得点が増え、
+        # 増えた値が 2 回続けて読めた」で行う (user 8/19・10/23)。盤面の画素の確認は使わず、
+        # 試合終了の固定 (5 秒) の最中でも開始してよい。これまでの解除経路 (盤面の画素つき) は
+        # 補助として残る (ON は OFF より遅くならない)。enable_post_match_lockdown_latch=True が前提
+        # (False との組合せは ValueError)。default False = 従来挙動完全維持・bit-identical。
+        enable_lockdown_score_zero_then_move_release: bool = False,
+        enable_match_end_pair: bool = False,
+        # 2026-10-24: 盤面読取の一括経路 (src/live_board_vectorized.py)。マスごとの Python
+        # ループを numpy・Rust の一括呼出に置き換える。出力は従来経路とビット一致。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_live_board_vectorized: bool = False,
+        # 2026-10-25: read_board の 1st pass を Rust 1 回呼出にする (src/live_native_read_board.py)。
+        # live_board_vectorized が ON のときだけ働く。default False = 従来挙動完全維持・bit-identical。
+        enable_live_native_read_board: bool = False,
     ) -> None:
+        self._init_media_tick(enable_media_tick_counters)
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
         self._bg_fp_force_max_puyo: int = (
@@ -1851,6 +1935,7 @@ class RecognitionPipeline:
             if bg_fp_force_max_puyo is not None
             else self.BG_FP_FORCE_MAX_PUYO
         )
+        self._enable_falling_puyo_integrity = enable_falling_puyo_integrity
         self._reader = image_reader
         # ネイティブ (Rust) HSV 分類 (2026-08-20)。既定 OFF = 従来の Python
         # 経路のまま bit-identical。有効時は ImageReader 経由で
@@ -1862,6 +1947,23 @@ class RecognitionPipeline:
         self._native_hsv_active: bool = False
         if enable_native_hsv_classifier and hasattr(image_reader, "enable_native_hsv"):
             self._native_hsv_active = bool(image_reader.enable_native_hsv(True))
+        # 盤面読取の一括経路 (2026-10-24)。既定 OFF = 従来の読取のまま bit-identical。
+        # ネイティブ HSV の有効化より後に伝える (一括の HSV 分類はネイティブ有効時のみ働く)。
+        self._live_board_vectorized_active: bool = False
+        if enable_live_board_vectorized and hasattr(
+            image_reader, "enable_live_board_vectorized",
+        ):
+            self._live_board_vectorized_active = bool(
+                image_reader.enable_live_board_vectorized(True),
+            )
+        # read_board の Rust 経路 (2026-10-25)。一括経路・ネイティブ HSV の有効化より後に伝える。
+        self._live_native_read_board_active: bool = False
+        if enable_live_native_read_board and hasattr(
+            image_reader, "enable_live_native_read_board",
+        ):
+            self._live_native_read_board_active = bool(
+                image_reader.enable_live_native_read_board(True),
+            )
         # fix/v70-zeropatch-redyellow (2026-06-02): 赤色相折り返し補正を
         # ColorClassifier に伝播する (HybridClassifier._hsv 経由も含む)。
         if enable_red_hue_wrap_fix:
@@ -1883,6 +1985,12 @@ class RecognitionPipeline:
         # 既存単独動作との backward compat 維持のため全て optional。
         self._score_zero_detector = score_zero_detector
         self._match_end_detector = match_end_detector
+        self._enable_match_end_pair = bool(enable_match_end_pair)
+        self._match_end_pair_zero_reads = 0
+        if enable_match_end_pair and isinstance(match_end_detector, MatchEndDetector):
+            from src.async_match_end_pair import AsyncMatchEndPairDetector
+            if not isinstance(match_end_detector, AsyncMatchEndPairDetector):
+                self._match_end_detector = AsyncMatchEndPairDetector(match_end_detector._templates)
         self._telop_detector = telop_detector
         # Phase I.c: OnlineHsvCalibrator (動画別 HSV 自動学習)
         # STABLE 中に信頼サンプル蓄積 → ready 後に ColorClassifier ranges を上書き
@@ -2127,6 +2235,20 @@ class RecognitionPipeline:
         self._prev_frame: np.ndarray | None = None
         # Score tracker (任意): ScoreOcr が無ければ delta=0 固定
         self._score_ocr = score_ocr
+        from src.score_roi_alignment import ScoreRoiAlignment
+        self._score_roi_alignment = (
+            ScoreRoiAlignment(score_ocr) if enable_score_roi_alignment and score_ocr else None
+        )
+        self._placement_reconcile = None
+        if enable_placement_signal_reconcile:
+            from src.placement_signal_runtime import PlacementSignalRuntime
+            classifier = getattr(image_reader, '_classifier', None)
+            ocr = score_ocr if score_ocr is not None else ScoreOcr.load_default()
+            self._placement_reconcile = PlacementSignalRuntime(
+                getattr(classifier, '_cnn', classifier), None,
+                enable_ojama=enable_placement_signal_ojama,
+                multiply_reader=ocr.placement_multiply_reader(),
+            )
         self._score_tracker_1p: ScoreTracker | None = (
             ScoreTracker("1P", score_ocr) if score_ocr else None
         )
@@ -2270,6 +2392,7 @@ class RecognitionPipeline:
         # 間引き時に流用する前回結果 (従来は update() 内で毎フレーム初期化していた)
         self._last_match_end_locked: bool = False
         self._last_telop_visible: bool = False
+        self._score_zero_error_count: int = 0  # score_zero 判定の例外件数 (母数は処理フレーム数)
         self._last_telop_result: "TelopResult | None" = None
         # 色→空 HSV 照合ガード (2026-07-30): _build_state_machine 呼び出し前に
         # 格納が必要 (引数として渡すため)。
@@ -2476,6 +2599,11 @@ class RecognitionPipeline:
         # 境界実装の仕上げ (2026-08-18)。 default False = bit-identical。
         self._enable_result_screen_hardening: bool = bool(
             enable_result_screen_hardening
+        )
+        # R37 (2026-10-23): 得点 0 → 増加で試合開始とする解除。 default False = bit-identical。
+        self._init_lockdown_score_start(
+            enable_lockdown_score_zero_then_move_release,
+            self._enable_post_match_lockdown_latch,
         )
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
@@ -2759,6 +2887,19 @@ class RecognitionPipeline:
         # 非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容 (= 物理的に自然)。
         # デフォルト False = 従来挙動維持 (backwards compat)。
         self._enable_infer_empty_guard: bool = bool(enable_infer_empty_guard)
+        # cycle65 対整合ガード (既定OFF)。監査カウンタと事象ログを持つ。
+        self._enable_next_recolor_pair_guard: bool = bool(
+            enable_next_recolor_pair_guard)
+        self.next_recolor_guard_counts: dict[str, int] = {
+            k: 0 for k in next_recolor_pair_guard.OUTCOMES}
+        self.next_recolor_guard_log: list[dict] = []
+        # row1 col2 の幻ぷよ抑止 (既定OFF)。側別の wrapper は ON の時だけ作る。
+        self._enable_row1_col2_guard: bool = bool(enable_row1_col2_guard)
+        self._row1_guards: dict[str, Row1Guard] = {}
+        # 答え合わせ pending の連鎖失効 (既定OFF)。失効件数は監査用。
+        self._enable_verification_pending_chain_expiry: bool = bool(
+            enable_verification_pending_chain_expiry)
+        self.verification_pending_expired_count: int = 0
         # game-event ベース連鎖終了 (C-1/C-2 plan, 2026-06-01)。
         # True で次ツモ変化 / お邪魔出現をトリガーとして CHAIN 終了する。
         # False = 従来 timing hold のみ (backwards compat)。
@@ -3616,6 +3757,32 @@ class RecognitionPipeline:
         enable_landing_chain_record_hold: bool = False,
         # W48b (2026-09-18): 連鎖が動いている間は記録しない。詳細は __init__ 側。
         enable_chain_active_record_hold: bool = False,
+        enable_placement_signal_reconcile: bool = False,
+        enable_placement_signal_ojama: bool = False,
+        # 2026-09-30: cycle65 NEXT履歴の色補正の対整合ガード。観測した新規2セルの色と
+        # 整合しない対では上書きしない (q第14試合1P 884秒の誤確定の根因A)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_next_recolor_pair_guard: bool = False,
+        # 2026-10-14: 3列目12段目 (row1 col2) の幻ぷよ抑止 (案2 物理ルール、src/row1_guard.py)。
+        # 公開する確定盤だけを直す。default False = 従来挙動完全維持・bit-identical。
+        enable_row1_col2_guard: bool = False,
+        # 2026-09-30: 答え合わせ pending の連鎖失効。pending 作成後に同じ側で新しい連鎖
+        # (CHAIN/GRAVITY_SETTLE) が始まったら、連鎖前の履歴が混ざるため破棄する
+        # (q第14試合1P 881.967秒の幻おじゃま9,9,9の根因B)。default False = bit-identical。
+        enable_verification_pending_chain_expiry: bool = False,
+        # 配布版の OCR 代替経路。None は環境変数で選択し、従来の呼出順も保持する。
+        score_zero_from_ocr: bool | None = None,
+        enable_falling_puyo_integrity: bool = False,
+        enable_score_roi_alignment: bool = False,
+        # 2026-10-23: コマ落ちに強い数え方 (__init__ の同名引数を参照)。default False。
+        enable_media_tick_counters: bool = False,
+        # R37 (2026-10-23): 試合開始の判定を得点 0 → 増加で行う (__init__ の同名引数を参照)。default False。
+        enable_lockdown_score_zero_then_move_release: bool = False,
+        enable_match_end_pair: bool = False,
+        # 2026-10-24: 盤面読取の一括経路 (__init__ の同名引数を参照)。default False。
+        enable_live_board_vectorized: bool = False,
+        # 2026-10-25: read_board の 1st pass の Rust 経路 (__init__ の同名引数を参照)。default False。
+        enable_live_native_read_board: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3715,15 +3882,16 @@ class RecognitionPipeline:
         score_zero_det: ScoreZeroDetector | None = None
         match_end_det: MatchEndDetector | None = None
         telop_det: TelopDetector | None = None
-        try:
-            score_zero_det = ScoreZeroDetector.load_default()
-        except Exception as e:
-            print(f"[pipeline] score_zero load skipped: {e}")
+        score_zero_det = _build_score_zero_detector(
+            score, score_zero_from_ocr_enabled(score_zero_from_ocr),
+        )
         try:
             # match_end_ncc_threshold=None (default) は既定閾値 0.55 のまま
             # (bit-identical)。値指定時のみ上書き (2026-08-19、全消しテロップ
             # 誤検出対策の A/B 用)。
-            if match_end_ncc_threshold is not None:
+            if enable_match_end_pair:
+                match_end_det = MatchEndDetector.load_default(pair_mode=True)
+            elif match_end_ncc_threshold is not None:
                 match_end_det = MatchEndDetector.load_default(
                     threshold=float(match_end_ncc_threshold),
                 )
@@ -3733,6 +3901,8 @@ class RecognitionPipeline:
             print(f"[pipeline] match_end load skipped: {e}")
         try:
             telop_det = TelopDetector.load_default()
+            if telop_det.template_count == 0:
+                print("[pipeline] telop templates absent: telop detection disabled (no telop)")
         except Exception as e:
             print(f"[pipeline] telop load skipped: {e}")
         # Phase I.c: OnlineHsvCalibrator (動画別 HSV 自動学習).
@@ -3761,6 +3931,9 @@ class RecognitionPipeline:
             enable_next_slide_detector=enable_next_slide_detector,
             score_zero_detector=score_zero_det,
             match_end_detector=match_end_det,
+            enable_match_end_pair=enable_match_end_pair,
+            enable_live_board_vectorized=enable_live_board_vectorized,
+            enable_live_native_read_board=enable_live_native_read_board,
             telop_detector=telop_det,
             online_hsv=online_hsv,
             enable_warmup_guard=enable_warmup_guard,
@@ -3889,11 +4062,110 @@ class RecognitionPipeline:
             enable_chain_active_record_hold=(
                 enable_chain_active_record_hold
             ),
+            enable_placement_signal_reconcile=enable_placement_signal_reconcile,
+            enable_placement_signal_ojama=enable_placement_signal_ojama,
+            enable_next_recolor_pair_guard=enable_next_recolor_pair_guard,
+            enable_row1_col2_guard=enable_row1_col2_guard,
+            enable_verification_pending_chain_expiry=(
+                enable_verification_pending_chain_expiry),
+            enable_falling_puyo_integrity=enable_falling_puyo_integrity,
+            enable_score_roi_alignment=enable_score_roi_alignment,
+            enable_media_tick_counters=enable_media_tick_counters,
+            enable_lockdown_score_zero_then_move_release=(
+                enable_lockdown_score_zero_then_move_release),
         )
 
     # ------------------------------------------------------------------
     # public API
     # ------------------------------------------------------------------
+
+    def _init_media_tick(self, enabled: bool) -> None:
+        """コマ落ちに強い数え方 (2026-10-23) の状態。OFF では時計を作らない (要件 E5)。"""
+        self._enable_media_tick_counters: bool = bool(enabled)
+        self._media_tick_clock: "TickClock | None" = None
+        self._media_tick_stamp: "TickStamp | None" = None
+        # 監査: ON なのに刻みの幅が未設定のまま update() された回数 (0 件を成功と読まないため)。
+        self._media_tick_unset_calls: int = 0
+
+    @property
+    def media_tick_step(self) -> int | None:
+        """設定済みの刻みの幅 (コマ番号の単位)。OFF・未設定なら None。"""
+        clock = getattr(self, "_media_tick_clock", None)
+        return clock.step if clock is not None else None
+
+    def set_media_tick_step(self, step: int) -> None:
+        """1 刻みあたりのコマ番号の幅を渡す (動画 = stride、OBS 実機 = 1)。最初の update の前に呼ぶ.
+
+        enable_media_tick_counters=False (既定) では何もしない (従来挙動と bit-identical)。
+        """
+        if not getattr(self, "_enable_media_tick_counters", False):
+            return
+        from src.media_tick import TickClock
+        self._media_tick_clock = TickClock(int(step))
+
+    def _advance_media_tick(self, frame_idx: int) -> None:
+        """この update() の刻みを決める。OFF・未設定なら None (状態機械は従来の経路)。"""
+        # __new__ で作った試験用の器・旧版の器でも従来どおり動くよう getattr で読む。
+        if not getattr(self, "_enable_media_tick_counters", False):
+            return
+        if self._media_tick_clock is None:
+            self._media_tick_unset_calls += 1
+            if self._media_tick_unset_calls == 1:
+                print("[pipeline] enable_media_tick_counters=True だが set_media_tick_step() が"
+                      " 未設定のため回数どおりに数える (counted)")
+            return
+        self._media_tick_stamp = self._media_tick_clock.advance(frame_idx)
+
+    def _r15_warmup_step(self) -> int:
+        """R15 (型 B、2026-10-23): おじゃま後の煙待ちを 1 回の STABLE 継続でいくつ減らすか.
+
+        OFF・刻みの幅が未設定なら 1 (= 従来と同じ)。刻みモードでは前回のパイプライン
+        呼び出しから進んだ刻み数 (最低 1)。全コマでは常に 1 なので従来と同じ。
+        """
+        stamp = getattr(self, "_media_tick_stamp", None)
+        if stamp is None:
+            return 1
+        from src.media_tick import audit_note, site_enabled
+        if not site_enabled("R15"):   # production_config.LIVE_FRAME_DROP_ROBUST_SITES で採否
+            return 1
+        step = stamp.delta()
+        audit_note("R15", step > 1)   # 母数と、2 刻み以上まとめて減らした回数 (診断のみ)
+        return step
+
+    def _r35_missed_placement(
+        self, side: str, time_sec: float, via: str,
+    ) -> dict | None:
+        """R35 (型 H1、2026-10-23): TSUMO_FALL を経ずに起きた設置を補う (刻みモード専用).
+
+        設計 DESIGN.md §4.5。呼び出し側が「盤面の色ぷよが 2 個増えた (cycle65 の経路)」
+        または「着地を見ないまま連鎖が始まった」を確かめた後に呼ぶ。ここでは残りの条件
+        「前回の呼び出しから R35_MIN_GAP_TICKS 刻み以上空いた」「NEXT が 1 組進んだ
+        (_pending_tsumo に未着地の組がある)」を見て、両方そろえば TSUMO_FALL→STABLE の
+        着地と同じに、その組をツモ数へ入れ、最初の手の時刻を記録する (時刻は観測したコマ)。
+        全コマでは前回の呼び出しから常に 1 刻みなので働かない (要件 E1)。
+
+        Returns:
+            着地の診断値 (SideResult.landing_diag へ載せる)。補わなかったら None。
+        """
+        from src.media_tick import audit_note
+        stamp = getattr(self, "_media_tick_stamp", None)
+        if stamp is None:
+            return None
+        pending = self._pending_tsumo_1p if side == "1P" else self._pending_tsumo_2p
+        fire = stamp.delta() >= R35_MIN_GAP_TICKS and bool(pending)
+        audit_note("R35." + via, fire)   # 母数と補った件数 (診断のみ)
+        if not fire:
+            return None
+        committed = pending.popleft()
+        counter = self._tsumo_count_1p if side == "1P" else self._tsumo_count_2p
+        counter[committed[0]] += 1
+        counter[committed[1]] += 1
+        if side == "1P" and self._first_move_sec_1p is None:
+            self._first_move_sec_1p = float(time_sec)
+        elif side == "2P" and self._first_move_sec_2p is None:
+            self._first_move_sec_2p = float(time_sec)
+        return {"falling_pair_old": None, "falling_pair_new": list(committed),
+                "source": "r35_" + via}
 
     def set_video_id(self, video_id: str | None) -> None:
         """案 R3 改: 動画 ID を設定する。
@@ -3964,13 +4236,25 @@ class RecognitionPipeline:
           3. score_actively_moving (enable_lockdown_score_moving_release、
              スコアが動いている=確実に試合中) + 盤面ROI確認。装飾スコア
              演出誤認 (過去事故) 対策で match_end_locked 中は解除しない
+          4. (R37、enable_lockdown_score_zero_then_move_release) 0 を経た後の
+             得点の増加が確認済み (_observe_lockdown_score_start) なら、盤面の
+             画素を見ずに解除する。上の 1〜3 はそのまま残る (補助)。
         """
         if match_end_locked and not self._post_match_lockdown_prev_end_locked:
             self._post_match_lockdown_active = True
             self._post_match_lockdown_started_time = time_sec
+            if self._enable_match_end_pair and self._match_end_detector is not None:
+                source_t = self._match_end_detector.lock_started_t
+                if source_t is not None:
+                    self._post_match_lockdown_started_time = source_t
             self._post_match_lockdown_raw_active_since = -1.0
+            if getattr(self, "_enable_lockdown_score_zero_then_move_release", False):
+                self._reset_lockdown_score_start()
         self._post_match_lockdown_prev_end_locked = match_end_locked
         if not self._post_match_lockdown_active:
+            return
+        if getattr(self, "_lockdown_score_start_confirmed", False):
+            self._post_match_lockdown_active = False
             return
         # 解除系統1+2: 「スコア0」持続 (テンプレ OR 数値) + 盤面ROI確認。
         # 数値側は ScoreTracker.last_score (前フレームまでの OCR 確定値、
@@ -3999,7 +4283,9 @@ class RecognitionPipeline:
             self._post_match_lockdown_active
             and self._enable_lockdown_score_moving_release
             and score_actively_moving
-            and not match_end_locked
+            and (not match_end_locked or (
+                self._enable_match_end_pair and self._match_end_detector is not None
+                and not self._match_end_detector.announcement_recent(time_sec)))
             and self._board_shows_real_gameplay(frame)
         ):
             self._post_match_lockdown_active = False
@@ -4013,6 +4299,114 @@ class RecognitionPipeline:
             )
         ):
             self._post_match_lockdown_active = False
+
+    def _release_pair_fallback(self, time_sec: float, locked: bool) -> bool:
+        """既存ラッチの補助解除・45秒の安全弁を組の保持にも適用する。"""
+        detector = self._match_end_detector
+        if not locked or detector is None:
+            return locked
+        auxiliary = self._enable_post_match_lockdown_latch and not self._post_match_lockdown_active
+        timed_out = (detector.lock_started_t is not None
+                     and time_sec - detector.lock_started_t >= self.POST_MATCH_LOCKDOWN_MAX_SEC)
+        if auxiliary or timed_out:
+            detector.release()
+            self._last_match_end_locked = False
+            self._match_end_pair_zero_reads = 0
+            return False
+        return locked
+
+    def _observe_pair_zero(self, raw_1p: int | None, raw_2p: int | None, time_sec: float) -> None:
+        """新規OCRの0/0が2回連続したら保持解除。欠測・非0で連続数を戻す。"""
+        detector = self._match_end_detector
+        if detector is None or not detector.is_locked(time_sec):
+            self._match_end_pair_zero_reads = 0
+            return
+        self._match_end_pair_zero_reads = (
+            self._match_end_pair_zero_reads + 1 if raw_1p == 0 and raw_2p == 0 else 0)
+        if self._match_end_pair_zero_reads < self.LOCKDOWN_START_CONFIRM_READS:
+            return
+        detector.release()
+        self._last_match_end_locked = False
+        self._post_match_lockdown_prev_end_locked = False
+        if self._enable_lockdown_score_zero_then_move_release:
+            self._lockdown_zero_seen = True
+            self._post_match_lockdown_active = True
+        else:
+            self._post_match_lockdown_active = False
+
+    def _init_lockdown_score_start(self, enabled: bool, latch_enabled: bool) -> None:
+        """R37 (2026-10-23): 得点 0 → 増加で試合開始とする解除の状態を作る。OFF では何も起きない。"""
+        if enabled and not latch_enabled:
+            raise ValueError(
+                "enable_lockdown_score_zero_then_move_release は "
+                "enable_post_match_lockdown_latch=True が前提 (ラッチの解除規則のため)",
+            )
+        self._enable_lockdown_score_zero_then_move_release: bool = bool(enabled)
+        self._reset_lockdown_score_start()
+
+    def _reset_lockdown_score_start(self) -> None:
+        """試合終了の立ち上がり・reset() で、「0 を経たか」と「増加の確認」を最初に戻す。"""
+        self._lockdown_zero_seen: bool = False
+        self._lockdown_score_start_confirmed: bool = False
+        self._lockdown_inc_value: dict[str, int | None] = {"1P": None, "2P": None}
+        self._lockdown_inc_run: dict[str, int] = {"1P": 0, "2P": 0}
+
+    def _count_lockdown_increase(self, side: str, raw: int | None) -> int:
+        """その側の「0 より大きい同じ値」の連続読取り数を更新して返す。
+
+        raw が None (読めなかったコマ) は連続を切らず据え置く。0 以下は試合前の
+        表示なので数え直す。違う値が読めたらその値から 1 に数え直す。
+        """
+        if raw is None:
+            return self._lockdown_inc_run[side]
+        if raw <= 0:
+            self._lockdown_inc_value[side] = None
+            self._lockdown_inc_run[side] = 0
+        elif raw == self._lockdown_inc_value[side]:
+            self._lockdown_inc_run[side] += 1
+        else:
+            self._lockdown_inc_value[side] = raw
+            self._lockdown_inc_run[side] = 1
+        return self._lockdown_inc_run[side]
+
+    def _observe_lockdown_score_start(
+        self, match_end_locked: bool, raw_1p: int | None, raw_2p: int | None,
+    ) -> None:
+        """R37: 試合終了後、0 を経た後の増加が 2 回続けて読めたら試合開始を確定する。
+
+        update() の得点読取りの直後に毎フレーム呼ぶ。OFF・確定済み・試合終了の最中でない
+        (ラッチも固定も無い) ときは何もしない。盤面の画素は使わない。
+        1. 両者の得点 (ScoreTracker の確定値) が 0 と読めたら「試合前」を記録する。
+        2. 試合前を経た後、どちらかの側で 0 より大きい同じ値が LOCKDOWN_START_CONFIRM_READS
+           回続けて読めたら確定する (ラッチの解除は次のコマの _update_post_match_lockdown_latch、
+           試合終了の固定の無効化は hard_match_off の組み立て)。
+        前の試合の最終得点が残る画面 (0 を経ていない) は、何が読めても数えない。
+        """
+        if not getattr(self, "_enable_lockdown_score_zero_then_move_release", False):
+            return
+        # 組モードは新規OCRの0/0を2回確認するまで、sticky値で開始を先取りしない。
+        if (self._enable_match_end_pair and self._match_end_detector is not None
+                and self._match_end_detector.lock_started_t is not None):
+            return
+        if self._lockdown_score_start_confirmed:
+            return
+        if not (self._post_match_lockdown_active or match_end_locked):
+            return
+        if not self._lockdown_zero_seen:
+            last_1p, last_2p = self._tracker_last_scores()
+            self._lockdown_zero_seen = last_1p == 0 and last_2p == 0
+            return
+        for side, raw in (("1P", raw_1p), ("2P", raw_2p)):
+            if self._count_lockdown_increase(side, raw) >= self.LOCKDOWN_START_CONFIRM_READS:
+                self._lockdown_score_start_confirmed = True
+
+    def _tracker_last_scores(self) -> tuple[int | None, int | None]:
+        """両側の ScoreTracker の最終確定値 (tracker が無い側は None)。"""
+        t1, t2 = self._score_tracker_1p, self._score_tracker_2p
+        return (
+            t1.last_score if t1 is not None else None,
+            t2.last_score if t2 is not None else None,
+        )
 
     def tsumo_count(self, side: str) -> int:
         """試合開始からの確定ツモ設置数 (手数, I-1 指標用 getter)。
@@ -4044,6 +4438,10 @@ class RecognitionPipeline:
                 VideoChainTracker 既定の 0.0 (= 動画絶対時刻がそのまま
                 elapsed になる旧挙動) を維持する。
         """
+        self._live_delta_cache = None
+        self._live_boundary_cache = None
+        if self._placement_reconcile is not None:
+            self._placement_reconcile.reset()
         self._sm_1p.reset()
         self._sm_2p.reset()
         self._gen_1p.reset()
@@ -4098,6 +4496,13 @@ class RecognitionPipeline:
         self._post_match_lockdown_prev_end_locked = False
         self._post_match_lockdown_started_time = -1.0
         self._post_match_lockdown_raw_active_since = -1.0
+        if self._enable_match_end_pair:
+            self._match_end_pair_zero_reads = 0
+            self._last_match_end_locked = False
+            if self._match_end_detector is not None:
+                self._match_end_detector.reset()
+        if getattr(self, "_enable_lockdown_score_zero_then_move_release", False):
+            self._reset_lockdown_score_start()   # R37: 0 を経たか・増加の確認も最初から
         self._bg_fp_captured = False
         # ImageReader の bg_fp も解除 + I1 対応 A: pre_capture_mode も reset
         if hasattr(self._reader, "set_background_fingerprints"):
@@ -4267,16 +4672,44 @@ class RecognitionPipeline:
             self._online_hsv_injected = False
             self._online_hsv_injected_colors.clear()
 
+    def _guard_recolor_pair(
+        self, side: str, time_sec: float,
+        diffs: "list[tuple[int, int, int]]",
+        queue: "list[tuple[int, int]]",
+        used_pair: "tuple[int, int]",
+    ) -> "tuple[int, int] | None":
+        """cycle65 の補正対を観測色と照合する。None なら補正しない (観測色維持)。"""
+        observed = [color for _, _, color in diffs]
+        pair, outcome = next_recolor_pair_guard.select_recolor_pair(
+            observed, queue)
+        self.next_recolor_guard_counts[outcome] += 1
+        self.next_recolor_guard_log.append(dict(
+            side=side, t=round(time_sec, 3), outcome=outcome,
+            cells=[(r, c) for r, c, _ in diffs], observed=observed,
+            used=list(used_pair), chosen=None if pair is None else list(pair)))
+        return pair
+
+    def observe_placement_frame(
+        self, frame_idx: int, time_sec: float, frame: np.ndarray,
+    ) -> None:
+        """R1専用の原フレーム入力。OFFでは読取りも状態変更も行わない。"""
+        runtime = getattr(self, '_placement_reconcile', None)
+        if runtime is not None:
+            runtime.observe(self, frame_idx, time_sec, frame)
+
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
     ) -> PipelineResult:
         """1 frame 投入、結果を返す."""
+        # コマ落ちに強い数え方 (2026-10-23): この呼び出しの刻み。OFF では何もしない。
+        self._advance_media_tick(frame_idx)
+        self.observe_placement_frame(frame_idx, time_sec, frame)
         # 0. 解像度依存 S_min 調整は呼び出し側 (viz/diag script) が
         # set_resolution_aware_s_min で明示設定する. pipeline.update に渡る
         # frame は image_reader で 1920x1080 にリサイズ済のため、 ここでの
         # 自動検出は不可能.
         # 1. 試合状態判定 + hysteresis
-        match_res = self._match_detector.detect(frame)
+        match_res = boundary_detect(self, self._match_detector, frame, time_sec, 'match')
         raw_active = (
             match_res.state == MatchState.IN_MATCH
             or self._force_in_match
@@ -4291,10 +4724,13 @@ class RecognitionPipeline:
         # 大 ROI 走査の間引き判定に使う (下の match_end / telop で参照)
         if self._score_zero_detector is not None:
             try:
-                sz = self._score_zero_detector.detect(frame)
+                sz = boundary_detect(self, self._score_zero_detector, frame, time_sec, 'zero')
                 score_zero_both = bool(sz.both_zero)
-            except Exception:
-                pass
+            except Exception as e:
+                # 従来は黙って False だった。挙動は同じまま、初回だけ表示し件数を残す (2026-09-30)。
+                self._score_zero_error_count += 1
+                if self._score_zero_error_count == 1:
+                    print(f"[pipeline] score_zero detect failed (counted, treated as False): {e!r}")
         match_end_locked = False
         if self._match_end_detector is not None:
             # 大 ROI 走査 (800x600) の間引き: 有効時は LARGE_ROI_THROTTLE_FRAMES に
@@ -4303,7 +4739,7 @@ class RecognitionPipeline:
             # 実既定値は True で、実測でも match_end/telop は 0.1 回/frame しか
             # 呼ばれていない = 間引きが稼働している)。無効化すると従来通り毎
             # フレーム実行 = bit-identical になる。
-            if self._should_run_large_roi_scan(frame_idx):
+            if self._enable_match_end_pair or self._should_run_large_roi_scan(frame_idx):
                 try:
                     match_end_locked = bool(
                         self._match_end_detector.update(frame, time_sec),
@@ -4382,14 +4818,22 @@ class RecognitionPipeline:
                 frame, time_sec, match_end_locked, score_zero_both,
                 cur_score_1p, cur_score_2p, score_actively_moving,
             )
+        if self._enable_match_end_pair:
+            match_end_locked = self._release_pair_fallback(time_sec, match_end_locked)
         # 強い「試合外」シグナル (hysteresis を上書き)
         # 2026-05-10 FIX-C: score=0 でも cnn_board に puyo があれば試合中継続
         # (試合開始直後の最初の数手が menu 誤判定される問題を回避)。
         # (b-2) self._post_match_lockdown_active は既定 False (bit-identical)。
+        # R37 (enable_lockdown_score_zero_then_move_release): 0 を経た後の得点の増加が確認済みなら、
+        # 試合終了の固定 (5 秒) の残りで試合外にしない。OFF では確認済みにならず match_end_locked のまま。
+        end_lock_hard = match_end_locked and not getattr(
+            self, "_lockdown_score_start_confirmed", False,
+        )
         hard_match_off = (
-            score_zero_both or match_end_locked
+            score_zero_both or end_lock_hard
             or self._post_match_lockdown_active
         )
+        score_zero_both_observed = score_zero_both  # 計装: 盤面による打消し前の値
         if hard_match_off:
             # match_end は確定信号、 score_zero は puyo 確認で否定
             puyo_observed = False
@@ -4411,7 +4855,7 @@ class RecognitionPipeline:
                 if p2_b is not None and p2_b.count_puyos() >= 2:
                     score_zero_both = False
                 hard_match_off = (
-                    score_zero_both or match_end_locked
+                    score_zero_both or end_lock_hard
                     or self._post_match_lockdown_active
                 )
             if hard_match_off:
@@ -4545,6 +4989,17 @@ class RecognitionPipeline:
             hard_match_off and not score_actively_moving_trusted
             and not chain_in_progress_suppresses
         )
+        if self._enable_match_end_pair and match_end_locked:
+            effective_hard_off = True
+        # 読取専用の診断列。判定・走査頻度は変更しない。
+        self._live_match_off_diagnostics = dict(
+            frame=frame_idx, t_sec=time_sec, score_zero_both_observed=score_zero_both_observed,
+            score_zero_both=score_zero_both, match_end_locked=match_end_locked,
+            last_match_end_locked=getattr(self, '_last_match_end_locked', None),
+            post_match_lockdown_active=self._post_match_lockdown_active,
+            hard_match_off=hard_match_off, effective_hard_off=effective_hard_off,
+            score_actively_moving_trusted=score_actively_moving_trusted,
+            chain_in_progress_suppresses=chain_in_progress_suppresses)
         is_active = (
             (raw_active or recent_active or sm_active or score_actively_moving)
             and not effective_hard_off
@@ -4639,8 +5094,9 @@ class RecognitionPipeline:
             (self._enable_tier1_warmup and self._tier1_warmup_remaining_2p > 0)
             or (self._enable_ojama_tier1_warmup and self._ojama_tier1_warmup_remaining_2p > 0)
         )
-        cnn_1p_raw, cnn_2p_raw = self._reader.read_both_boards(
-            frame,
+        from src.live_delta_cells import read_boards
+        cnn_1p_raw, cnn_2p_raw = read_boards(
+            self, frame, time_sec,
             skip_tier1_1p=_skip_t1_1p,
             skip_tier1_2p=_skip_t1_2p,
             # 修正2 (2026-07-30): 上で計算済の telop 検出結果を使い回す
@@ -4889,6 +5345,10 @@ class RecognitionPipeline:
                 self._stash_and_clear_active_chain("2P")
 
         # 4. score 差分
+        # 得点セルと式の共通キャッシュを作る前に、入力単位の枠を確定する。
+        alignment = getattr(self, '_score_roi_alignment', None)
+        if alignment is not None:
+            alignment.observe(frame, time_sec)
         # 修正1 (2026-07-30): 生 score 値 (_score_ocr_val_Xp) も同時に受け取り、
         # 機能D (_check_formula_detected) が同一 frame・同一 side のスコアを
         # 再度フルで読み直す (score_ocr.read_side 完全重複呼び出し) のを防ぐ。
@@ -4906,6 +5366,11 @@ class RecognitionPipeline:
                 want_detail=self._enable_formula_value_read,
             )
         )
+
+        # liveの同一呼出しに限り生OCR値を共有する。未読trackerは欠測と区別する。
+        if (getattr(self, '_live_share_scores', False)
+                and self._score_tracker_1p is not None and self._score_tracker_2p is not None):
+            self._live_raw_scores = (frame_idx, time_sec, _score_ocr_val_1p, _score_ocr_val_2p)
 
         # 追修 (2026-07-25): force_in_match=True 構成では is_match_active=False
         # 分岐 (MENU 強制、confirmed_board 等クリアの発火点) が一度も走らない
@@ -4952,7 +5417,11 @@ class RecognitionPipeline:
                 if self._enable_score_reset_strict
                 else boundary_candidate
             )
-            if boundary_now and not self._match_start_boundary_latched:
+            pair_waiting = self._enable_match_end_pair and (
+                (self._match_end_detector is not None and self._match_end_detector.is_locked(time_sec))
+                or (self._enable_lockdown_score_zero_then_move_release
+                    and self._post_match_lockdown_active))
+            if boundary_now and not self._match_start_boundary_latched and not pair_waiting:
                 if os.environ.get(_DEBUG_RESET_PROBE_ENV):
                     tsumo_1p_before = self.tsumo_count("1P")
                     tsumo_2p_before = self.tsumo_count("2P")
@@ -4974,6 +5443,13 @@ class RecognitionPipeline:
                 self._match_start_boundary_latched = False
             self._prev_score_for_reset_1p = cur_score_1p
             self._prev_score_for_reset_2p = cur_score_2p
+        # R37: 試合終了後の得点 0 → 増加の観測 (reset() の後に置き、同じコマの reset で消されない)。
+        self._observe_lockdown_score_start(
+            match_end_locked, _score_ocr_val_1p, _score_ocr_val_2p,
+        )
+
+        if self._enable_match_end_pair:
+            self._observe_pair_zero(_score_ocr_val_1p, _score_ocr_val_2p, time_sec)
 
         # 4a. 機能B: score 急増 CHAIN 早期発火 (enable_chain_score_early_fire=True 時のみ)。
         # VideoChainTracker の puyo 減少検知を待たずに、自 side score_delta が
@@ -5434,15 +5910,20 @@ class RecognitionPipeline:
         # 経路 A': OJAMA 専用 tier1 warmup guard カウンタ更新。
         # OJAMA_FALL → STABLE 遷移時のみ OJAMA_TIER1_WARMUP_FRAMES をセット。
         if self._enable_ojama_tier1_warmup:
+            # コマ落ちに強い数え方 (2026-10-23、R15 型 B): 刻みモードでは STABLE の続いた
+            # 刻みずつ減らす (OFF では 1 = 従来どおり)。
+            _r15_step = self._r15_warmup_step()
             self._ojama_tier1_warmup_remaining_1p = _update_ojama_tier1_warmup_counter(
                 prev_state=_pre_state_1p,
                 p_state=p1.state,
                 remaining=self._ojama_tier1_warmup_remaining_1p,
+                step=_r15_step,
             )
             self._ojama_tier1_warmup_remaining_2p = _update_ojama_tier1_warmup_counter(
                 prev_state=_pre_state_2p,
                 p_state=p2.state,
                 remaining=self._ojama_tier1_warmup_remaining_2p,
+                step=_r15_step,
             )
         # エフェクト時間ゲート (2026-08-03): お邪魔着弾 window の更新。
         # OJAMA_FALL は 1 frame で STABLE に抜けるため (state_detectors.
@@ -5602,7 +6083,25 @@ class RecognitionPipeline:
                     # 擬似ラベル抽出失敗は本流に影響させない
                     pass
 
-        return result
+        return self._publish_row1_result(result)
+
+    def _publish_row1_result(self, result: PipelineResult) -> PipelineResult:
+        """内部履歴・較正・擬似ラベルの更新後に公開盤だけを補正する。"""
+        sides = []
+        for side in (result.p1, result.p2):
+            published = self._apply_row1_col2_guard(
+                side.side, side.confirmed_board, side.raw_cnn_board, result.time_sec,
+                in_chain=self._row1_formula_visible(side.side),
+                next_moved=bool(side.next_slide_motion),
+                ojama_falling=side.state == BoardState.OJAMA_FALL,
+                settled=side.state == BoardState.STABLE and side.landing_diag is not None,
+            )
+            sides.append(side if published is side.confirmed_board else replace(
+                side, confirmed_board=published,
+                evaluation_confirmed_board=side.confirmed_board))
+        if sides[0] is result.p1 and sides[1] is result.p2:
+            return result
+        return replace(result, p1=sides[0], p2=sides[1])
 
     # ------------------------------------------------------------------
     # internal
@@ -6867,6 +7366,18 @@ class RecognitionPipeline:
             self._chain_verify_pending_1p if side == "1P"
             else self._chain_verify_pending_2p
         )
+        if (
+            pending is not None
+            and self._enable_verification_pending_chain_expiry
+            and state in self.VERIFY_EXPIRY_STATES
+        ):
+            # 新しい連鎖が始まった: 履歴の連鎖前フレームが多数決へ混ざるため破棄。
+            if side == "1P":
+                self._chain_verify_pending_1p = None
+            else:
+                self._chain_verify_pending_2p = None
+            self.verification_pending_expired_count += 1
+            return None, None
         if pending is None or state != BoardState.STABLE:
             return None, None
         pending["cnn_history"].append(cnn_board.copy())
@@ -7296,9 +7807,12 @@ class RecognitionPipeline:
         # state=EFFECT は不要 (= 静的バナーで盤面全体を凍結すると STABLE 中の
         # 非被覆セル更新も止まり、 試合開始から数十秒間「ずっと EFFECT」 になる
         # 問題が発生)。 match_end のみ effect_vis に残す.
+        # R37: 0 を経た後の得点の増加で試合開始を確認済みなら、試合終了の固定の残りは演出扱いにしない
+        # (確定盤面が無いまま EFFECT に入ると、連鎖が来るまで STABLE へ戻れない)。OFF では常に従来どおり。
         effect_vis = bool(
             self._match_end_detector is not None
             and self._match_end_detector.is_locked(time_sec)
+            and not getattr(self, "_lockdown_score_start_confirmed", False)
         )
         # cycle 71g (提案 A 補強): score が継続的に動いていれば effect_visible を
         # 解除. 試合 1 終了演出の lockdown が試合 2 期間中まで残るのを防ぐ
@@ -7341,9 +7855,16 @@ class RecognitionPipeline:
                 DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
             )
             try:
-                _hsv_board_for_signals = self._reader.read_board_hsv_only(
-                    frame_bgr, region_for_hsv,
-                )
+                # live_recog_speed_py (既定 OFF): 同じコマ・同じ分類器の状態なら、後段 (B3 の記録時補正)
+                # の同じ読取りと結果を共有する。OFF では read_board_hsv_only をそのまま呼ぶ。
+                if c_enabled('live_hsv_lazy'):
+                    _hsv_board_for_signals = DeferredHsv(
+                        lambda: _read_hsv_only_shared(self._reader, frame_bgr, region_for_hsv),
+                    )
+                else:
+                    _hsv_board_for_signals = _read_hsv_only_shared(
+                        self._reader, frame_bgr, region_for_hsv,
+                    )
             except Exception:
                 _hsv_board_for_signals = None
         # フェーズ A 精緻化 (2026-06-02): OjamaVisualDetector の内部 state 更新前に
@@ -7471,6 +7992,7 @@ class RecognitionPipeline:
             own_score_delta=score_d_for_self,  # 案2 (2026-08-13)
             own_chain_hold_until_sec=own_chain_hold_until,  # 案4-lite拡張 (2026-08-13)
             own_pending_ojama_forecast=_own_pending_ojama_forecast,  # 案1会計連動
+            media_tick=getattr(self, "_media_tick_stamp", None),  # コマ落ちに強い数え方 (2026-10-23、既定 None)
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、
@@ -7482,6 +8004,7 @@ class RecognitionPipeline:
         )
         prev_next_queue = list(sm.context.next_queue)
 
+        sm._enable_falling_puyo_integrity = self._enable_falling_puyo_integrity
         ctx: StateContext = sm.update(frame_idx, signals)
 
         # W25根治 第3弾: 直近安定色メモリの更新。STABLE 確定毎に (state
@@ -7560,6 +8083,19 @@ class RecognitionPipeline:
                         self._first_move_sec_1p = float(signals.time_sec)
                 elif self._first_move_sec_2p is None:
                     self._first_move_sec_2p = float(signals.time_sec)
+        # コマ落ちに強い数え方 (2026-10-23、R35 型 H1、既定 OFF): 着地 (STABLE) を
+        # 見ないまま自分の連鎖が始まった設置を補う (置き終わりの合図 3)。
+        # 刻みモードで前回の呼び出しから 2 刻み以上空いたときだけ働く (全コマでは動かない)。
+        # GS_EXEMPT: 連鎖の「始まり」(STABLE/TSUMO_FALL → CHAIN) だけを見る。GRAVITY_SETTLE は
+        # 連鎖の後の状態で、設置の補完とは無関係なので含めない。
+        if (
+            getattr(self, "_media_tick_stamp", None) is not None
+            and prev_state in (BoardState.STABLE, BoardState.TSUMO_FALL)
+            and ctx.state == BoardState.CHAIN
+        ):
+            _r35_diag = self._r35_missed_placement(side, time_sec, "chain_start")
+            if _r35_diag is not None:
+                _landing_diag = _r35_diag
         # 2026-05-11 サイクル71 Phase 1a: 物理推論主軸化.
         # 旧 _compute_landing_inferred (= CNN 差分位置採用) を廃止し、
         # placement_inferrer.infer_placement (= 物理パターン全列挙 + NEXT 色固定
@@ -7988,6 +8524,13 @@ class RecognitionPipeline:
                     elif prev_next_queue:
                         falling_pair_b = prev_next_queue[-1]
                     if (
+                        self._enable_next_recolor_pair_guard
+                        and next_recolor_pair_guard.is_usable_pair(falling_pair_b)
+                    ):
+                        falling_pair_b = self._guard_recolor_pair(
+                            side, ctx.time_sec, diffs, prev_next_queue,
+                            falling_pair_b)
+                    if (
                         falling_pair_b is not None
                         and falling_pair_b[0] not in (
                             COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA,
@@ -8029,6 +8572,15 @@ class RecognitionPipeline:
                             )
                             ctx.confirmed_board = final_b
                             ctx.pending_board = final_b.copy()
+                            # コマ落ちに強い数え方 (2026-10-23、R35 型 H1、既定 OFF):
+                            # TSUMO_FALL を見ないまま 2 個増えた設置を、TSUMO_FALL を
+                            # 経た設置と同じに扱う (ツモ数・最初の手・着地の診断値)。
+                            if getattr(self, "_media_tick_stamp", None) is not None:
+                                _r35_diag = self._r35_missed_placement(
+                                    side, time_sec, "stable_plus2",
+                                )
+                                if _r35_diag is not None:
+                                    _landing_diag = _r35_diag
 
         # Phase C-6 の C: CHAIN_FALL → STABLE 復帰時に ChainSimulator
         # final_board (= 物理推論で確定した連鎖後盤面) で上書き。
@@ -8425,6 +8977,7 @@ class RecognitionPipeline:
                             _guard_hsv_clf,
                             frame_bgr,
                             _guard_region,
+                            falling_puyo_integrity=self._enable_falling_puyo_integrity,
                         )
                     )
                     ctx.pending_board = ctx.confirmed_board.copy()
@@ -8851,6 +9404,41 @@ class RecognitionPipeline:
         )
 
 
+    def _row1_formula_visible(self, side: str) -> bool:
+        """連鎖状態の残留ではなく、同じコマ・同じ側の掛け算式の実読を使う。"""
+        reading = getattr(self, f'_formula_last_read_{side.lower()}', None)
+        return bool(getattr(reading, 'valid', False))
+
+    def _apply_row1_col2_guard(
+        self, side: str, published: "Board | None", raw_cnn: Board | None,
+        time_sec: float, in_chain: bool = False,
+        next_moved: bool = False, ojama_falling: bool = False,
+        settled: bool = False,
+    ) -> "Board | None":
+        """公開する確定盤の row1 col2 の幻ぷよを外す (既定OFFでは素通し)。"""
+        from src.phase_j.live_row1_audit import CURRENT
+        active_audit = CURRENT.get()
+        if not self._enable_row1_col2_guard:
+            if active_audit is not None:
+                audit, frame = active_audit
+                audit.apply(audit.shadow(self, side), published, raw_cnn,
+                            time_sec, in_chain, frame, side, True,
+                            next_moved, ojama_falling, settled)
+            return published
+        guard = self._row1_guards.setdefault(side, Row1Guard())
+        if active_audit is not None:
+            audit, frame = active_audit
+            return audit.apply(guard, published, raw_cnn, time_sec,
+                               in_chain, frame, side, False, next_moved, ojama_falling, settled)
+        if published is None:
+            guard.reset()
+            return None
+        return guard.step(published, raw_cnn, time_sec, in_chain, next_moved, ojama_falling, settled)
+
+    def row1_guard_counts(self) -> dict[str, dict[str, int]]:
+        """側別の抑止カウンタ (OFF では空)。遅れ (spawn_held フレーム数) の測定に使う。"""
+        return {side: dict(g.counts) for side, g in self._row1_guards.items()}
+
     def _set_deferred_confirmed(
         self,
         side: str,
@@ -9243,6 +9831,7 @@ def _update_ojama_tier1_warmup_counter(
     prev_state: "BoardState",
     p_state: "BoardState",
     remaining: int,
+    step: int = 1,
 ) -> int:
     """経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup カウンタ更新。
 
@@ -9254,6 +9843,9 @@ def _update_ojama_tier1_warmup_counter(
         prev_state: _step_side 呼び出し前の state (= 前フレームの state)。
         p_state: _step_side が返した現フレームの state。
         remaining: 現在の warmup 残余 frame 数。
+        step: STABLE 継続 1 回で減らす量。既定 1 (= 従来と bit-identical)。コマ落ちに強い
+            数え方 (2026-10-23、R15 型 B) の刻みモードでは前回の呼び出しから進んだ刻み数。
+            待ちは時間の意味しか持たないので、観測の下限は付けない (設計 §2.2 型 B)。
 
     Returns:
         更新後の warmup 残余 frame 数 (0 以上)。
@@ -9266,7 +9858,7 @@ def _update_ojama_tier1_warmup_counter(
         return OJAMA_TIER1_WARMUP_FRAMES
     # STABLE 継続: デクリメント
     if p_state == BoardState.STABLE and remaining > 0:
-        return remaining - 1
+        return max(0, remaining - step)
     # STABLE 以外: リセット
     if p_state != BoardState.STABLE:
         return 0

@@ -1,11 +1,19 @@
 """eval 8 動画を並列 3 で実行する Python ランナー (シェル変数展開問題を回避)."""
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import subprocess
 import sys
 from pathlib import Path
 
-BASE = Path("/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer")
+BASE = Path(_public_dev_text('<repo>'))
 CNN_MODEL = str(BASE / "models/cnn_phase_b_large_v2.pt")
 PYTHON = str(BASE / "venv/bin/python")
 MAX_PARALLEL = 3

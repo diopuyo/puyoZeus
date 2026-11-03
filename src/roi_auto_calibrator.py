@@ -17,6 +17,7 @@
     4. オフセットが過大 (>30px) なら未検出扱いで default 維持
 """
 from __future__ import annotations
+from src.phase_j.live_color_roi import full_image
 
 from dataclasses import dataclass
 
@@ -64,7 +65,7 @@ def detect_roi_offsets(
     """
     if frame.shape[:2] != (1080, 1920):
         return RoiCalibration((0, 0), (0, 0), 0.0)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(full_image(frame), cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, CANNY_LOW, CANNY_HIGH)
     # 1P / 2P それぞれの探索領域
     p1_offset = _detect_field_offset(

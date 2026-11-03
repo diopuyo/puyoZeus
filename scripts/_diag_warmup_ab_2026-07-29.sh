@@ -4,7 +4,7 @@
 # 引きずられる) を _diag_settle_freeze_2026-07-29.py の計装出力で検証する。
 # nice -n 19、逐次実行 (並列にしない、CLAUDE.mdプロセス管理ルール準拠)。
 set -u
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 
 LOG=logs/diag_warmup_ab_2026-07-29.log

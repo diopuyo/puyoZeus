@@ -1,7 +1,7 @@
 #!/bin/bash
 # v35レビュー動画の映像・音声を全編デコードする。
 set -euo pipefail
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer
 
 VIDEO=data/verify/gate4_first5_review_2026-08-27/gate4_first5_cond5_v35_review_extreme_flip_guard.mp4
 FFMPEG=$(./venv/bin/python -c \

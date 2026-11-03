@@ -1,0 +1,50 @@
+[
+ {
+  "base": "q900_off",
+  "candidate": "qrec_off",
+  "frames_base": 900,
+  "frames_candidate": 4994,
+  "frames_compared": 900,
+  "frame_field_mismatch": {
+   "frame": 900,
+   "t_sec": 900,
+   "result_bytes": 900,
+   "pipeline": 900,
+   "dropped_before": 0,
+   "b3": 900
+  },
+  "frames_any_mismatch": 900,
+  "boards": {
+   "raw_cnn_board": {
+    "cells": 140400,
+    "diff_cells": 98249,
+    "diff_frames": 900
+   },
+   "cnn_board": {
+    "cells": 140400,
+    "diff_cells": 98069,
+    "diff_frames": 900
+   },
+   "confirmed_board": {
+    "cells": 140400,
+    "diff_cells": 90398,
+    "diff_frames": 898
+   }
+  },
+  "both_stable_frames": 143,
+  "both_stable_board_diff_cells": 41612,
+  "both_stable_board_cells": 66924,
+  "logits": {
+   "base_calls": 2710,
+   "candidate_calls": 14444,
+   "base_rows": 99170,
+   "candidate_rows": 562513,
+   "base_unique_inputs": 40088,
+   "candidate_unique_inputs": 410184,
+   "candidate_inputs_missing_in_base": 410184,
+   "logits_bytes_mismatch": 0,
+   "base_self_inconsistent": 0,
+   "candidate_self_inconsistent": 0
+  }
+ }
+]

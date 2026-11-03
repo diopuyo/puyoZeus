@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project_root="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+project_root="<home>/.gemini/antigravity/scratch/puyo_analyzer"
 mode="${1:?修正modeを指定してください}"
 output_root="${2:?新規出力rootを指定してください}"
 module_sha="${3:?候補sourceの固定SHAを指定してください}"

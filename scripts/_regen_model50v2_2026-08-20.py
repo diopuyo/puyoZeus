@@ -28,6 +28,14 @@ DL を試みる。年齢制限等で失敗した動画は status.tsv に FAIL �
 """
 from __future__ import annotations
 
+import sys as _public_release_sys
+from pathlib import Path as _PublicReleasePath
+_public_release_root = str(_PublicReleasePath(__file__).resolve().parents[0])
+if _public_release_root not in _public_release_sys.path:
+    _public_release_sys.path.insert(0, _public_release_root)
+from src.public_dev_paths import resolve_text as _public_dev_text
+
+
 import importlib.util
 import shutil
 import subprocess
@@ -46,7 +54,7 @@ assert _spec.loader is not None
 sys.modules[_spec.name] = orch
 _spec.loader.exec_module(orch)
 
-_NODE24_PATH = "/home/ryouj/.nvm/versions/node/v24.19.0/bin/node"
+_NODE24_PATH = _public_dev_text('<home>/.nvm/versions/node/v24.19.0/bin/node')
 _DL_RETRY_COUNT = 5
 _DL_RETRY_SLEEP_SEC = 45.0
 

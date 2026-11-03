@@ -32,7 +32,7 @@ Phase A / A2 / A3 / F **完了**。さらに **Phase G** (score OCR 推論を CS
 
 ### テスト
 - 全テスト数: **819 passed / 1 skipped** (旧 712 から +107、Phase A の 23 + A2 の 11 + 既存追加分)
-- 全テスト走行コマンド: `wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"`
+- 全テスト走行コマンド: `wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"`
 - 実行時間 約 9 分
 
 ## 3. 進行中（再開時に確認）
@@ -71,7 +71,7 @@ Phase A / A2 / A3 / F **完了**。さらに **Phase G** (score OCR 推論を CS
 - 再起動するならハンドオフ末尾の「Phase A3 再起動コマンド」参照
 
 ### ユーザ未対応
-- **視覚予告レビュー**: `C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\verify\ojama_warning_check.png` の目視確認（5 フレーム × 1P/2P）
+- **視覚予告レビュー**: `<home>\.gemini\antigravity\scratch\puyo_analyzer\data\verify\ojama_warning_check.png` の目視確認（5 フレーム × 1P/2P）
   - 既知の誤差例: 3200s 1P (210→90 過小), 0600s 1P (360→300 -1 個), 0285s 2P (150→120 -1 個)
   - レビュー結果次第で `incoming_ojama_pressure` を学習特徴量に残すか、score OCR 連動に置換するかを判断
 
@@ -560,10 +560,10 @@ ls -la scripts/verify_score_ojama_v2.py 2>&1
 ls -la data/verify/ojama_score_v2_*.json 2>&1
 
 # 2. 全テスト走行（成功すれば Phase A3 もきれいに完了）
-wsl -- bash -c "cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"
+wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"
 
 # 3. 視覚予告レビュー（ユーザにファイルを開いて確認してもらう）
-echo "C:\Users\ryouj\.gemini\antigravity\scratch\puyo_analyzer\data\verify\ojama_warning_check.png"
+echo "<home>\.gemini\antigravity\scratch\puyo_analyzer\data\verify\ojama_warning_check.png"
 
 # 4. Phase A3 が中途半端なら再起動
 #    エージェント ID a39e94ccd7ece3d86 に SendMessage で進捗確認、

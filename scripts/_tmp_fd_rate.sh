@@ -1,6 +1,6 @@
 #!/bin/bash
 # 動画fd読み込み位置の増加を90秒測り、実処理速度(%/分)を出す
-cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
+cd <home>/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 snap() {
   for pid in $(pgrep -f 'venv/bin/python -m scripts.collect_indicators_v2'); do
     out=$(tr '\0' ' ' < /proc/$pid/cmdline | grep -oE 'study/[a-z0-9_]+\.csv')

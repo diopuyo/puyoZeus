@@ -14,7 +14,7 @@
 # (winners_panel_diff_gated_2026-07-26 に4動画分のJSONは存在することを確認済みだが、
 #  今回の用途では不要なためスコープ外とした)。
 set -u
-PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
+PROJ_DIR="<home>/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 
 OUT_DIR="data/verify/labeled_win_extra4_2026-07-29"
