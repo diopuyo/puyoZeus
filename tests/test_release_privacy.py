@@ -15,7 +15,7 @@ from release_privacy import portable_provenance, refresh_model_hashes, sanitize_
 
 
 def test_provenance_preserves_fields_hashes_and_relative_members() -> None:
-    original = {'input_root': '/mnt/c/Users/ryouj/work/data', 'members': [{'name': 'seed/model.joblib', 'sha256': 'abc'}],
+    original = {'input_root': '/mnt/c/Users/Example/work/data', 'members': [{'name': 'seed/model.joblib', 'sha256': 'abc'}],
                 'input_sha256': {'C:/puyo1_work/run/rows.json': 'def'}, 'count': 17}
     result = portable_provenance(original)
     assert result['input_root'] == '<build>/work/data'
@@ -32,7 +32,7 @@ def test_bundle_copy_keeps_model_bytes_and_refreshes_manifest_hash(tmp_path: Pat
     model.write_bytes(b'unchanged-model')
     digest = hashlib.sha256(model.read_bytes()).hexdigest()
     manifest = models / 'manifest.json'
-    manifest.write_text(json.dumps({'input_root': 'C:/Users/ryouj/work', 'members': [{'name': model.name, 'sha256': digest}]}))
+    manifest.write_text(json.dumps({'input_root': 'C:/Users/Example/work', 'members': [{'name': model.name, 'sha256': digest}]}))
     sanitize_bundle_provenance(tmp_path)
     data = json.loads(manifest.read_text())
     assert hashlib.sha256((models / data['members'][0]['name']).read_bytes()).hexdigest() == digest
@@ -44,7 +44,7 @@ def test_recompile_replaces_existing_absolute_filename(tmp_path: Path, monkeypat
     source = tmp_path / 'app/module.py'
     source.parent.mkdir()
     source.write_text('def value():\n    return 42\n')
-    compiled = Path(py_compile.compile(str(source), dfile='C:/Users/ryouj/old/module.py'))
+    compiled = Path(py_compile.compile(str(source), dfile='C:/Users/Example/old/module.py'))
     real_run = subprocess.run
     def run_with_current_python(command: list[str], **kwargs):
         return real_run([sys.executable, *command[1:]], **kwargs)

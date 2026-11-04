@@ -24,21 +24,32 @@ class AppWindow:
     def __init__(self, url: str, root: Path, enabled: bool,
                  hidden: bool = False) -> None:
         self.url, self.root = url, root
+        self.default_url = url
         self.enabled, self.hidden = enabled, hidden
         self.window: Any = None
         self.finished = threading.Event()
         self.ready = threading.Event()
         self.pending_open = threading.Event()
         self.exiting = False
+        self.pending_path: str | None = None
 
-    def open(self) -> None:
+    def open(self, path: str | None = None) -> None:
+        if path is not None:
+            from urllib.parse import urljoin
+            self.pending_path = urljoin(self.default_url, path)
+        elif self.pending_path is None:
+            self.pending_path = self.default_url
         if self.enabled and not self.ready.is_set():
             self.pending_open.set()
         elif self.window is not None:
+            if self.pending_path is not None:
+                self.window.load_url(self.pending_path)
+                self.pending_path = None
             self.window.show()
             self.window.restore()
         else:
-            webbrowser.open(self.url)
+            webbrowser.open(self.pending_path or self.default_url)
+            self.pending_path = None
 
     def closing(self) -> bool:
         if self.exiting:
@@ -48,6 +59,9 @@ class AppWindow:
 
     def shown(self) -> None:
         self.ready.set()
+        if self.finished.is_set():
+            self.exiting = True
+            self.window.destroy()
 
     def set_icon(self) -> None:
         """pywebview 6.1のicon引数はWinForms非対応なのでnativeで設定する。"""
@@ -74,6 +88,8 @@ class AppWindow:
             self.window.destroy()
 
     def run(self) -> None:
+        if self.finished.is_set():
+            return
         threading.Thread(target=self.watch, daemon=True).start()
         if self.enabled:
             try:
@@ -81,12 +97,16 @@ class AppWindow:
                 # 6.1はEdge指定でも不在時にMSHTMLへ降りるため、作成前に確認する。
                 if webview.initialize('edgechromium').renderer != 'edgechromium':
                     raise RuntimeError('Edge WebView2 がありません')
+                if self.finished.is_set():
+                    return
                 self.window = webview.create_window(
                     TITLE, self.url, width=WINDOW_WIDTH, height=WINDOW_HEIGHT,
                     hidden=self.hidden)
                 self.window.events.closing += self.closing
                 self.window.events.before_show += self.set_icon
                 self.window.events.shown += self.shown
+                if self.finished.is_set():
+                    return
                 webview.start(func=None if self.hidden else self.open, gui='edgechromium',
                               icon=str(Path(__file__).parent / 'brand/app_logo.ico'))
                 return

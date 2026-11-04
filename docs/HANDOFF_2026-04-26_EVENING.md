@@ -64,8 +64,8 @@ Phase A / A2 / A3 / F **完了**。さらに **Phase G** (score OCR 推論を CS
   - `scripts/verify_score_ojama_v2.py` (video_02 の 3 試合で 3 方式比較)
 - **再開時のチェック**:
   ```bash
-  ls -la /c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/src/score_ocr.py
-  ls -la /c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/ojama_score_v2_*.json
+  ls -la /c/Users/<user>/.gemini/antigravity/scratch/puyo_analyzer/src/score_ocr.py
+  ls -la /c/Users/<user>/.gemini/antigravity/scratch/puyo_analyzer/data/verify/ojama_score_v2_*.json
   ```
 - スリープで WSL が停止すると CSV/モデル書込が中途半端になる可能性。`src/score_ocr.py` が存在し import 可能なら成功、欠損 or 部分書込なら再起動が必要。
 - 再起動するならハンドオフ末尾の「Phase A3 再起動コマンド」参照
@@ -551,7 +551,7 @@ F → G → G v2 → H/J → I → J → K (撤回) → L1 → L2 → M → N �
 
 ```bash
 # 0. 現在地確認
-cd /c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+cd /c/Users/<user>/.gemini/antigravity/scratch/puyo_analyzer
 
 # 1. Phase A3 完了状況確認
 ls -la src/score_ocr.py 2>&1

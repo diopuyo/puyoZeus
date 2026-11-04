@@ -72,7 +72,7 @@ def command(source: str, mode: str, dest: Path, seconds: int,
     flags = shlex.split(advantage_overlay_flags())
     if "--exchange-event-update" in flags:
         raise ValueError("OFF基準にexchange-event-updateが含まれている")
-    args = [sys.executable, "-m", "scripts.run_e3_exchange_eval_20260926",
+    args = [sys.executable, "-s", "-m", "scripts.run_e3_exchange_eval_20260926",
             "--worker", "--video", str(VIDEO_ROOT / f"{source}_first_0_900_20260925_v1.mp4"),
             "--out", str(dest / "overlay.mp4"), "--max-sec", str(seconds),
             "--dump-timeline", str(dest / "settled.npz"),

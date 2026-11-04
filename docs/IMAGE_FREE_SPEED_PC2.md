@@ -6,7 +6,7 @@
 モデルは前回の比較用のまま。fix1 完了後、統合したソースで段3を検収して最終版を再生成する。
 未合格票を手作業で合格へ書き換えない。
 
-1. 共有 `\\192.168.1.2\puyo_d\b3_data\codex_tasks\image_free_speed_pc2_v1.tar` と
+1. 共有 `\\192.0.2.2\example_share\b3_data\codex_tasks\image_free_speed_pc2_v1.tar` と
    `.tar.sha256` をPC2のローカルへコピーし、`sha256sum -c` で照合する。
 2. 新しいディレクトリへ `tar -xf image_free_speed_pc2_v1.tar` で展開する。
    既存の `image_free_parallel_pc2`・`image_free_recog2` は上書きしない。

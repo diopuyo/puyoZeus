@@ -16,6 +16,8 @@ BINARY_ASSETS.update({f'/mascot/{band}.webp': (f'brand/mascot_{band}.webp', 'ima
 BINARY_ASSETS.update({f'/fonts/{name}.woff2': (f'fonts/{name}.woff2', 'font/woff2')
                       for name in ('DelaGothicOne-Regular', 'NotoSansJP')})
 ASSETS = {'/overlay_expressions.js': ('overlay_expressions.js', 'text/javascript'),
+    '/distribution_ux.js': ('distribution_ux.js', 'text/javascript'),
+    '/distribution_ux.css': ('distribution_ux.css', 'text/css'),
     '/overlay_24h.js': ('overlay_24h.js', 'text/javascript'),
     '/overlay_battle.css': ('overlay_battle.css', 'text/css'),
     '/overlay_battle.js': ('overlay_battle.js', 'text/javascript'),
@@ -52,7 +54,10 @@ class OverlayPagesMixin:
 
     def do_GET(self) -> None:
         path = self.path.split('?')[0]
-        if path in BINARY_ASSETS:
+        if path == '/input-preview.jpg':
+            from .live_preview import current_image
+            self._serve_asset(current_image(), 'image/jpeg')
+        elif path in BINARY_ASSETS:
             filename, mime = BINARY_ASSETS[path]
             self._serve_asset((Path(__file__).parent / filename).read_bytes(), mime)
         elif path.startswith('/mascot/'):

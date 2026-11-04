@@ -14,8 +14,7 @@ for(const [value,label] of Object.entries(OverlayOptions.catalog.themes)) {
 /** @param {object} values */
 function setControls(values) {
   const options=OverlayOptions.resolve(values);
-  form.elements.x.value=options.x??'';form.elements.y.value=options.y??'';
-  options.layout=({card:'center',data:'center',ribbon:'center',l:'l-left','l-right':'l-left'})[options.layout]||options.layout;
+  options.layout=({card:'center',data:'center',ribbon:'center'})[options.layout]||options.layout;
   for(const [key,value] of Object.entries(options)) {
     const input=form.elements.namedItem(key);
     if(!input) continue;
@@ -27,21 +26,27 @@ function setControls(values) {
 function readControls() {
   const result={};
   for(const input of form.elements) if(input.name) result[input.name]=input.type==='checkbox'?input.checked:input.value;
-  result.mascot_band_edges=result.mascot_band_edges.split(',').map(v=>v.trim()===''?NaN:Number(v));
   result.scale=Number(result.scale);
-  for(const key of ['x','y']) {if(result[key]==='') delete result[key];else result[key]=Number(result[key]);}
-  return result;
+  return OverlayOptions.normalize(result);
 }
 /** @returns {void} */
 function updatePreview() {
-  const options=readControls(),query=new URLSearchParams(options),g=OverlayOptions.geometry(options);
+  const options=readControls(),query=new URLSearchParams(options),g=OverlayOptions.geometry(OverlayOptions.resolve(options));
   const isL=options.layout.startsWith('l');
-  get('position-controls').disabled=isL;
-  form.elements.recent.disabled=options.layout==='minimal';
-  form.elements.full.disabled=!isL||!options.band;
+  const placementHint=get('placement-hint');
+  if(placementHint) {
+    placementHint.hidden=!isL;
+    const placementEnglish=options.language==='en'||(options.language==='auto'&&!String(window.overlayDefaults?.os_language||navigator.language).startsWith('ja'));
+    placementHint.textContent=placementEnglish?
+      `In OBS, scale the game video to ${options.scale}% and place it at (${g.x}, ${g.y}).`:
+      `OBS でゲームの映像を ${options.scale}% に縮小し、位置 (${g.x}, ${g.y}) に置いてください`;
+  }
+  form.elements.mascot_dopamine.disabled=!options.mascot_dopamine_mode;
+  form.elements.mascot_speed.disabled=!options.mascot_eyes;
   for(const button of get('theme-samples').children) button.setAttribute('aria-pressed',String(button.dataset.theme===options.theme));
   get('l-controls').disabled=!isL;get('scale-value').value=`${options.scale}%`;
   const base=new URL('/',location.href);base.search=query.toString();get('url').value=base.href;
+  if(window.overlayDefaults.distribution_mode) get('url').value=new URL('/',location.href).href;
   get('json').value=JSON.stringify({overlay:options},null,2);
   get('copied').textContent='';
   get('placement').textContent=`ブラウザソース：1920 × 1080、位置 (0, 0)、最上面\nゲーム：位置 (${g.x}, ${g.y})、${g.width} × ${g.height}、縮小率 ${isL?options.scale:100}%\n`+
@@ -53,6 +58,7 @@ function updatePreview() {
   get('sample-label').textContent=live?'数値：現在の対戦データ／背景：選択した静止画':'数値と推移は見本用のサンプルです。';
   base.searchParams.set('preview',live?'live':'sample');get('overlay').src=base.href;
   window.PuyoI18n?.setLanguage(options.language);
+  window.scheduleAppearanceSave?.();
 }
 /** @returns {void} */
 function renderSample() {
@@ -71,13 +77,7 @@ function renderSample() {
   }
 }
 form.addEventListener('input',updatePreview);
-form.elements.layout.addEventListener('change',()=>{
-  const defaults=OverlayOptions.resolve({layout:form.elements.layout.value});
-  form.elements.corner.value=defaults.corner;
-  form.elements.x.value='';form.elements.y.value='';
-  for(const key of ['recent','full','details']) form.elements[key].checked=defaults[key];
-  updatePreview();
-});
+form.elements.layout.addEventListener('change',updatePreview);
 form.elements.theme.addEventListener('change',()=>{
   updatePreview();
 });

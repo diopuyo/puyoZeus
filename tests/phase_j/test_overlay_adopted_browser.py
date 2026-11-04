@@ -96,23 +96,26 @@ def test_legacy_ribbon_uses_center(browser: Browser, query: str) -> None:
 
 @pytest.mark.parametrize('path,theme_selector,layout_selector,preview', [
     ('/settings', '[name=theme]', '[name=layout]', '#overlay'),
-    ('/setup', '#theme', '#layout', '#preset'),
+    ('/setup', '[name=theme]', '[name=layout]', '#overlay'),
 ])
 def test_two_designs_four_layouts(browser: Browser, distribution: tuple, path: str,
                                  theme_selector: str, layout_selector: str, preview: str) -> None:
+    ui_layouts = ['center', 'minimal', 'vertical', 'l-top-left', 'l-top-right',
+                  'l-bottom-left', 'l-bottom-right']
     _, url = distribution
     page = browser.new_page(viewport={'width':1500,'height':1100})
     page.goto(url+path)
+    page.locator('#tab-appearance').click()
     themes = page.locator(theme_selector)
     layouts = page.locator(layout_selector)
     expect(themes).to_have_value('pop')
     expect(layouts).to_have_value('center')
     assert themes.locator('option').evaluate_all('(nodes)=>nodes.map(e=>e.value)') == THEMES
-    assert layouts.locator('option').evaluate_all('(nodes)=>nodes.map(e=>e.value)') == LAYOUTS
+    assert layouts.locator('option').evaluate_all('(nodes)=>nodes.map(e=>e.value)') == ui_layouts
     assert page.locator('[name=vgraph]').count() == 0
     for theme in THEMES:
         themes.select_option(theme)
-        for layout in LAYOUTS:
+        for layout in ui_layouts:
             layouts.select_option(layout)
             # 連続選択で前の iframe を検査しないよう、指定 URL の読み込み完了を待つ。
             page.wait_for_function('''selector=>{const frame=document.querySelector(selector);
@@ -122,6 +125,6 @@ def test_two_designs_four_layouts(browser: Browser, distribution: tuple, path: s
             }''', arg=preview)
             stage = page.frame_locator(preview).locator('#stage')
             expect(stage).to_have_attribute('data-pop', 'cream' if theme == 'pop-cream' else 'black')
-            expect(stage).to_have_attribute('data-layout', {'center':'side','vertical':'side','minimal':'mini','l-left':'l'}[layout])
+            expect(stage).to_have_attribute('data-layout', 'l' if layout.startswith('l-') else {'center':'side','vertical':'side','minimal':'mini'}[layout])
             expect(stage).to_have_attribute('data-vgraph', '1' if layout in ['center','vertical'] else '0')
     page.close()

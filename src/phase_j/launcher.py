@@ -411,7 +411,7 @@ def load_user_config(path: Path, allow_video: bool = False) -> UserConfig:
     """配布既定を補って読む。明示値を優先し、不正・資産不足は起動前に知らせる。"""
     if not path.is_file():
         raise LauncherConfigError(f'設定ファイルがありません: {path}\n'
-                                  'puyo_live.example.json をコピーして puyo_live.json を作ってください')
+                                  'tools/puyo_live.example.json をコピーして puyo_live.json を作ってください')
     try:
         data = json.loads(path.read_text(encoding='utf-8-sig'))
     except json.JSONDecodeError as error:

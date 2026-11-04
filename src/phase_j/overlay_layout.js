@@ -7,7 +7,7 @@ let fullHistory=[],fullStart=null;
 function applyOverlayOptions(options) {
   const stage=el('stage'),panel=el('panel'),band=el('band');
   const layouts={center:'side',card:'ribbon',ribbon:'side',minimal:'mini',vertical:'side',l:'l','l-left':'l','l-right':'l'};
-  stage.dataset.layout=layouts[options.layout]||'ribbon';
+  stage.dataset.layout=options.layout.startsWith('l-')?'l':layouts[options.layout]||'ribbon';
   stage.dataset.theme=options.theme==='pop-cream'?'pop':options.theme;
   stage.dataset.pop=options.theme==='pop-cream'?'cream':'black';
   stage.dataset.place=options.layout==='center'?'center':'edge';
@@ -24,6 +24,7 @@ function applyOverlayOptions(options) {
     Object.assign(panel.style,{left:`${g.columnX}px`,top:`${g.y}px`,width:`${g.columnWidth}px`,height:`${g.height}px`});
     Object.assign(band.style,{top:`${g.bandY}px`,height:`${g.bandHeight}px`});
   } else {
+    for(const property of ['left','top','width','height']) panel.style[property]='';
     if(options.x!==undefined) panel.style.left=`${options.x}px`;
     if(options.y!==undefined) panel.style.top=`${options.y}px`;
   }

@@ -12,31 +12,50 @@ import secrets
 import socket
 import time
 from typing import Any
+from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+MAX_REPORT_BYTES = 20 * 1024
+MAX_RECEIPT_BYTES = 8192
 MAX_REPORTS = 20
 LOG_LINES = 100
 MAX_LOG_BYTES = 64 * 1024
 SEND_TIMEOUT = 10
 PREVIEW_TTL = 15 * 60
 RELAY_PLACEHOLDER = 'https://puyolive-reports.example.invalid/api/reports'
+SECRET_FIELD = re.compile(r'password|passwd|secret|token|api[_-]?key', re.IGNORECASE)
+MIN_IDENTITY_LENGTH = 3
 
 
-def redact(value: Any, identities: tuple[str, ...] | None = None) -> Any:
+def redact(value: Any, identities: tuple[str, ...] | None = None, root: Path | None = None) -> Any:
     """構造・キーを含めて伏せ字にし、別ユーザーのホームパスも隠す。"""
     identities = identities or (getpass.getuser(), socket.gethostname(),
                                  os.environ.get('COMPUTERNAME', ''))
     if isinstance(value, dict):
-        return {redact(str(k), identities): redact(v, identities) for k, v in value.items()}
+        result = {}
+        for key, item in value.items():
+            if SECRET_FIELD.search(str(key)):
+                result[str(key)] = '[redacted]'
+            else:
+                result[redact(str(key), identities, root)] = redact(item, identities, root)
+        return result
     if isinstance(value, (list, tuple)):
-        return [redact(item, identities) for item in value]
+        return [redact(item, identities, root) for item in value]
     if not isinstance(value, str):
         return value
-    value = re.sub(r'(?i)([\\/]Users[\\/]|[\\/]home[\\/])[^\\/\s"\']+', r'\1[redacted]', value)
+    if root is not None:
+        pattern = r'[\\/]+'.join(re.escape(part) for part in re.split(r'[\\/]+', str(root).rstrip('\\/')))
+        value = re.sub(pattern + r'(?=$|[\\/\s"\'])', '<install>', value, flags=re.IGNORECASE)
+    value = re.sub(r'(?i)([\\/]+Users[\\/]+|[\\/]+home[\\/]+)[^\\/\s"\']+', r'\1[redacted]', value)
+    value = re.sub(r'(?i)OneDrive - [^\\/"\'\r\n]+', 'OneDrive - [redacted]', value)
+    if '@' in value:
+        value = re.sub(r'(?i)[\w.%+-]{1,64}@[\w.-]{1,253}\.[a-z]{2,63}', '[redacted]', value)
+    value = re.sub(r'(?<![\w:])[\\/]{2,}[^\\/\s"\']+[\\/]+[^\\/\s"\']+', '<network>', value)
+    value = re.sub(r'''(?i)\b(password|passwd|secret|token|api[_-]?key)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)''', r'\1\2[redacted]', value)
     for identity in sorted(set(identities), key=len, reverse=True):
-        if identity:
-            value = re.sub(re.escape(identity), '[redacted]', value, flags=re.IGNORECASE)
+        if len(identity) >= MIN_IDENTITY_LENGTH:
+            value = re.sub(r'(?<!\w)' + re.escape(identity) + r'(?!\w)', '[redacted]', value, flags=re.IGNORECASE)
     return value
 
 
@@ -78,6 +97,30 @@ def environment() -> dict[str, Any]:
     return result
 
 
+def receipt_counts(response: Any) -> dict[str, int]:
+    """応答の任意文字列は表示せず、受理件数と重複件数だけを採る。"""
+    try:
+        data = json.loads(response.read(MAX_RECEIPT_BYTES))
+    except (ValueError, TypeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {key: data[key] for key in ('accepted', 'duplicates')
+            if type(data.get(key)) is int and 0 <= data[key] <= MAX_REPORTS}
+
+
+def compact_report(report: dict[str, Any]) -> dict[str, Any]:
+    """数値要約を残し、大きい既存の補助情報から省略する。省略はプレビューにも出す。
+    version は受け口の必須欄 (version.app) なので省略しない。"""
+    report['omitted_fields'] = []
+    for key in ('recent_logs', 'installation_logs', 'self_diagnostics', 'error', 'settings', 'environment', 'summary'):
+        if len(json.dumps(report, ensure_ascii=False).encode('utf-8')) <= MAX_REPORT_BYTES:
+            break
+        report['omitted_fields'].append(key)
+        report[key] = [] if key.endswith('logs') else {} if isinstance(report[key], dict) else ''
+    return report
+
+
 class NoRedirect(HTTPRedirectHandler):
     """確認した送信先以外へのリダイレクトを拒否する。"""
 
@@ -89,8 +132,10 @@ class NoRedirect(HTTPRedirectHandler):
 class ReportStore:
     """未送信キューと、一回限り・期限つきの確認用スナップショット。"""
 
-    def __init__(self, directory: Path, fallback_directory: Path | None = None) -> None:
+    def __init__(self, directory: Path, fallback_directory: Path | None = None, root: Path | None = None) -> None:
         self.directory = directory
+        self.root = root
+        self.last_send_result: dict[str, Any] = {}
         self.fallback_directory = fallback_directory
         directory.mkdir(parents=True, exist_ok=True)
         identity = directory / 'installation_id.txt'
@@ -100,33 +145,63 @@ class ReportStore:
         self.previews: dict[str, tuple[float, dict[str, Any], list[Path], str]] = {}
 
     def report(self, version: dict[str, Any], settings: dict[str, Any], error: dict[str, Any],
-               diagnostics: dict[str, Any], logs: list[str], install_logs: list[str]) -> dict[str, Any]:
-        safe_error = redact(error)
+               diagnostics: dict[str, Any], logs: list[str], install_logs: list[str],
+               numeric_summary: dict[str, Any] | None = None) -> dict[str, Any]:
+        safe_error = redact(error, root=self.root)
         source = str(safe_error.get('type', 'manual')) + ':' + str(safe_error.get('location', 'settings'))
-        return redact(dict(schema_version=1, report_id=secrets.token_hex(16),
+        report = redact(dict(schema_version=1, report_id=secrets.token_hex(16),
             created_at=time.time(), installation_id=self.installation_id,
             version=version, environment=environment(), settings=settings, error=safe_error,
             fingerprint=hashlib.sha256(source.encode()).hexdigest(),
             summary=source, recent_logs=logs, installation_logs=install_logs,
-            self_diagnostics=diagnostics))
+            self_diagnostics=diagnostics), root=self.root)
+        if numeric_summary is not None:
+            report['numeric_summary'] = redact(numeric_summary, root=self.root)
+            report = compact_report(report)
+        return report
 
-    def preview(self, report: dict[str, Any], endpoint: str) -> dict[str, Any]:
+    def preview(self, report: dict[str, Any], endpoint: str,
+                max_reports: int | None = None) -> dict[str, Any]:
         self.previews = {k: v for k, v in self.previews.items() if time.time() - v[0] < PREVIEW_TTL}
         files = sorted(self.directory.glob('pending-*.json'))[-MAX_REPORTS:]
         if self.fallback_directory and self.fallback_directory.exists():
             files += sorted(self.fallback_directory.glob('pending-*.json'))[-MAX_REPORTS:]
-        reports = [redact(json.loads(p.read_text(encoding='utf-8-sig'))) for p in files]
+        stored = self.read_pending(files)
+        files = [path for path, _ in stored]
+        reports = [item for _, item in stored]
         reports = list({r['report_id']: r for r in reports}.values())
         reports.append(report)
+        if max_reports is not None:
+            if not 1 <= max_reports <= MAX_REPORTS:
+                raise ValueError('Invalid report limit')
+            reports = reports[-max_reports:]
+            selected = {item['report_id'] for item in reports}
+            files = [path for path, item in stored if item['report_id'] in selected]
         token = secrets.token_urlsafe(32)
         payload = dict(schema_version=1, reports=reports)
         self.previews[token] = (time.time(), payload, files, endpoint)
         local_only = (urlsplit(endpoint).hostname or '').endswith('.invalid')
         return dict(token=token, destination=endpoint, payload=payload, local_only=local_only)
 
+    def read_pending(self, files: list[Path]) -> list[tuple[Path, dict[str, Any]]]:
+        stored = []
+        for path in files:
+            try:
+                item = json.loads(path.read_text(encoding='utf-8-sig'))
+                if not isinstance(item, dict) or not isinstance(item.get('report_id'), str) or not item['report_id']:
+                    raise ValueError('Invalid pending report')
+                stored.append((path, redact(item, root=self.root)))
+            except (OSError, ValueError):
+                try:
+                    path.rename(path.with_name('invalid-' + secrets.token_hex(16) + '.json'))
+                except OSError:
+                    pass
+        return stored
+
     def send(self, token: str, confirmed: bool, allow_local: bool = False) -> bool:
         if confirmed is not True or token not in self.previews:
             raise ValueError('送信内容を確認してください / Review the report first')
+        self.last_send_result = {}
         created, payload, files, endpoint = self.previews.pop(token)
         if time.time() - created > PREVIEW_TTL:
             raise ValueError('確認期限切れ / Preview expired')
@@ -144,6 +219,11 @@ class ReportStore:
             with build_opener(NoRedirect()).open(request, timeout=SEND_TIMEOUT) as response:
                 if not 200 <= response.status < 300:
                     raise OSError('中継が受理しませんでした')
+                self.last_send_result = receipt_counts(response)
+        except HTTPError as error:
+            self.last_send_result = dict(status=error.code)
+            self.save(payload['reports'])
+            return False
         except Exception:
             self.save(payload['reports'])
             return False
@@ -154,7 +234,9 @@ class ReportStore:
     def save(self, reports: list[dict[str, Any]]) -> None:
         for report in reports:
             filename = 'pending-' + hashlib.sha256(str(report['report_id']).encode()).hexdigest() + '.json'
-            (self.directory / filename).write_text(json.dumps(redact(report), ensure_ascii=False), encoding='utf-8')
+            temporary = self.directory / (filename + '.' + secrets.token_hex(8) + '.tmp')
+            temporary.write_text(json.dumps(redact(report, root=self.root), ensure_ascii=False), encoding='utf-8')
+            temporary.replace(self.directory / filename)
         paths = sorted(self.directory.glob('pending-*.json'), key=lambda p: p.stat().st_mtime)
         for old in paths[:-MAX_REPORTS]:
             old.unlink()

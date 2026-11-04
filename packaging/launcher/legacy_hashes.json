@@ -1,0 +1,70 @@
+{
+  "mascot_expressions_preview.png": [
+    "5b1fd09b69c4299caa169aa1fdd847aba3a9392fc241fc4c29c3527b346e1992"
+  ],
+  "puyo_live.example.json": [
+    "2c51d9479bc7ce4b71dd6feed2ca125319de11893d24c4b2128a8912451e2362"
+  ],
+  "PuyoLive.bat": [
+    "5639dcf1a93ef5a5af84bcdd78d18e5879cd149d8a0827142bcc34fae1dceda6"
+  ],
+  "PuyoLive.vbs": [
+    "28ea23484385a501dba072d47d2febbdf9bfe6fb6f7b8f932b50524d15ee95f8"
+  ],
+  "puyoZeus Live.bat": [
+    "5639dcf1a93ef5a5af84bcdd78d18e5879cd149d8a0827142bcc34fae1dceda6"
+  ],
+  "puyoZeus Live.vbs": [
+    "28ea23484385a501dba072d47d2febbdf9bfe6fb6f7b8f932b50524d15ee95f8"
+  ],
+  "puyoZeus.bat": [
+    "5639dcf1a93ef5a5af84bcdd78d18e5879cd149d8a0827142bcc34fae1dceda6"
+  ],
+  "README.md": [
+    "e3e39bb5e13d947c69c2f0efafd03000d45ef621e6ae32f71636da0ce997269e"
+  ],
+  "README_distribution.md": [
+    "1ec6c265aaf1872c4e9925415ee3d4c248db21eabc4f1bea05d069ed600bec0c"
+  ],
+  "SendLogs.ps1": [
+    "44efd5b50ce9e328cc1128d90c00641abada77ac71c1c8591c7cb21f34c94bda"
+  ],
+  "Uninstall.bat": [
+    "f5e9b8f4c7bcd11a72903739facb5e6a03916c5554dbba3d0ec4ec0a8a72a3f3"
+  ],
+  "UninstallCleanup.ps1": [
+    "8e198a31ab08974a11ad40af7c6e8f3fe3a2937d1c882921ab517d5ed651cfe5"
+  ],
+  "アンインストール.bat": [
+    "f5e9b8f4c7bcd11a72903739facb5e6a03916c5554dbba3d0ec4ec0a8a72a3f3"
+  ],
+  "tools/PuyoLive.bat": [
+    "f6467f02f4caf2e0bec5c25934de6ea189534f904c9f1f6242d087e48db9c3d0"
+  ],
+  "tools/PuyoLive.vbs": [
+    "56b58000b650321864c2579ffd477e2828290ee30ac9d9164b1054714f231f81"
+  ],
+  "tools/puyoZeus Live.bat": [
+    "f6467f02f4caf2e0bec5c25934de6ea189534f904c9f1f6242d087e48db9c3d0"
+  ],
+  "tools/puyoZeus.bat": [
+    "f6467f02f4caf2e0bec5c25934de6ea189534f904c9f1f6242d087e48db9c3d0"
+  ],
+  "tools/Uninstall.bat": [
+    "8b7c2ac9fa0611152fa7e09d7a381cef61a774fa144fb67914c1ddad957f000d"
+  ],
+  "puyoZeus Live.exe": [
+    "ffb17c080c69a93507542777b8c90a9a31e1d65bfc24ee49313cdcd72b812f86",
+    "5c879867f57cd2695f696fb936b75b12e72d78c23e9bff8c6c1c486a3744ed95"
+  ],
+  "tools/puyoZeus Live.vbs": [
+    "56b58000b650321864c2579ffd477e2828290ee30ac9d9164b1054714f231f81"
+  ],
+  "tools/アンインストール.bat": [
+    "8b7c2ac9fa0611152fa7e09d7a381cef61a774fa144fb67914c1ddad957f000d"
+  ],
+  "アンインストール.exe": [
+    "7445a32b2f12ec6af49205468fa5f4f3759375fad8db43e4990df27a61765b82",
+    "46053fd73ac5c5fb7d2c769ca5016cbcbbd744aaa8a1e24e4edf99c93ec59636"
+  ]
+}

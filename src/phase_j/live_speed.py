@@ -187,6 +187,8 @@ def configure(options: argparse.Namespace, parser: argparse.ArgumentParser) -> N
     write_trial_flags_if_ready(options)
     from .live_native_hsv import configure_record_path
     configure_record_path(getattr(options, 'output', None))
+    from .live_screen_errors import configure_output as configure_screen_output
+    configure_screen_output(getattr(options, 'output', None))
     from .live_capture_reconnect import configure_output as configure_reconnect_output
     configure_reconnect_output(values['live_capture_reconnect'], getattr(options, 'output', None))
     from .live_verify_reasons import OUTPUT_ENV

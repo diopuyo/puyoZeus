@@ -31,8 +31,8 @@ def test_ribbon_bounds_numbers_and_recent(browser: Browser, p: float) -> None:
 def test_ribbon_explicit_options_and_position(browser: Browser) -> None:
     page=new_page(browser,'ribbon&theme=battle-a&x=900&y=650&recent=false&mascot=false')
     page.evaluate('renderSnapshot',selected(.5))
-    assert page.locator('#panel').bounding_box()==dict(x=900,y=650,width=244,height=560)
-    expect(page.locator('#trend')).to_be_hidden()
+    assert page.locator('#panel').bounding_box()==dict(x=838,y=180,width=244,height=560)
+    expect(page.locator('#trend')).to_be_visible()
     expect(page.locator('#mascot')).to_be_hidden()
     expect(page.locator('#battle-speech')).to_be_hidden()
     page.close()
@@ -71,19 +71,8 @@ def test_ribbon_settings_drag_and_overlap(browser: Browser, server: object) -> N
     frame=page.frame_locator('#overlay')
     expect(frame.locator('#panel')).to_have_attribute('data-layout','center')
     expect(frame.locator('#stage')).to_have_attribute('data-theme','pop')
-    expect(page.locator('#overlap-warning')).to_contain_text('主要なゲーム表示を避けた位置')
-    handle=page.locator('#drag-handle')
-    handle.scroll_into_view_if_needed()
-    b=handle.bounding_box()
-    page.mouse.move(b['x']+b['width']/2,b['y']+b['height']/2)
-    page.mouse.down()
-    page.mouse.move(b['x']+b['width']/2+70,b['y']+b['height']/2-20,steps=8)
-    page.mouse.up()
-    expect(page.locator('[name=x]')).not_to_have_value('')
+    assert page.locator('#drag-handle, [data-position], [name=x], [name=y]').count() == 0
     saved=json.loads(page.locator('#json').input_value())['overlay']
-    expect(frame.locator('#panel')).to_have_css('left',f"{saved['x']}px")
-    expect(frame.locator('#mascot')).to_have_css('left',f"{saved['x']+62}px")
-    expect(frame.locator('#mascot')).to_have_css('top',f"{saved['y']+568}px")
-    expect(frame.locator('#battle-speech')).to_have_css('left','50%')
-    assert saved['layout']=='center' and saved['theme']=='pop' and saved['mascot']
+    assert 'x' not in saved and 'y' not in saved
+    expect(frame.locator('#panel')).to_have_css('left','838px')
     page.close()

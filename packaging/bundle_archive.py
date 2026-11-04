@@ -6,15 +6,29 @@ from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import zipfile
+import shutil
 from hashlib import sha256
 from typing import Callable
 
 # 事前生成した __pycache__/*.pyc は製品資産なので保持する。
 RUNTIME_DIRS = frozenset({'logs', 'log', 'cache', '.cache', '.pytest_cache',
-                          'output', 'outputs', 'smoke', 'verification'})
+                          'output', 'output_history', 'outputs', 'smoke', 'verification'})
 RUNTIME_SUFFIXES = frozenset({'.log', '.tmp'})
 EXTRACTION_WORKERS = 32
 MAX_PRELOAD_BYTES = 1024**3
+HIDDEN_ROOT_FILES = frozenset({'python312.dll', 'vcruntime140.dll', 'vcruntime140_1.dll',
+                              'puyoZeus Live._pth', 'アンインストール._pth'})
+
+
+def zip_entry(bundle: Path, path: Path) -> zipfile.ZipInfo:
+    """Shell.Applicationで保持されるDOSの隠し属性を補助部品に付ける。"""
+    relative = path.relative_to(bundle).as_posix()
+    entry = zipfile.ZipInfo.from_file(path, f'{bundle.name}/{relative}')
+    entry.compress_type = zipfile.ZIP_DEFLATED
+    if relative in HIDDEN_ROOT_FILES:
+        entry.create_system = 0
+        entry.external_attr = 0x22  # DOS Hidden + Archive
+    return entry
 
 
 def is_runtime_file(relative: str) -> bool:
@@ -45,14 +59,15 @@ def write_bundle_zip(bundle: Path, archive: Path, in_memory: bool = False,
             with ThreadPoolExecutor(max_workers=EXTRACTION_WORKERS) as workers:
                 for index, (path, payload) in enumerate(zip(paths, workers.map(Path.read_bytes, paths)), 1):
                     name = f'{bundle.name}/{path.relative_to(bundle).as_posix()}'
-                    output.writestr(name, payload)
+                    output.writestr(zip_entry(bundle, path), payload)
                     if source_hashes is not None:
                         source_hashes[name] = sha256(payload).hexdigest()
                     if progress is not None:
                         progress(index, len(paths))
         else:
             for path in paths:
-                output.write(path, f'{bundle.name}/{path.relative_to(bundle).as_posix()}')
+                with path.open('rb') as source, output.open(zip_entry(bundle, path), 'w') as target:
+                    shutil.copyfileobj(source, target)
     if in_memory:
         with archive.open('xb') as stream:
             stream.write(destination.getbuffer())

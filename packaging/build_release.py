@@ -21,9 +21,10 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'packaging')]
-from build_bundle import build, DEFAULT_ASSET_ROOT, write_manifest, precompile, copy_licenses
+from build_bundle import build, DEFAULT_ASSET_ROOT, write_manifest, precompile, LICENSE_PATTERNS
 from bundle_archive import is_runtime_file, write_bundle_zip
 from release_privacy import sanitize_bundle_provenance, refresh_model_hashes
+from build_launchers import build_launchers
 
 DEFAULT_OUTPUT = Path('D:/puyo_analyzer/b3_data/codex_tasks/dist_app_release')
 INPUTS = Path('D:/puyo_analyzer/packaging')
@@ -42,6 +43,14 @@ RC_MODEL_DIRS = ('b3_c2', 'b3_c2_ens', 'b3_ex_L200H_retR', 'ama_plain', 'live_ex
 WINDOW_WHEELS = ('pywebview==6.1', 'bottle==0.13.4', 'pythonnet==3.2.1',
                  'clr_loader==0.3.1', 'cffi==2.1.1', 'pycparser==3.12',
                  'typing_extensions==4.16.0')
+PYTHON_RUNTIME_CONFIG = ('<configuration><runtime><loadFromRemoteSources enabled="true"/>'
+                         '</runtime></configuration>\n')
+
+
+def write_python_runtime_configs(bundle: Path) -> None:
+    """エクスプローラーが引き継いだダウンロード印でも同梱DLLを読めるようにする。"""
+    for executable in ('python.exe', 'pythonw.exe'):
+        (bundle / 'python' / (executable + '.config')).write_text(PYTHON_RUNTIME_CONFIG, encoding='ascii')
 
 
 def prepare_window_wheels(output: Path) -> None:
@@ -102,11 +111,41 @@ def copy_rc_assets(bundle: Path, models: Path) -> dict[str, str]:
     return hashes
 
 
+# 0.6.0 の補助別名との互換性を保つ。全原文は相対パス付きで別途保存する。
+FLAT_LICENSE_SOURCES = {
+    'numpy-2.4.4': {
+        'license.md': 'licenses/numpy/fft/pocketfft/LICENSE.md',
+        'license': 'licenses/numpy/_core/src/umath/svml/LICENSE',
+    },
+}
+
+
+def copy_flat_release_licenses(bundle: Path) -> None:
+    """平坦な補助別名の採用元を固定。原文は後で相対パス付きで全て保存する。"""
+    site = bundle / 'python/Lib/site-packages'
+    for info in sorted(site.glob('*.dist-info')):
+        sources = {path for pattern in LICENSE_PATTERNS for path in info.rglob(pattern)
+                   if path.is_file()}
+        selected: set[str] = set()
+        for source in sorted(sources, key=lambda path: path.relative_to(info).as_posix()):
+            key = source.name.casefold()
+            if key in selected:
+                continue
+            selected.add(key)
+            preferred = FLAT_LICENSE_SOURCES.get(info.name.removesuffix('.dist-info'), {}).get(key)
+            if preferred and (info / preferred).is_file():
+                source = info / preferred
+            target = bundle / 'LICENSES' / info.name.removesuffix('.dist-info') / source.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+
+
 def copy_release_licenses(bundle: Path) -> None:
     """同名の原文を元の相対ディレクトリ付きで保存する。"""
+    copy_flat_release_licenses(bundle)
     site = bundle / 'python/Lib/site-packages'
-    for info in site.glob('*.dist-info'):
-        for source in info.rglob('*'):
+    for info in sorted(site.glob('*.dist-info')):
+        for source in sorted(info.rglob('*')):
             if source.is_file() and ('licenses' in source.relative_to(info).parts
                                     or source.name.upper().startswith(('LICEN', 'COPYING', 'NOTICE'))):
                 relative = source.relative_to(info)
@@ -122,7 +161,7 @@ def copy_release_licenses(bundle: Path) -> None:
     shutil.copytree(ROOT / 'native/puyo_core/licenses', bundle / 'LICENSES/puyo_core', dirs_exist_ok=True)
     shutil.copytree(ROOT / 'packaging/licenses/release', bundle / 'LICENSES', dirs_exist_ok=True)
     copy_window_licenses(bundle)
-    for name in ('LICENSE', 'README.md', 'THIRD_PARTY_NOTICES.md'):
+    for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md'):
         shutil.copy2(ROOT / name, bundle / name)
     for target in (bundle / 'LICENSES').rglob('*'):
         if target.is_file() and target.stat().st_mtime < ZIP_EPOCH_SECONDS:
@@ -140,6 +179,17 @@ def prune_release_development_files(bundle: Path) -> None:
     for path in site.rglob('*'):
         if path.is_file() and path.suffix.lower() in development_suffixes:
             path.unlink()
+    # 常駐版は描画せず、オフラインの認識描画だけで使う台本は含めない。
+    scripts = bundle / 'app/scripts'
+    (scripts / 'visualize_recognition.py').unlink(missing_ok=True)
+    for path in (scripts / '__pycache__').glob('visualize_recognition.*.pyc'):
+        path.unlink()
+    # 既存のステージを再利用する場合も、旧い調整値のバックアップを残さない。
+    backup = bundle / 'app/data/per_video_hsv_ranges/_backup_pre_expand_yellow'
+    if backup.is_dir():
+        if not backup.resolve().is_relative_to(bundle.resolve()):
+            raise ValueError('バックアップが配布先の外を指しています')
+        shutil.rmtree(backup)
 
 
 def safe_output(output: Path) -> Path:
@@ -194,9 +244,56 @@ def retain_python_vc_runtime(bundle: Path, output: Path) -> None:
                 target.unlink(missing_ok=True)
 
 
+def write_sendlogs(bundle: Path) -> None:
+    """旗に応じた宛先を単一の設定から取り、zipとインストーラーで共有する。"""
+    from src.phase_j.distribution_config import feedback_site_url
+    from src.phase_j.distribution_logs import RELAY_PLACEHOLDER
+    script = (ROOT / 'packaging/SendLogs.ps1').read_text(encoding='ascii')
+    site = feedback_site_url()
+    if site:
+        endpoint = (site + "/api/reports").replace("'", "''")
+        script = script.replace(RELAY_PLACEHOLDER, endpoint)
+    (bundle / 'tools').mkdir(exist_ok=True)
+    (bundle / 'tools/SendLogs.ps1').write_text(script, encoding='ascii')
+
+
+def arrange_launchers(bundle: Path) -> None:
+    """直下の起動・削除入口を各1つにし、互換入口はtoolsへ置く。"""
+    tools = bundle / 'tools'
+    tools.mkdir(exist_ok=True)
+    keep = set()
+    for source in bundle.iterdir():
+        if source.suffix.lower() not in ('.bat', '.vbs') or source.name in keep:
+            continue
+        target = tools / source.name
+        if target.exists():
+            raise FileExistsError(target)
+        content = source.read_text(encoding='utf-8-sig')
+        if source.suffix.lower() == '.bat':
+            content = content.replace('%~dp0', '%~dp0..\\')
+        else:
+            content = content.replace('fs.GetParentFolderName(WScript.ScriptFullName)',
+                                      'fs.GetParentFolderName(fs.GetParentFolderName(WScript.ScriptFullName))')
+        target.write_text(content, encoding='utf-8')
+        source.unlink()
+
+
+def arrange_release_documents(bundle: Path) -> None:
+    """説明書は日英併記の1つとし、補助ファイルをtoolsへまとめる。"""
+    tools = bundle / 'tools'
+    tools.mkdir(exist_ok=True)
+    shutil.copy2(ROOT / 'packaging/puyo_live.example.json', tools / 'puyo_live.example.json')
+    shutil.copy2(ROOT / 'docs/mascot_expressions_preview.png', tools / 'mascot_expressions_preview.png')
+    shutil.copy2(ROOT / 'docs/DISTRIBUTION_APP_GUIDE.md', bundle / 'README_ja.txt')
+    for name in ('README.md', 'README_distribution.md', 'SendLogs.ps1', 'UninstallCleanup.ps1',
+                 'puyo_live.example.json', 'mascot_expressions_preview.png'):
+        (bundle / name).unlink(missing_ok=True)
+
+
 def finish_bundle(output: Path, version: str, model: Path, rc_models: Path = RC_MODELS, model_label: str = '24w2-temporary') -> Path:
     bundle = output / 'build/PuyoLive'
     retain_python_vc_runtime(bundle, output)
+    write_python_runtime_configs(bundle)
     if digest(bundle / 'app/models/b3/model.joblib') != digest(model):
         raise ValueError('同梱モデルと指定モデルが一致しません')
     for wheel in (output / 'camera_wheels').glob('*.whl'):
@@ -211,17 +308,18 @@ def finish_bundle(output: Path, version: str, model: Path, rc_models: Path = RC_
         code_sha=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         dirty=bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True)))
     (bundle / 'app/RELEASE.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
-    for source, dest in (('PuyoLive-distribution.bat', 'PuyoLive.bat'), ('PuyoLive-distribution.bat', 'puyoZeus Live.bat'), ('PuyoLive-distribution.bat', 'puyoZeus.bat'), ('SendLogs.ps1', 'SendLogs.ps1')):
+    for source, dest in (('PuyoLive-distribution.bat', 'PuyoLive.bat'), ('PuyoLive-distribution.bat', 'puyoZeus Live.bat'), ('PuyoLive-distribution.bat', 'puyoZeus.bat')):
         shutil.copy2(ROOT / 'packaging' / source, bundle / dest)
+    write_sendlogs(bundle)
     shutil.copy2(ROOT / 'packaging/PuyoLive.vbs', bundle / 'puyoZeus Live.vbs')
     shutil.copy2(ROOT / 'packaging/PuyoLive.vbs', bundle / 'PuyoLive.vbs')
     for name in ('Uninstall.bat', 'アンインストール.bat'):
         shutil.copy2(ROOT / 'packaging/Uninstall.bat', bundle / name)
-    shutil.copy2(ROOT / 'packaging/UninstallCleanup.ps1', bundle / 'UninstallCleanup.ps1')
+    shutil.copy2(ROOT / 'packaging/UninstallCleanup.ps1', bundle / 'tools/UninstallCleanup.ps1')
+    arrange_launchers(bundle)
+    build_launchers(bundle, version)
     (bundle / 'mascot').mkdir(exist_ok=True)
-    shutil.copy2(ROOT / 'docs/mascot_expressions_preview.png', bundle / 'mascot_expressions_preview.png')
-    shutil.copy2(ROOT / 'docs/DISTRIBUTION_APP_GUIDE.md', bundle / 'README_distribution.md')
-    shutil.copy2(ROOT / 'docs/DISTRIBUTION_APP_GUIDE.md', bundle / 'README_ja.txt')
+    arrange_release_documents(bundle)
     precompile(bundle / 'python', bundle / 'app', bundle / 'python/Lib/site-packages')
     files = [p for p in (bundle / 'app').rglob('*') if p.is_file() and p.name != 'MANIFEST.json']
     write_manifest(bundle, files)

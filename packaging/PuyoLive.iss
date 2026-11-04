@@ -56,10 +56,10 @@ Name: "{group}\{cm:Uninstall}"; Filename: "{uninstallexe}"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "distribution.json,puyo_live.json,output\*,logs\*,install.log"
-Source: "SendLogs.ps1"; Flags: dontcopy
+Source: "{#SourceDir}\tools\SendLogs.ps1"; Flags: dontcopy
 
 [Run]
-Filename: "{app}\python\pythonw.exe"; Parameters: "-m src.phase_j.distribution_app --root ""{app}"" --setup"; WorkingDir: "{app}"; Description: "{cm:InitialSetup}"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\python\pythonw.exe"; Parameters: "-s -m src.phase_j.distribution_app --root . --setup"; WorkingDir: "{app}"; Description: "{cm:InitialSetup}"; Flags: postinstall nowait skipifsilent
 
 [UninstallDelete]
 ; 保存後の再インストールでは既存扱いになる親も、空の場合だけ片付ける。
@@ -86,7 +86,7 @@ function CleanupCommand(Options: String): Boolean;
 var ExitCode: Integer;
 begin
   Result := Exec(ExpandConstant('{app}\python\python.exe'),
-    '-B -m src.phase_j.distribution_uninstall --root "' + ExpandConstant('{app}') + '" ' + Options,
+    '-s -B -m src.phase_j.distribution_uninstall --root . ' + Options,
     ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ExitCode);
   Result := Result and (ExitCode = 0);
 end;
@@ -98,7 +98,7 @@ begin
   if CompareText(ExtractFileName(ParamStr(0)), '_unins.tmp') <> 0 then Exit;
   TempDirectory := ExtractFileDir(ParamStr(0));
   Helper := TempDirectory + '\PuyoLiveUninstallCleanup.ps1';
-  if not FileCopy(ExpandConstant('{app}\UninstallCleanup.ps1'), Helper, False) then Exit;
+  if not FileCopy(ExpandConstant('{app}\tools\UninstallCleanup.ps1'), Helper, False) then Exit;
   Args := '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' +
     Helper + '" -UninstallerPid ' + IntToStr(UninstallProcessId);
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Args,
@@ -210,7 +210,7 @@ begin
     if MsgBox(L('インストールが完了しませんでした。「ログを送る」の確認画面を開きますか？内容を表示し、SEND と入力した時だけ送信します。',
       'Installation did not finish. Open Send logs? The report is shown first and sent only when you type SEND.'), mbConfirmation, MB_YESNO) = IDYES then begin
       Args := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\SendLogs.ps1') + '" -LogPath "' + ExpandConstant('{log}') + '" -AppVersion "{#ReleaseVersion}" -CodeSha "{#ReleaseCodeSHA}" -ModelSha "{#ReleaseModelSHA}"';
-      Exec('powershell.exe', Args, '', SW_SHOWNORMAL, ewWaitUntilTerminated, ExitCode);
+      Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Args, '', SW_SHOWNORMAL, ewWaitUntilTerminated, ExitCode);
     end;
   end;
 end;

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
-from playwright.sync_api import Browser, Page
+from playwright.sync_api import Browser, Page, expect
 
 from scripts.render_overlay_design import new_page, snapshot, SCENES
 from src.phase_j.live_publish import LiveOverlayServer, LiveStreamState
@@ -51,9 +51,10 @@ def test_switches_work_on_every_layout(browser: Browser, key: str, selector: str
     for layout in ['card', 'ribbon', 'minimal', 'data', 'l-right', 'l-left']:
         for enabled in ['true', 'false']:
             page = new_page(browser, f'{layout}&{key}={enabled}')
-            supported = (key == 'numbers' or key == 'recent' and layout != 'minimal'
-                         or key == 'full' and layout.startswith('l'))
-            assert page.locator(selector).is_visible() == (enabled == 'true' and supported)
+            # 廃止された切替指定より、配置ごとの 0.6.0 初期値を優先する。
+            visible = key == 'numbers' or (key == 'recent' and layout != 'minimal')
+            visible = visible or (key == 'full' and layout.startswith('l'))
+            assert page.locator(selector).is_visible() == visible
             page.close()
 
 
@@ -84,26 +85,26 @@ def test_http_defaults_url_override_and_settings(browser: Browser, server: LiveO
     page.on('pageerror', lambda error: errors.append(str(error)))
     origin = f'http://127.0.0.1:{server.address()[1]}'
     page.goto(origin + '/?preview=sample&scale=85&numbers=true')
-    assert page.evaluate('overlayOptions.layout') == 'l-left'
+    assert page.evaluate('overlayOptions.layout') == 'l-top-right'
     assert page.evaluate('overlayOptions.scale') == 85
     assert page.locator('#p1').is_visible()
     page.goto(origin + '/settings')
     page.locator('#image').set_input_files(SCENES['early'][1])
-    page.locator('[name=corner]').select_option('bottom-right')
+    page.locator('[name=layout]').select_option('l-bottom-right')
     page.locator('[name=scale]').fill('80')
-    page.locator('[name=full]').check()
+    assert page.locator('[name=full]').count() == 0
     assert page.locator('[name=midline]').is_hidden()
     assert 'midline=adaptive' in page.locator('#url').input_value()
     assert '"midline": "adaptive"' in page.locator('#json').input_value()
     assert '位置 (384, 216)' in page.locator('#placement').inner_text()
-    assert 'numbers=false' in page.locator('#url').input_value()
+    assert 'numbers=' not in page.locator('#url').input_value()
     frame = page.frame_locator('#overlay')
     frame.locator('#p1').wait_for(state='attached')
-    assert frame.locator('#state').inner_text() == '対戦中'
+    # 見本は iframe の load 後に描画されるため、要素の存在だけでは待ち足りない。
+    expect(frame.locator('#state')).to_have_text('対戦中')
     assert frame.locator('#stage').get_attribute('data-midline') == 'adaptive'
     assert page.locator('#frame').is_visible()
     page.locator('#scene').select_option('result')
-    from playwright.sync_api import expect
     expect(frame.locator('#state')).to_have_text('決着 · 2P')
     assert 'preview=' not in page.locator('#url').input_value()
     assert not errors
@@ -139,8 +140,8 @@ def test_invalid_url_uses_valid_file_defaults(browser: Browser, server: LiveOver
     page = browser.new_page()
     page.goto(f'http://127.0.0.1:{server.address()[1]}/?preview=sample&scale=100&layout=bad&numbers=bad')
     assert page.evaluate('overlayOptions.scale') == 75
-    assert page.evaluate('overlayOptions.layout') == 'l-left'
-    assert page.locator('.scores').is_hidden()
+    assert page.evaluate('overlayOptions.layout') == 'l-top-right'
+    assert page.locator('.scores').is_visible()
     assert page.request.get(f'http://127.0.0.1:{server.address()[1]}/puyo_live.json').status == 404
     page.close()
 

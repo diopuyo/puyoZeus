@@ -17,7 +17,7 @@ def test_reject_invalid(value: object) -> None:
 
 def test_partial_and_independent_options() -> None:
     data = dict(layout='l-left', corner='bottom-right', scale=77.5, numbers=False)
-    assert validate_overlay(data) == data
+    assert validate_overlay(data) == dict(layout='l-bottom-right', scale=77.5)
     assert validate_overlay({}) == {}
 
 
@@ -33,10 +33,11 @@ def test_launcher_to_pipeline_keeps_options(tmp_path: Path) -> None:
                    numbers=False, recent=True, full=True, status=False, details=True, font='large')
     user = parse_user_config(dict(device_name='OBS Virtual Camera', overlay=overlay), tmp_path)
     pipeline = build_pipeline_config(user)
-    assert pipeline['overlay'] == overlay
+    expected = validate_overlay(overlay)
+    assert pipeline['overlay'] == expected
     path = tmp_path / 'pipeline.json'
     path.write_text(json.dumps(dict(overlay=pipeline['overlay'])), encoding='utf-8')
-    assert _file_defaults(argparse.ArgumentParser(), path)['overlay'] == overlay
+    assert _file_defaults(argparse.ArgumentParser(), path)['overlay'] == expected
 
 
 def test_launcher_invalid_overlay_is_configuration_error(tmp_path: Path) -> None:

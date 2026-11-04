@@ -11,7 +11,7 @@ import subprocess
 import tarfile
 import time
 
-SHARE = r'\\192.168.1.2\puyo_d\b3_data\codex_tasks\image_free_speed_stream_v1'
+SHARE = r'\\192.0.2.2\example_share\b3_data\codex_tasks\image_free_speed_stream_v1'
 POLL_SECONDS = 30
 
 

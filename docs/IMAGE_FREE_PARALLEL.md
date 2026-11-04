@@ -23,7 +23,7 @@ CPUはSMT兄弟を避けて物理コアを優先する。既定最大4作業だ�
 起動例（PC1）:
 
 ```powershell
-wsl -d Ubuntu -- bash -lc 'setsid -f bash /mnt/d/puyo_analyzer/b3_data/codex_tasks/image_free_recog2/run_parallel.sh >> /mnt/d/puyo_analyzer/b3_data/codex_tasks/image_free_recog2/parallel.log 2>&1 < /dev/null'
+wsl -d Ubuntu -- bash -lc 'setsid -f bash /mnt/d/example_project/b3_data/codex_tasks/image_free_recog2/run_parallel.sh >> /mnt/d/example_project/b3_data/codex_tasks/image_free_recog2/parallel.log 2>&1 < /dev/null'
 ```
 
 進行はsupervisor.jsonと各動画のprogress.json、確定点はcheckpoint.json。
@@ -33,8 +33,8 @@ workerのexit_codesが非ゼロの場合はその動画のparallel.logを調べ�
 全終了後のresult.jsonは合格判定をしない。候補の画像読込禁止など固定比較側の検査を保つ。
 
 PC2が利用可能になるまではPC1の4本を継続する。
-PC2作業一式と詳細手順は `D:/puyo_analyzer/b3_data/codex_tasks/image_free_parallel_pc2/`。
-転送先は `\\192.168.1.2\puyo_d\codex_tasks\image_free_parallel_pc2`。
+PC2作業一式と詳細手順は `D:/example_project/b3_data/codex_tasks/image_free_parallel_pc2/`。
+転送先は `\\192.0.2.2\example_share\codex_tasks\image_free_parallel_pc2`。
 PC2用configはvideo_d01/video_d02の2本。絶対パス入りpickleの移植を避け0から実行する。
 PC2で両動画の進行確認後、PC1ジョブ直下のparallel_control.jsonへ
 `{"disabled_videos":["video_d01","video_d02"]}` を保存する。

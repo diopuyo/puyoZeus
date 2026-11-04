@@ -2,7 +2,7 @@
 # 分割点確認用: 候補6点(#1,2,3,5,6,7)の前後フレームを元動画から切り出し
 # #5,6,7 はセット境界候補として広めの窓も取る
 set -e
-cd "/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+cd "/c/Users/<user>/.gemini/antigravity/scratch/puyo_analyzer"
 SRC="data/frames/video_zenchi_c0BQoMJwwQU.mp4"
 OUTDIR="data/verify/zenchi_boundary_confirm_2026-08-21"
 mkdir -p "$OUTDIR"

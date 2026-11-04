@@ -3438,47 +3438,6 @@ def _expected_fire_mc_k3k4(
     return {3: (sums[3], sq_sums[3], n_samples), 4: (sums[4], sq_sums[4], n_samples)}
 
 
-def _expected_fire_search(
-    board: Board,
-    colors: "tuple[int, ...]",
-    sim: ChainSimulator,
-    beam_width: int,
-    k_levels: "tuple[int, ...]",
-    n_samples: int,
-    elapsed_sec: float,
-    rng: "random.Random",
-) -> ExpectedFireResult:
-    """expected_fire_power の本体探索ループ (モンテカルロ、K=1,2同時チェックポイント)。
-
-    1サンプル = 「ランダム色ペアを _near_future_known_expand (near_future の
-    既知ペア展開ロジックをそのまま再利用) で最適配置」を K 回繰り返す
-    ロールアウト。max_k (=2) 手分ロールアウトし、K=1 到達時点・K=2 到達時点の
-    両方の running max をチェックポイントとして記録する (near_future と
-    同じ「サンプルを使い回す」設計、モンテカルロを2重に走らせない)。
-    """
-    max_k = max(k_levels)
-    sums = {k: 0.0 for k in k_levels}
-    sq_sums = {k: 0.0 for k in k_levels}
-
-    for _ in range(n_samples):
-        frontier: "list[tuple[float, Board]]" = [(0.0, board)]
-        best_score = 0.0
-        for hand in range(1, max_k + 1):
-            if frontier:
-                pair = _expected_fire_sample_pair(rng, colors)
-                expanded = _near_future_known_expand(frontier, pair, sim)
-                if expanded:
-                    frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
-                    top_score = expanded[0][0]
-                    if top_score > best_score:
-                        best_score = top_score
-                else:
-                    frontier = []  # 以降のホライズンも配置不能 (満杯等)、値を据え置く
-            if hand in k_levels:
-                sums[hand] += best_score
-                sq_sums[hand] += best_score * best_score
-
-    return _expected_fire_finalize(sums, sq_sums, k_levels, n_samples, elapsed_sec)
 
 
 def _expected_fire_finalize(

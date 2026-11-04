@@ -49,8 +49,11 @@ LIVE_VERIFY_ENTRY_FAST_RETRY_DEFAULT = False
 LIVE_CHAIN_FORECAST_RECHECK_DEFAULT = False
 LIVE_CHAIN_END_FORMULA_DEFAULT = False
 
+# 2026-11-03: 0.6.1準備。サイト未開設のため未採用・既定OFF。確認後の手動送信だけ。
+DISTRIBUTION_SITE_FEEDBACK = False
+
 # 2026-11-02: 専用の設定窓。PC1の採否決定前につき既定OFF（app_window_20261102）。
-DISTRIBUTION_APP_WINDOW = True  # 2026-11-02 PC1案、user確認待ち。常駐窓の注文。
+DISTRIBUTION_APP_WINDOW = True  # 2026-11-03 user 承認 (11-02 PC1 案、常駐窓の注文)。0.6.0 で配布。
 
 from dataclasses import dataclass
 
@@ -2023,7 +2026,7 @@ RELEASE_LIVE_DEFAULTS: dict[str, bool | float] = {
     'live_disable_power_throttling': True,
     # 追補で24w2との差を許可された診断記録。その他のDも既存OFFを維持する。
     'live_stage_timing': False, 'live_verify_reason_log': False,
-    # 2026-11-02 PC1案・user確認待ち。低水準の比較用既定はOFFを維持。
+    # 2026-11-03 user 承認 (11-02 PC1 案、W64 の直しと連鎖の予測の直し)。0.6.0 で配布。低水準の比較用既定はOFFを維持。
     'live_verify_entry_fast_retry': True,
     'live_chain_forecast_recheck': True,
     'live_chain_end_formula': True,

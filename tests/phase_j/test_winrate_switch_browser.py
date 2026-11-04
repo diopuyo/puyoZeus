@@ -20,7 +20,7 @@ def test_line1_graph_and_number() -> None:
             data['evaluations']['winrate_switch'] = dict(line1=value, b3=.4, source1='v4.9f')
             page.evaluate('data => renderSnapshot(data)', data)
         page.wait_for_timeout(250)
-        assert '撃ち合い+B3' == page.locator('#heading').inner_text()
+        assert '勝率' == page.locator('#heading').inner_text()
         assert '30' in page.locator('#p1').inner_text()
         assert page.locator('#whole-trace').get_attribute('d').count('L') == 2
         assert 'B3: 40.0%' in page.locator('#heading').get_attribute('title')

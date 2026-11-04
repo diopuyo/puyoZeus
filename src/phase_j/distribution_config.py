@@ -12,12 +12,21 @@ from urllib.parse import urlsplit
 
 from .distribution_logs import RELAY_PLACEHOLDER
 from .overlay_config import validate_overlay
+from .distribution_secret import protect, unprotect
 from src.production_config import DISTRIBUTION_APP_WINDOW
+
+# 正式なサイト住所が決まったら、この1か所だけを変更する。
+DISTRIBUTION_SITE_URL = 'https://puyolive-site.pages.dev'
+
+def feedback_site_url() -> str:
+    from src.production_config import DISTRIBUTION_SITE_FEEDBACK
+    return DISTRIBUTION_SITE_URL.rstrip('/') if DISTRIBUTION_SITE_FEEDBACK else ''
+
 
 DEFAULT_PORT = 8765
 MAX_PORT_ATTEMPTS = 100
 PREVIEW_WIDTH = 640
-DEFAULTS: dict[str, Any] = dict(completed=False, language='auto', device_index=0,
+DEFAULTS: dict[str, Any] = dict(completed=False, onboarding_seen=False, language='auto', device_index=0,
     device_name='OBS Virtual Camera', port=DEFAULT_PORT, check_updates=False,
     relay_url=RELAY_PLACEHOLDER, releases_url='https://puyolive.example.invalid/releases.json',
     auto_input=True, obs_enabled=False, obs_port=4455, obs_password='', desktop_shortcut=False, start_menu_shortcut=True, autostart=False, overlay={},
@@ -35,14 +44,22 @@ def os_language() -> str:
 
 def load_settings(root: Path) -> dict[str, Any]:
     path = root / 'distribution.json'
-    return validate_settings(json.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else {})
+    raw = json.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else {}
+    if not isinstance(raw, dict):
+        raise ValueError('JSON object required')
+    saved_password = raw.get('obs_password', '')
+    raw['obs_password'] = unprotect(saved_password)
+    settings = validate_settings(raw)
+    if isinstance(saved_password, str) and saved_password:
+        save_settings(root, settings)
+    return settings
 
 
 def validate_settings(data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(data, dict) or set(data) - DEFAULTS.keys():
         raise ValueError('不明な設定 / Unknown settings')
     value = {**DEFAULTS, **data}
-    for key in ('auto_input', 'obs_enabled', 'completed', 'check_updates', 'desktop_shortcut', 'start_menu_shortcut', 'autostart', 'distribution_app_window'):
+    for key in ('auto_input', 'obs_enabled', 'completed', 'onboarding_seen', 'check_updates', 'desktop_shortcut', 'start_menu_shortcut', 'autostart', 'distribution_app_window'):
         if type(value[key]) is not bool:
             raise ValueError(f'{key}: true / false')
     for key, low, high in (('obs_port', 1024, 65535), ('port', 1024, 65535), ('device_index', 0, 64)):
@@ -58,12 +75,22 @@ def validate_settings(data: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f'{key}: HTTPS URL required')
     if not isinstance(value['obs_password'], str):
         raise ValueError('OBS password must be text')
+    site = feedback_site_url()
+    if site:
+        value.update(relay_url=site + '/api/reports', releases_url=site + '/releases.json')
+    else:
+        for key, suffix in (('relay_url', '/api/reports'), ('releases_url', '/releases.json')):
+            if value[key] == DISTRIBUTION_SITE_URL.rstrip('/') + suffix:
+                value[key] = DEFAULTS[key]
     value['overlay'] = validate_overlay(value['overlay'])
     return value
 
 
 def save_settings(root: Path, settings: dict[str, Any]) -> None:
     value = validate_settings(settings)
+    if feedback_site_url():
+        value.update(relay_url=DEFAULTS['relay_url'], releases_url=DEFAULTS['releases_url'])
+    value['obs_password'] = protect(value['obs_password'])
     temporary = root / 'distribution.json.tmp'
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
     temporary.replace(root / 'distribution.json')

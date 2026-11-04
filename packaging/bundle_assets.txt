@@ -55,6 +55,7 @@ models/landing_counter_prob_v1
 data/indicators_v2/phase_platt_calibration.json
 data/indicators_v2/platt_calibration.json
 data/indicators_v2/winprob_calib.json
+# _backup_pre_expand_yellow は expand_asset の除外対象。現行の調整値だけを配布する。
 data/per_video_hsv_ranges
 data/puyo_profiles
 data/verify/chain_length_conditional_2026-08-13.json
@@ -66,11 +67,13 @@ data/verify/retrain148_2026-08-14/model_full148_full_features.joblib
 src/phase_j/overlay_i18n.js
 src/phase_j/overlay_mascot.js
 src/phase_j/distribution_settings.js
-src/phase_j/distribution_setup.js
-src/phase_j/distribution_setup.html
+src/phase_j/obs_camera_stopped.png
 src/adaptive_background.py
 src/cell_recovery_refiner.py
 src/exchange_origin_evidence.py
 src/image_free_ui_ensemble.py
 src/roi_auto_calibrator.py
 src/roi_calibration.py
+src/phase_j/distribution_ux.js
+src/phase_j/distribution_ux.css
+src/phase_j/distribution_remove.py

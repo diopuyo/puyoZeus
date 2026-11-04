@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION = '0.6.0-preview.11'
 ASSETS = ('overlay.html', 'overlay_options.js', 'overlay_position.js', 'overlay_layout.js',
     'overlay_mascot.js', 'overlay_themes.css', 'overlay_settings.html', 'overlay_settings.js',
-    'distribution_setup.html', 'distribution_setup.js', 'overlay_i18n.js')
+    'overlay_i18n.js')
 SERVER_CODE = '''import json
 import src.phase_j.live_publish as module
 server=module.LiveOverlayServer(module.LiveStreamState(),'127.0.0.1',0)

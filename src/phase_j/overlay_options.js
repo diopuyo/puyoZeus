@@ -5,9 +5,9 @@ window.OverlayOptions=(()=>{
   const DEFAULT_SCALE=80, PERCENT=100, BAND_EDGES=[10,30,70,90], EDGE_COUNT=4;
   // 設定ページに出す選択肢はここだけで管理する。
   const catalog={themes:{pop:'ポップ (黒)','pop-cream':'ポップ (クリーム)'},
-    layouts:{center:'真ん中の柱',minimal:'小さい帯',vertical:'縦','l-left':'L字'}};
+    layouts:{center:'真ん中の柱',minimal:'小さい帯',vertical:'縦','l-top-left':'L字・左上','l-top-right':'L字・右上','l-bottom-left':'L字・左下','l-bottom-right':'L字・右下'}};
   const aliases={'battle-a':'pop',esports:'pop',normal:'pop',classic:'pop',noir:'pop',neon:'pop',arena:'pop',stylish:'pop',plain:'pop'};
-  const enums={layout:['center','card','ribbon','minimal','data','l-right','l-left','l','vertical'],
+  const enums={layout:['center','card','ribbon','minimal','data','l-right','l-left','l','vertical','l-top-left','l-top-right','l-bottom-left','l-bottom-right'],
     corner:['top-left','top-right','bottom-left','bottom-right'],font:['small','medium','large'],
     midline:['split','line','glow','adaptive'],theme:['pop',...Object.keys(catalog.themes),...Object.keys(aliases)],
     language:['auto','ja','en'],mascot_position:['left','right','card'],mascot_size:['small','medium','large'],mascot_dopamine:['low','normal','high'],mascot_speed:['0.5','1','1.5','2']};
@@ -15,7 +15,7 @@ window.OverlayOptions=(()=>{
     'content_hands','content_return','content_margin','content_bound','content_unknown',
     'content_active','content_step','content_length','content_remaining','content_seconds',
     'content_k1','content_colors','content_ojama','content_model'];
-  const flags=[...contentFlags,'band','numbers','recent','full','status','details','mascot','mascot_motion','mascot_eyes','mascot_expressions','mascot_flip_right','mascot_bloodshot','debug_panel','vgraph'];
+  const flags=[...contentFlags,'band','numbers','recent','full','status','details','mascot','mascot_dopamine_mode','mascot_motion','mascot_eyes','mascot_expressions','mascot_flip_right','mascot_bloodshot','debug_panel','vgraph'];
   // 配信で読む主要項目だけを既定表示し、補足は個別設定で追加する。
   const defaultContents=['pending','return','margin','step','length','k1'].map(key=>`content_${key}`);
   /** @param {object} input @returns {object} */
@@ -40,17 +40,30 @@ window.OverlayOptions=(()=>{
     if(Array.isArray(edges)&&edges.length===EDGE_COUNT&&edges.every((v,i)=>
       typeof v==='number'&&Number.isFinite(v)&&v>0&&v<PERCENT&&(i===0||v>edges[i-1])))
       result.mascot_band_edges=[...edges];
+    return normalize(result);
+  }
+  /** @param {object} input @returns {object} */
+  function normalize(input) {
+    const result={...input};
+    if(['l','l-left','l-right'].includes(result.layout))
+      result.layout='l-'+(result.corner||(result.layout==='l-left'?'top-right':'top-left'));
+    if(result.mascot_dopamine_mode===undefined&&
+      ('mascot_motion' in result||'mascot_expressions' in result))
+      result.mascot_dopamine_mode=result.mascot_motion!==false&&result.mascot_expressions!==false;
+    for(const key of ['x','y','corner','mascot_flip_right','mascot_band_edges','numbers','recent','full','mascot_motion','mascot_expressions']) delete result[key];
     return result;
   }
   /** @param {object} defaults @param {string} query @returns {object} */
   function resolve(defaults={},query='') {
+    if(defaults.distribution_mode&&!new URLSearchParams(query).has('preview')) query='';
     const selected={...valid(defaults),...valid(Object.fromEntries(new URLSearchParams(query)))};
     // 旧URLの指定を記録しつつ、見た目は対応する採用デザインに統一する。
     const requestedTheme=new URLSearchParams(query).get('theme')??defaults.theme;
     selected.legacyTheme=!requestedTheme||Boolean(aliases[requestedTheme]);
-    const layout=selected.layout||'center', isL=layout.startsWith('l');
-    return {...Object.fromEntries(contentFlags.map(key=>[key,defaultContents.includes(key)])),layout,midline:'adaptive',theme:'pop',corner:layout==='l-left'?'top-right':'top-left',scale:DEFAULT_SCALE,font:'medium',
-      mascot_dopamine:'normal',mascot_speed:'1',mascot_bloodshot:false,debug_panel:false,vgraph:false,mascot_band_edges:[...BAND_EDGES],language:'auto',mascot:true,mascot_motion:true,mascot_eyes:true,mascot_expressions:true,mascot_flip_right:false,mascot_position:'card',mascot_size:'medium',
+    const layout=selected.layout||'center', isL=layout.startsWith('l-');
+    const mode=selected.mascot_dopamine_mode!==false;
+    return {...Object.fromEntries(contentFlags.map(key=>[key,defaultContents.includes(key)])),layout,midline:'adaptive',theme:'pop',corner:isL?layout.slice(2):'top-left',scale:DEFAULT_SCALE,font:'medium',
+      mascot_dopamine:'normal',mascot_speed:'1',mascot_bloodshot:false,debug_panel:false,vgraph:false,mascot_band_edges:[...BAND_EDGES],language:'auto',mascot:true,mascot_dopamine_mode:mode,mascot_motion:mode,mascot_eyes:true,mascot_expressions:mode,mascot_flip_right:false,mascot_position:'card',mascot_size:'medium',
       band:true,numbers:true,recent:layout!=='minimal',full:isL,status:true,
       details:isL||layout==='data',...selected};
   }
@@ -67,7 +80,7 @@ window.OverlayOptions=(()=>{
   function isBattle(options) {
     return !options.debug_panel&&['pop','pop-cream','stylish','plain'].includes(options.theme);
   }
-  return {resolve,geometry,flags,catalog,WIDTH,HEIGHT,isBattle};
+  return {resolve,normalize,geometry,flags,catalog,WIDTH,HEIGHT,isBattle};
 })();
 
 // 入力・実行状態を同じ言葉で案内する。判定値には触れない。
@@ -76,12 +89,19 @@ window.DistributionStatus=(state,language='ja')=>{
   const d=state.diagnostics||{},en=language==='en';
   const value=(kind,ja,english,next,nextEnglish)=>({kind,title:en?english:ja,next:en?nextEnglish:next});
   if(state.error) return value('error','起動・実行エラー','Startup or runtime error',
-    '入力を確認してください。実行中ならアプリを終了して開き直してください。続く場合は「表示設定・ログを送る」で記録を確認できます。',
+    '入力を確認してください。実行中ならトレイの「終了」で停止して開き直してください。続く場合は「表示設定・ログを送る」で記録を確認できます。',
     'Check input. If the app is running, quit and reopen it. If this continues, review the report in Display settings / Send logs.');
+  if(d.input_waiting) {
+    const parts=(d.input?.message||'試合が映るのを待っています / Waiting for a match to appear').split(' / ');
+    return value('waiting','試合待ち','Waiting for a match',parts[0],parts[1]||parts[0]);
+  }
   if(d.scanning) return value('checking','入力を確かめています','Checking input',
     'OBS の仮想カメラを探しています。少しお待ちください。','Looking for OBS Virtual Camera. Please wait.');
-  if(!state.running) return value('stopped','起動前','Ready to set up',
-    '入力と見た目を選び、下の「保存して起動」を押してください。','Choose your input and style, then Save and start below.');
+  if(!state.running) return value('stopped','起動前','Ready to start',
+    'OBS の仮想カメラを開始し、上の「起動」を押してください。','Start OBS Virtual Camera, then click Start above.');
+  if(d.calibration==='obs_stopped') return value('error','要対応','Needs attention',
+    'OBS の仮想カメラが止まっています。OBS の「仮想カメラ開始」を押してください',
+    'OBS Virtual Camera has stopped. Click Start Virtual Camera in OBS.');
   if(d.calibration==='overlay_feedback') return value('error','入力の設定を確認','Check input settings',
     'OBS 仮想カメラの出力を「ソース」にして、ゲームのキャプチャだけを選んでください。',
     'Set OBS Virtual Camera output to Source and select only the game capture.');

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 原resource guard/実wait/親finalizeを保持する固定区間。外側setsid -f -wで起動する。
 set -euo pipefail
-project=/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer
+project=/mnt/c/Users/"<user>"/.gemini/antigravity/scratch/puyo_analyzer
 runner=data/verify/g2_second_prefix_runtime_2026-09-14_v40/target_entry.py
 guard=data/verify/g2_bounded_publication_runtime_2026-09-09_v1/resource_guard.py
 supervisor=data/verify/g2_m1_paced_runtime_2026-09-13_v12/supervise.py

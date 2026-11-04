@@ -1,6 +1,5 @@
 """固定テンプレートのFFTを再利用する単一スレッドNCC照合。"""
 from __future__ import annotations
-from src.phase_j.live_color_roi import full_image
 
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -130,6 +129,7 @@ class PreparedTemplate:
         scores = self.scores(image, prepared)
         _, maximum, _, position = cv2.minMaxLoc(scores)
         if maximum >= threshold-NCC_DECISION_MARGIN:
+            from src.phase_j.live_color_roi import full_image
             scores = cv2.matchTemplate(full_image(image), self.template, cv2.TM_CCOEFF_NORMED)
             _, maximum, _, position = cv2.minMaxLoc(scores)
         return float(maximum), position

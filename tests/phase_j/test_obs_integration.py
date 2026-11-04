@@ -108,6 +108,7 @@ class MockObs:
         self.inputs: list[dict] = []
         self.items: list[dict] = []
         self.active = False
+        self.settings: dict = {}
 
     def handle(self, socket: object) -> None:
         socket.send(json.dumps(dict(op=0,d=dict(rpcVersion=1,authentication=dict(salt='salt',challenge='challenge')))))
@@ -128,6 +129,10 @@ class MockObs:
             return dict(currentProgramSceneName='Temporary test scene')
         if kind == 'GetSceneItemList':
             return dict(sceneItems=self.items)
+        if kind == 'GetInputSettings':
+            return dict(inputSettings=self.settings[data['inputName']])
+        if kind == 'SetInputSettings':
+            self.settings[data['inputName']].update(data['inputSettings'])
         if kind == 'GetInputList':
             return dict(inputs=self.inputs)
         if kind == 'GetVirtualCamStatus':
@@ -137,6 +142,7 @@ class MockObs:
         if kind == 'CreateInput':
             assert data['inputSettings']['width'] == 1920
             assert data['inputSettings']['height'] == 1080
+            self.settings[data['inputName']] = data['inputSettings'].copy()
             self.inputs.append(dict(inputName=data['inputName']))
             self.items.append(dict(sourceName=data['inputName'],inputKind='browser_source'))
         return {}
@@ -155,7 +161,7 @@ def test_obs_real_protocol_read_apply_idempotent_and_auth() -> None:
         assert obs.calls.count('CreateInput') == 1
         assert obs.calls.count('StartVirtualCam') == 1
         assert len(obs.inputs) == 1
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError, match='OBS のパスワードが違います.*The OBS password is incorrect'):
             integrate({**settings,'obs_password':'wrong'}, 'http://127.0.0.1:8765/')
         server.shutdown()
 

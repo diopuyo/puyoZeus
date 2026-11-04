@@ -1,6 +1,11 @@
 'use strict';
 // 公開DTOと数値はそのままに、表示用テキストとアクセシビリティ属性だけ翻訳する。
 const PUYO_TRANSLATIONS={
+ 'OBS の仮想カメラを開始してください':'Start OBS Virtual Camera',
+ 'ドーパミンモード':'Dopamine mode','L字・左上':'L-shaped / top left','L字・右上':'L-shaped / top right',
+ 'L字・左下':'L-shaped / bottom left','L字・右下':'L-shaped / bottom right','起動':'Start','停止':'Stop',
+ '停止中':'Stopped','動作中':'Running',
+
  'デザイン':'Design','リボン':'Ribbon','ミニ帯':'Mini strip','サイド柱':'Side column',
  '目を動かす':'Animate eyes','表情を変える':'Change expressions',
  'ドーパミンの動きを有効にする':'Enable dopamine motion',
@@ -24,6 +29,7 @@ const PUYO_TRANSLATIONS={
 "OBS 連携をオンにする":"Enable OBS integration",
 "WebSocket ポート":"WebSocket port",
 "OBS パスワード":"OBS password",
+"パスワードを消去":"Clear password",
 "空欄なら保存済みのパスワードを使います。パスワードはこのPCだけに保存し、ログには含めません。":"Leave blank to keep the saved password. It stays on this PC and is excluded from reports.",
 "接続・シーンを確認":"Check connection and scene",
 "今のシーンに表示を追加・仮想カメラ開始":"Add overlay to current scene and start Virtual Camera",
@@ -46,11 +52,8 @@ const PUYO_TRANSLATIONS={
     '目の充血':'Bloodshot eyes over time', '目のスピード':'Eye speed',
     '起動から30分・45分・60分で充血が強くなります。再起動でリセット。':'Increases at 30, 45 and 60 minutes after app startup. Restart to reset.',
 
-    'アンインストール':'Uninstall',
-    'アンインストールを開始':'Start uninstall',
-    'アプリを終了し、アンインストールを開始しますか？':'Exit the app and start uninstalling?',
-    '開いた画面で続けてください。このページは閉じられます。':'Continue in the window that opened. You can close this page.',
-    'インストーラー版は下のボタン、スタートメニュー、または Windows の「アプリ」から削除できます。zip版は下のボタンか同梱の Uninstall.bat（アンインストール.bat）を実行し、登録解除後に展開フォルダを削除してください。設定・ログ・記録は既定で残します。削除を選んだ場合だけ消します。':'For the installer edition, use the button below, Start menu, or Windows Apps. For the ZIP edition, use the button below or run the included Uninstall.bat, then delete the extracted folder after cleanup. Settings, logs and recordings are kept by default and removed only if you choose to delete them.',
+    '報告のフォルダを開く':'Open report folder',
+    '感想フォームを開く':'Open feedback form',
     'puyoZeus Live — 対戦分析':'puyoZeus Live — Match Analysis',
     'puyoZeus Live':'puyoZeus Live',
     '表情の境界（1P勝率%、昇順4値）':'Expression thresholds (1P win %, four ascending values)',
@@ -85,7 +88,7 @@ const PUYO_TRANSLATIONS={
     '設定ファイルの既定値として使う':'Use as configuration defaults',
     'puyo_live.json の最上位に以下の overlay を追加・置換し、次回起動時に反映します。他の設定は残してください。':'Add or replace the overlay object in puyo_live.json. Keep other settings. Changes apply on next launch.',
     '選択したURLを Ctrl+C でコピーしてください':'Press Ctrl+C to copy the selected URL',
-    '設定ファイルの既定に戻す':'Reset to saved defaults','コピーしました':'Copied',
+    '見た目を初期に戻す':'Reset appearance','コピーしました':'Copied',
     '表示言語':'Display language','OSの言語':'OS language','日本語':'Japanese',
     'ゼウスくんを表示':'Show Zeus-kun','ゼウスくん':'Mascot','勝率が動いたときの動き':'Animate large probability changes',
     'カード横':'Beside card','左下':'Bottom left','右下':'Bottom right','大きさ':'Size',
@@ -106,7 +109,7 @@ const PUYO_TRANSLATIONS={
     '見本の数値':'Preview values','序盤（サンプル）':'Opening (sample)','撃ち合い（サンプル）':'Exchange (sample)','決着（サンプル）':'Result (sample)',
     '現在の対戦データ':'Current match data','表示の見本':'Overlay preview','URLをコピー':'Copy URL',
     '保存しました':'Saved','設定を保存':'Save settings','ログを送る':'Send logs','初期設定':'Initial setup','送信内容の確認':'Review report',
-    'アプリを終了':'Quit app','終了しました。このページを閉じてください。':'Stopped. You can close this page.',
+    'トレイの「終了」':'Exit in the tray','終了しました。このページを閉じてください。':'Stopped. You can close this page.',
     '起動・実行エラー。ログを送るから内容を確認できます。':'Startup or runtime error. Select Send logs to review the report.',
     '新しい版があります:':'New version available:',
     '自動送信はしません。保存済みの未送信ログも含みます。':'Nothing is sent automatically. Previously saved unsent reports are included.',
@@ -122,12 +125,24 @@ const PUYO_TRANSLATIONS={
     '1P推移':'1P history','1P勝率':'1P win probability','現在':'Now','位置':'Position','対戦の勝率':'Match win probability',
     '返し':'Response','おじゃま':'Garbage','状態':'Status','点/個':' points/puyo','個':' puyos','秒':' s','手':' moves'
   };
+Object.assign(PUYO_TRANSLATIONS,{"はじめに": "Getting started", "閉じる": "Close", "OBS の仮想カメラを開始します。": "Start OBS Virtual Camera.", "上の「起動」を押します。試合が映るまで待機します。": "Click Start above. The app waits until a match appears.", "URL をコピーして OBS のブラウザソースへ追加します（1920×1080）。": "Copy the URL into an OBS Browser Source (1920×1080).", "終了はトレイ（通知領域）のメニューから。": "To quit, use Exit in the system tray menu.", "アプリの設定": "App settings", "デスクトップにショートカットを作る": "Create a desktop shortcut", "スタートメニューにショートカットを作る": "Create a Start menu shortcut", "Windows 起動時に自動起動する": "Start automatically with Windows", "起動時に更新を確認する": "Check for updates at startup", "詳細": "Advanced", "アプリのポート番号": "App port", "ポート番号の変更はアプリの次回起動時に反映されます。": "Port changes take effect the next time the app starts.", "OBS への追加": "Add to OBS", "ブラウザソース": "Browser Source", "OBS にブラウザソースを追加し、幅 1920・高さ 1080 に設定します。": "Add an OBS Browser Source with width 1920 and height 1080."});
+Object.assign(PUYO_TRANSLATIONS,{
+    '配信':'Stream','見た目':'Appearance','その他':'Other','詳しく':'Details',
+    '配信を始める、見た目を変える、アプリを設定する。':'Start streaming, change the look, and set up the app.',
+    'OBS を自動で設定':'Set up OBS automatically','自分で設定する場合':'Set up manually',
+    'OBS の「ツール → WebSocket サーバー設定」でサーバーを有効にします。':'In OBS, open Tools → WebSocket Server Settings and enable the server.',
+    'そこで表示されるパスワードを下に入力します。':'Enter the password shown there below.',
+    'アプリが見ている映像':'What the app sees','入力を切り替える':'Switch input',
+    '自動で選ぶ':'Choose automatically','映像を確認':'Check video','まだ映像がありません':'No video yet',
+    'ゼウスくんの細かな設定':'More mascot settings','変更は自動で保存され、OBS に反映されます。':'Changes are saved automatically and applied to OBS.',
+    '試合待ち':'Waiting for a match','解析中':'Analyzing','要対応':'Needs attention','見本にゲーム画像を重ねる':'Add a game image to the sample'
+  });
 window.PuyoI18n=(()=>{
   const dictionary=PUYO_TRANSLATIONS;
   const exact={'小':'Small','中':'Medium','大':'Large','あり':'Yes','なし':'No','連鎖':'Chain'};
   const pattern=new RegExp(Object.keys(dictionary).sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'),'g');
   let language='ja';const originals=new WeakMap(),attributes=new WeakMap();
-  const originalTitle=document.title;
+  const originalTitle=window.overlayDefaults?.distribution_mode?'puyoZeus Live':document.title;
   /** @param {string} text @returns {string} */
   function t(text) {return language==='ja'?text:exact[text]||text.replace(pattern,key=>dictionary[key]);}
   /** @param {Node} root @returns {void} */
@@ -135,7 +150,7 @@ window.PuyoI18n=(()=>{
     if(!root) return;
     const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
     while(walker.nextNode()) {
-      const node=walker.currentNode;if(node.parentElement?.closest('script,style,textarea,pre')) continue;
+      const node=walker.currentNode;if(node.parentElement?.closest('script,style,textarea,pre,[data-i18n-transient]')) continue;
       const saved=originals.get(node),source=saved&&node.nodeValue===saved.output?saved.source:node.nodeValue;
       const output=t(source);originals.set(node,{source,output});if(node.nodeValue!==output) node.nodeValue=output;
     }
@@ -149,8 +164,11 @@ window.PuyoI18n=(()=>{
   }
   /** @param {string} requested @returns {void} */
   function setLanguage(requested) {
+    const previous=language;
     language=requested==='auto'?(String(window.overlayDefaults?.os_language||navigator.language).startsWith('ja')?'ja':'en'):requested;
-    if(!['ja','en'].includes(language)) language='ja';document.documentElement.lang=language;document.title=t(originalTitle);translate();
+    if(!['ja','en'].includes(language)) language='ja';document.documentElement.lang=language;
+    if(previous!==language) document.dispatchEvent(new Event('puyo-language-change'));
+    document.title=t(originalTitle);translate();
   }
   const observer=new MutationObserver(()=>translate());
   setLanguage(OverlayOptions.resolve(window.overlayDefaults,location.search).language);

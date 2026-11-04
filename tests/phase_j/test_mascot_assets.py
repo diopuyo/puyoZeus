@@ -61,7 +61,8 @@ def test_http_animated_assets_and_custom_override(distribution: tuple, band: int
 @pytest.mark.parametrize('name', ['mascot_expressions', 'mascot_flip_right'])
 def test_config_requires_booleans(name: str) -> None:
     for value in (True, False):
-        assert validate_overlay({name: value}) == {name: value}
+        expected = {'mascot_dopamine_mode': value} if name == 'mascot_expressions' else {}
+        assert validate_overlay({name: value}) == expected
     for value in ('true', 1, None):
         with pytest.raises(ValueError):
             validate_overlay({name: value})
@@ -70,7 +71,7 @@ def test_config_requires_booleans(name: str) -> None:
 @pytest.mark.parametrize('edges', [
     [10, 30, 70, 90], [20, 40, 60, 80], [5.5, 25, 75, 95.5]])
 def test_config_accepts_custom_band_edges(edges: list[float]) -> None:
-    assert validate_overlay({'mascot_band_edges': edges}) == {'mascot_band_edges': edges}
+    assert validate_overlay({'mascot_band_edges': edges}) == {}
 
 
 @pytest.mark.parametrize('edges', [

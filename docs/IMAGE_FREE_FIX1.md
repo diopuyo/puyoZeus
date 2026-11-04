@@ -1,6 +1,6 @@
 画像なしUI認識の再学習・比較手順
 
-作業票と学習データは `D:/puyo_analyzer/b3_data/codex_tasks/image_free_fix1/`。
+作業票と学習データは `D:/example_project/b3_data/codex_tasks/image_free_fix1/`。
 旧 `image_free_recog2/` のモデル・確定チャンク・再開状態は変更しない。
 `PUYO_IMAGE_FREE_ALL` は既定OFFを維持する。
 
@@ -39,7 +39,7 @@
 死亡は `ui.death_0` / `ui.death_1` に閾値適用前のスコアを記録する。
 
 PC2引き継ぎは新しい `image_free_fix1_pc2.tar` を使用する。
-共有先は `\\192.168.1.2\puyo_d\codex_tasks\image_free_fix1_pc2`。
+共有先は `\\192.0.2.2\example_share\codex_tasks\image_free_fix1_pc2`。
 同梱の手順書に従いPC2のローカル領域へ展開し、ソースハッシュと配置先を検証する。
 PC2分は d01・d02 の2本で、PC1のpickleを移植せず0フレームから始める。
 PC2は統括の指示で起動し、両動画の進捗確認後にPC1の同動画を無効化する。

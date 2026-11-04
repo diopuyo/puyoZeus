@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-LAYOUTS = ('center', 'card', 'ribbon', 'minimal', 'data', 'l-right', 'l-left', 'l', 'vertical')
+LAYOUTS = ('center', 'card', 'ribbon', 'minimal', 'data', 'l-right', 'l-left', 'l', 'vertical',
+           'l-top-left', 'l-top-right', 'l-bottom-left', 'l-bottom-right')
 CORNERS = ('top-left', 'top-right', 'bottom-left', 'bottom-right')
 FONT_SIZES = ('small', 'medium', 'large')
 THEMES = ('stylish', 'plain', 'normal', 'esports', 'pop', 'pop-cream', 'classic', 'neon', 'arena', 'noir', 'battle-a')
@@ -19,7 +20,7 @@ BOOL_KEYS = frozenset({
     'content_active', 'content_step', 'content_length', 'content_remaining', 'content_seconds',
     'content_k1', 'content_colors', 'content_ojama', 'content_model',
 })
-BOOL_KEYS |= frozenset({'vgraph', 'mascot', 'mascot_eyes', 'mascot_motion', 'mascot_expressions', 'mascot_flip_right', 'mascot_bloodshot'})
+BOOL_KEYS |= frozenset({'mascot_dopamine_mode', 'vgraph', 'mascot', 'mascot_eyes', 'mascot_motion', 'mascot_expressions', 'mascot_flip_right', 'mascot_bloodshot'})
 # 試験用の情報パネル (L字配置のときだけ表示)。既定OFF。
 BOOL_KEYS |= frozenset({'debug_panel'})
 ENUMS = dict(layout=LAYOUTS, corner=CORNERS, font=FONT_SIZES, theme=THEMES, midline=MIDLINES,
@@ -52,7 +53,24 @@ def validate_overlay(value: Any) -> dict[str, Any]:
                 any(type(edge) not in (int, float) or not 0 < edge < PERCENT for edge in edges) or
                 any(left >= right for left, right in zip(edges, edges[1:]))):
             raise ValueError('overlay.mascot_band_edges は0〜100の間の昇順4値です')
-    return dict(value)
+    return normalize_overlay(value)
+
+
+def normalize_overlay(value: dict[str, Any]) -> dict[str, Any]:
+    """0.6.0 の指定を読み替え、廃止項目を保存しない。"""
+    result = dict(value)
+    layout = result.get('layout')
+    if layout in ('l', 'l-left', 'l-right'):
+        corner = result.get('corner', 'top-right' if layout == 'l-left' else 'top-left')
+        result['layout'] = 'l-' + corner
+    if 'mascot_dopamine_mode' not in result and any(
+            key in result for key in ('mascot_motion', 'mascot_expressions')):
+        result['mascot_dopamine_mode'] = all(
+            result.get(key, True) for key in ('mascot_motion', 'mascot_expressions'))
+    for key in ('x', 'y', 'corner', 'mascot_flip_right', 'mascot_band_edges',
+                'numbers', 'recent', 'full', 'mascot_motion', 'mascot_expressions'):
+        result.pop(key, None)
+    return result
 
 
 def with_debug_defaults(overlay: dict[str, Any]) -> dict[str, Any]:

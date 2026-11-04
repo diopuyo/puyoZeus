@@ -46,12 +46,12 @@ def test_ascii_safe_handles_empty() -> None:
 
 def test_to_windows_path_wsl() -> None:
     """/mnt/c/... → C:\..."""
-    assert to_windows_path("/mnt/c/Users/ryouj/foo.png") == r"C:\Users\ryouj\foo.png"
+    assert to_windows_path("/mnt/c/Users/Example/foo.png") == r"C:\Users\Example\foo.png"
 
 
 def test_to_windows_path_mingw() -> None:
     """/c/... → C:\..."""
-    assert to_windows_path("/c/Users/ryouj/foo.png") == r"C:\Users\ryouj\foo.png"
+    assert to_windows_path("/c/Users/Example/foo.png") == r"C:\Users\Example\foo.png"
 
 
 def test_to_windows_path_other_drive() -> None:

@@ -16,7 +16,7 @@ class Entry(c.Structure):
 class Memory(c.Structure):
     _fields_ = [('size', w.DWORD), ('faults', w.DWORD),
         *[(name, c.c_size_t) for name in ('peak_rss', 'rss', 'peak_page', 'page',
-          'peak_nonpage', 'nonpage', 'pagefile', 'peak_pagefile')]]
+          'peak_nonpage', 'nonpage', 'pagefile', 'peak_pagefile', 'private')]]
 
 
 def process_rows() -> list[dict]:
@@ -59,13 +59,13 @@ def details(row: dict) -> dict:
         if kernel.GetProcessTimes(handle, *[c.byref(t) for t in times]):
             row['cpu_sec'] = (times[2].value+times[3].value)/1e7
         if c.windll.psapi.GetProcessMemoryInfo(handle, c.byref(memory), memory.size):
-            row.update(rss_bytes=memory.rss, peak_rss_bytes=memory.peak_rss)
+            row.update(rss_bytes=memory.rss, peak_rss_bytes=memory.peak_rss, private_bytes=memory.private)
     finally:
         kernel.CloseHandle(handle)
     return row
 
 
-def process_tree() -> list[dict]:
+def process_tree(include_obs: bool = True) -> list[dict]:
     if os.name != 'nt':
         return []
     rows, owned = process_rows(), {os.getpid()}
@@ -74,7 +74,7 @@ def process_tree() -> list[dict]:
         if found == owned:
             break
         owned = found
-    return [details(r) for r in rows if r['pid'] in owned or r['name'].lower() == 'obs64.exe']
+    return [details(r) for r in rows if r['pid'] in owned or (include_obs and r['name'].lower() == 'obs64.exe')]
 
 
 def gpu_memory() -> dict:

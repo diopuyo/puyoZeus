@@ -128,7 +128,7 @@ purple: ...
 
 ```bash
 # 現状把握 (引継ぎ確認)
-cat /c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/docs/HANDOFF_2026-04-28_BOARD_RECOGNITION.md
+cat /c/Users/<user>/.gemini/antigravity/scratch/puyo_analyzer/docs/HANDOFF_2026-04-28_BOARD_RECOGNITION.md
 
 # 全テスト走行 (約 3 分)
 wsl -- bash -c "cd <home>/.gemini/antigravity/scratch/puyo_analyzer && PYTHONPATH=. ./venv/bin/python -m pytest tests/ -q"

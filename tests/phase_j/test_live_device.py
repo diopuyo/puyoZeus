@@ -93,15 +93,14 @@ def test_misplaced_border_is_rejected() -> None:
     assert not border_pair([(60, 20, 60, 120), (160, 20, 160, 120)], 0, 100, 100)
 
 
-def test_verifier_failure_releases_capture() -> None:
+def test_verifier_failure_releases_capture(caplog: pytest.LogCaptureFixture) -> None:
     capture = FakeDevice(np.zeros((1080, 1920, 3), np.uint8))
     def broken(image: np.ndarray) -> bool:
         raise ValueError('検出器失敗')
     source = DirectShowSource(DeviceConfig('OBS', 0), 1.0, lambda: None,
         lambda *args: capture, broken)
-    with pytest.raises(ValueError):
-        list(source)
-    assert capture.released
+    assert list(source) == []
+    assert capture.released and '検出器失敗' in caplog.text
 
 
 # ---- 画面確認の緩和 (relaxed_verify) と連続不合格ヒステリシス (verify_fail_streak) ----

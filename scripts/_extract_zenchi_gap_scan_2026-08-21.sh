@@ -1,7 +1,7 @@
 #!/bin/bash
 # 3412.2s~4379.5s の間に大きな不連続(WIN星の急変・2P名変化)があるか粗く走査
 set -e
-cd "/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+cd "/c/Users/<user>/.gemini/antigravity/scratch/puyo_analyzer"
 SRC="data/frames/video_zenchi_c0BQoMJwwQU.mp4"
 OUTDIR="data/verify/zenchi_boundary_confirm_2026-08-21/gapscan"
 mkdir -p "$OUTDIR"

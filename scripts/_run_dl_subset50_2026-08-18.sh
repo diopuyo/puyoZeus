@@ -9,7 +9,7 @@ mkdir -p logs
 # setsid -f 経由で起動しない事象を実測、2026-08-18)
 exec >> logs/dl_subset50_2026-08-18.log 2>&1
 echo "[dl50] 開始 $(date)"
-SP="<home>/AppData/Local/Temp/claude/C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/22abd085-8e57-4d2a-857e-8516be642774/scratchpad"
+SP="<home>/AppData/Local/Temp/claude/C--Users-<user>--gemini-antigravity-scratch-puyo-analyzer/22abd085-8e57-4d2a-857e-8516be642774/scratchpad"
 CKM="$SP/yt_cookies_master.txt"
 CK="$SP/yt_cookies_work_dl50.txt"
 NODE=<home>/.nvm/versions/node/v24.19.0/bin/node

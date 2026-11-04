@@ -164,7 +164,7 @@ function renderSnapshot(data) {
     clearFullHistory();
     const progress=Number.isFinite(display.calibration_progress)?Math.max(0,Math.min(99,display.calibration_progress)):0;
     return unavailable(phase==='calibrating'?`画面調整中 ${Math.round(progress)}%`:
-      phase==='overlay_feedback'?'表示の映り込み':phase==='no_puyo_screen'?'試合待ち':'入力確認中');
+      phase==='obs_stopped'?'OBS の仮想カメラを開始してください':phase==='overlay_feedback'?'表示の映り込み':phase==='no_puyo_screen'?'試合待ち':'入力確認中');
   }
   if(display.match_phase==='between_matches') {clearFullHistory();return unavailable('試合待ち');}
   if(display.status==='integrity_fault'||data.integrity?.status==='fault') return unavailable('入力確認中');
@@ -193,8 +193,19 @@ function armWatchdog() {
   watchdog=setTimeout(()=>{if(lastKind==='live') unavailable('更新待ち');},
     COMPLETION_DRIVEN?CONNECTION_STALE_MS:STALE_MS);
 }
+const EVENT_RETRY_MS = 3000;
+function reconnectingEvents(url, subscribe) {
+  const stream=new EventSource(url);
+  let retry=null;
+  stream.addEventListener('error',()=>{
+    if(stream.readyState===EventSource.CLOSED&&retry===null) {
+      retry=setTimeout(()=>{stream.close();reconnectingEvents(url,subscribe);},EVENT_RETRY_MS);
+    }
+  });
+  subscribe(stream);
+}
 function connect() {
-  const stream=new EventSource('/events');
+  reconnectingEvents('/events',stream=>{
   stream.addEventListener('analysis',event=>{
     try {renderSnapshot(JSON.parse(event.data));}
     catch {unavailable('入力確認中');}
@@ -206,6 +217,7 @@ function connect() {
   stream.addEventListener('heartbeat',()=>{if(COMPLETION_DRIVEN) armWatchdog();});
   stream.onopen=()=>{if(el('panel').dataset.mode==='offline') unavailable('入力確認中');};
   stream.onerror=()=>{clearTimeout(watchdog);unavailable('接続待ち','offline');};
+  });
 }
 </script>
 <script src="overlay_contents.js"></script>
@@ -230,4 +242,22 @@ el('panel').append(feedbackMarker);
 <script>PuyoExpressions.update();</script>
 <script>renderContents(null);el('stage').style.visibility='visible';</script>
 <script>if(new URLSearchParams(location.search).get('preview')!=='sample') connect();</script>
+<script>
+if(window.overlayDefaults.distribution_mode&&!new URLSearchParams(location.search).has('preview')) {
+  reconnectingEvents('/api/settings/events',appearanceEvents=>{
+  appearanceEvents.addEventListener('appearance',event=>{
+    const incoming=JSON.parse(event.data);
+    if(incoming.app_started_at!==undefined&&incoming.app_started_at!==window.overlayDefaults.app_started_at) {
+      location.reload();return;
+    }
+    const state=el('stage').dataset.state;
+    const options=OverlayOptions.resolve(incoming);
+    for(const key of Object.keys(overlayOptions)) delete overlayOptions[key];
+    Object.assign(overlayOptions,options);
+    applyOverlayOptions(overlayOptions);el('stage').dataset.state=state;
+    PuyoI18n.setLanguage(options.language);PuyoMascot.update({});
+  });
+  });
+}
+</script>
 </html>

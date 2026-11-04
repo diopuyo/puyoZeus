@@ -147,7 +147,7 @@ def test_numbers_off_keeps_gauge_and_no_band_keeps_mascot_outside_game(browser: 
     page.goto(f'http://127.0.0.1:{server.address()[1]}/?preview=sample&theme=battle-a&layout=l&band=false&numbers=false')
     page.evaluate('renderSnapshot', snapshot(.8))
     assert page.locator('#bar').is_visible()
-    assert not page.locator('.player').first.is_visible()
+    assert page.locator('.player').first.is_visible()
     game = page.evaluate('OverlayOptions.geometry(overlayOptions)')
     box = page.locator('#mascot').bounding_box()
     assert box['y'] >= game['y']+game['height']

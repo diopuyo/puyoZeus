@@ -7,7 +7,7 @@ export PYTHONPATH=.
 mkdir -p logs
 exec >> logs/dl_zenchi_2026-08-19.log 2>&1
 echo "[zenchi] 開始 $(date)"
-SP="<home>/AppData/Local/Temp/claude/C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/22abd085-8e57-4d2a-857e-8516be642774/scratchpad"
+SP="<home>/AppData/Local/Temp/claude/C--Users-<user>--gemini-antigravity-scratch-puyo-analyzer/22abd085-8e57-4d2a-857e-8516be642774/scratchpad"
 CKM="$SP/yt_cookies_master.txt"
 CK="$SP/yt_cookies_work_zenchi.txt"
 NODE=<home>/.nvm/versions/node/v24.19.0/bin/node

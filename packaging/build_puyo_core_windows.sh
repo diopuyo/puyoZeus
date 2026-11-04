@@ -5,7 +5,7 @@
 # 出力: D:/puyo_analyzer/packaging/native_build/wheels/puyo_core-0.1.0-cp312-cp312-win_amd64.whl (build_bundle.py が同梱)
 set -euo pipefail
 WORK=/d/puyo_analyzer/packaging
-PY314=/c/Users/ryouj/AppData/Local/Python/pythoncore-3.14-64/python.exe   # ビルド用ホスト Python (pip 用)
+PY314=/c/Users/"<user>"/AppData/Local/Python/pythoncore-3.14-64/python.exe   # ビルド用ホスト Python (pip 用)
 REPO="${1:?リポジトリのルート (native/puyo_core を含む)}"
 
 # 1) Rust を D: に導入 (ユーザー権限、PATH は汚さない)

@@ -290,7 +290,9 @@ def test_flags_default_off_and_spawn_delivery(key: str, tmp_path: Path, monkeypa
     from src.phase_j.release_config import release_user_config
     assert live_speed.SPEED_DEFAULTS[key] is False
     assert UserConfig.__dataclass_fields__[key].default is False
-    assert release_user_config({}, tmp_path)[key] is False
+    # 配布の既定は ON (2026-11-03 user 承認)。明示の OFF はそのまま通る。
+    assert release_user_config({}, tmp_path)[key] is True
+    assert release_user_config({key: False}, tmp_path)[key] is False
     assert release_user_config({key: True}, tmp_path)[key] is True
     user = parse_user_config(dict(source='dshow', device_name='OBS', **{key: True}), tmp_path)
     assert build_pipeline_config(user)[key] is True

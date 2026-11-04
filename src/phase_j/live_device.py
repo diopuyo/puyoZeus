@@ -20,6 +20,7 @@ from .live_source import CapturedFrame, FrameSource, NATIVE_SIZE, RECOGNITION_HZ
 from .live_input_guard import FrameContinuity
 from . import live_stage_timing as timing
 from .live_border_grace import wrap_verifier, verify_screen
+from .live_screen_errors import check_screen
 from . import live_verify_reasons as reasons
 from . import live_verify_split as split
 from . import live_verify_entry as entry
@@ -261,6 +262,8 @@ class DirectShowSource(FrameSource):
         from .live_capture_reconnect import make_reconnector
         self._reconnector = make_reconnector()   # 既定 OFF は None (従来どおり 1 回だけ開く)
         self._read_ok = True
+        self._feedback_checked_at = float('-inf')
+        self._feedback_present = False
 
     def _capture(self) -> Any:
         if not self._buffered_capture:
@@ -295,6 +298,10 @@ class DirectShowSource(FrameSource):
         timing.begin('recognition', captured)
         ok, image = timing.measure('capture', capture.read) if capture.isOpened() else (False, None)
         self._read_ok = bool(ok)
+        if ok:
+            from .live_preview import offer_frame
+            offer_frame(image)
+            self._check_feedback(image, captured)
         if self.config.fast_first_judgment and ok and image is not None and image.ndim >= 2:
             self._check_format((image.shape[1], image.shape[0]))
         if self._buffered_capture:
@@ -307,6 +314,25 @@ class DirectShowSource(FrameSource):
             normalized = timing.measure('color_correction', correct, normalized)
         size = (image.shape[1], image.shape[0]) if normalized is not None else None
         return captured, normalized, size
+
+    def _check_feedback(self, image: Any, captured: float) -> None:
+        """画面検証の合否と独立に、色補正前の入力で表示の目印を確認する。"""
+        if captured - self._feedback_checked_at >= VERIFY_PERIOD_SEC:
+            from .distribution_input import has_feedback
+            self._feedback_present = check_screen('feedback', has_feedback, image)
+            self._feedback_checked_at = captured
+
+    def _feedback_hold(self) -> bool:
+        """目印がある間は警告を保ち、次の入力取得は続ける。"""
+        if not self._feedback_present:
+            return False
+        if self.on_status:
+            self.on_status('overlay_feedback')
+        else:
+            self.on_hold()
+        timing.finish(held=True)
+        self.sleep(READ_RETRY_SEC)
+        return True
 
     def _check_format(self, size: tuple[int, int]) -> None:
         """正規化前の形式変更を通知する。画面検証と強制境界の条件は変更しない。"""
@@ -349,15 +375,12 @@ class DirectShowSource(FrameSource):
                     verified, fail_streak = False, 0
                     last_verify = float('-inf')
                 elif captured-last_verify >= entry.verification_period(verified, VERIFY_PERIOD_SEC, entry_fast_retry):
-                    passed = timing.measure('screen_verify', verify_screen, verifier, normalized,
+                    passed = timing.measure('screen_verify', check_screen, 'screen_verify', verify_screen, verifier, normalized,
                                             captured, size, screen_generation)
                     verified, fail_streak = self._judge(passed, verified, fail_streak)
                     last_verify = captured
-                if not verified:
-                    if self.on_match_end_hold is not None:
-                        self._feed_match_end_hold(normalized, captured, transport_ready)
-                    self._screen_hold(transport_ready, normalized, continuity, fail_streak,
-                                      async_screen or verifier)
+                if self._hold_input(verified, transport_ready, normalized, captured,
+                                    continuity, fail_streak, async_screen or verifier):
                     continue
                 elapsed = captured-origin
                 yield CapturedFrame(round(elapsed*RECOGNITION_HZ), elapsed,
@@ -372,6 +395,18 @@ class DirectShowSource(FrameSource):
                     async_screen.close()
             if self._buffered_capture:
                 self.dropped = capture.dropped
+
+    def _hold_input(self, verified: bool, ready: bool, image: Any, captured: float,
+                    continuity: FrameContinuity, streak: int, verifier: Any) -> bool:
+        """画面として合格しても、映り込みがあれば保留を通知する。"""
+        if ready and self._feedback_hold():
+            return True
+        if verified:
+            return False
+        if self.on_match_end_hold is not None:
+            self._feed_match_end_hold(image, captured, ready)
+        self._screen_hold(ready, image, continuity, streak, verifier)
+        return True
 
     def _feed_match_end_hold(self, image: Any, captured: float, ready: bool) -> None:
         """検証workerとOCR等の可変状態を共有せず、最新の画像を独立確認する。"""
@@ -401,6 +436,7 @@ class DirectShowSource(FrameSource):
     def _screen_hold(self, ready: bool, image: Any, continuity: FrameContinuity,
                      streak: int, verifier: Any) -> None:
         """保留通知はworkerではなく、入力所有者から従来どおり発行する。"""
+        from .distribution_input import is_obs_stopped
         self.input_diagnostics = dict(transport_ready=ready, normalized=image is not None,
             continuity=dict(continuity.diagnostics) if image is not None else None,
             verifier_fail_streak=streak, verifier_fail_limit=self.config.verify_fail_streak)
@@ -408,6 +444,7 @@ class DirectShowSource(FrameSource):
             self.input_diagnostics.update(split.diagnostics(getattr(verifier, 'failure', None), ready))
         if self.on_status:
             self.on_status('verifying' if not ready else
+                           'obs_stopped' if check_screen('obs_stopped', is_obs_stopped, image) else
                            'overlay_feedback' if getattr(verifier, 'feedback', False) else 'no_puyo_screen')
         else:
             self.on_hold()

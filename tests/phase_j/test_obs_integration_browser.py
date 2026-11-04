@@ -1,6 +1,7 @@
 """設定・URL・アプリ起動時刻の結合を実ブラウザで検証する。"""
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -11,9 +12,17 @@ from playwright.sync_api import Browser, expect
 
 from tests.phase_j.test_overlay_browser import browser
 from tests.phase_j.test_distribution_app import distribution
+from tests.phase_j.test_distribution_browser import select_language, open_appearance
 from scripts.render_overlay_design import snapshot
 
-FRAMES = Path('D:/puyo_analyzer/local_frames/obs_integration')
+FRAMES: Path
+
+
+@pytest.fixture(autouse=True)
+def frame_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """画像は一時領域か明示された保存先にだけ出力する。"""
+    destination = Path(os.environ.get('OBS_TEST_FRAMES', str(tmp_path / 'frames')))
+    monkeypatch.setitem(globals(), 'FRAMES', destination)
 
 
 @pytest.mark.parametrize('language,labels', [
@@ -24,17 +33,19 @@ def test_dopamine_labels_preserve_saved_values(browser: Browser, distribution: t
     runtime, url = distribution
     page = browser.new_page()
     page.goto(url + '/settings')
+    open_appearance(page)
     select = page.locator('[name=mascot_dopamine]')
     assert select.input_value() == 'normal'
-    page.locator('[name=language]').select_option(language)
+    select_language(page, language)
     expect(select.locator('option')).to_have_text(labels)
     expect(page.locator('[name=mascot_speed] option')).to_have_text(['0.5×', '1×', '1.5×', '2×'])
     assert page.evaluate("['低','普通','高'].map(PuyoI18n.t)") == (
         ['低', '普通', '高'] if language == 'ja' else ['Low', 'Normal', 'High'])
     for value, label in zip(['low', 'normal', 'high'], labels):
-        select.select_option(label=label)
-        assert f'mascot_dopamine={value}' in page.locator('#url').input_value()
-        page.locator('#save-settings').click()
+        open_appearance(page)
+        with page.expect_response(lambda r: r.url.endswith('/api/settings') and f'\"mascot_dopamine\":\"{value}\"' in (r.request.post_data or '')):
+            select.select_option(label=label)
+        assert page.locator('#url').input_value() == url + '/'
         expect(page.locator('#save-status')).to_have_text('保存しました' if language == 'ja' else 'Saved')
         assert runtime.settings['overlay']['mascot_dopamine'] == value
         page.reload()
@@ -90,18 +101,19 @@ def test_options_saved_and_preview_screens(browser: Browser, distribution: tuple
     FRAMES.mkdir(parents=True,exist_ok=True)
     page = browser.new_page(viewport=dict(width=1440,height=1000))
     page.goto(url+'/settings')
-    for key in ('mascot','mascot_expressions','mascot_bloodshot'):
+    open_appearance(page)
+    for key in ('mascot','mascot_dopamine_mode','mascot_bloodshot'):
         page.locator(f'[name={key}]').check()
     page.locator('[name=mascot_dopamine]').select_option('high')
     page.locator('[name=mascot_speed]').select_option('1.5')
-    page.locator('#save-settings').click()
     expect(page.locator('#save-status')).to_have_text('保存しました')
     assert runtime.settings['overlay']['mascot_speed'] == '1.5'
     assert runtime.settings['overlay']['mascot_dopamine'] == 'high'
-    assert 'mascot_bloodshot=true' in page.locator('#url').input_value()
+    assert page.locator('#url').input_value() == url + '/' and runtime.settings['overlay']['mascot_bloodshot']
     page.screenshot(path=str(FRAMES/'settings-ja.png'),full_page=True)
-    page.locator('[name=language]').select_option('en')
+    select_language(page, 'en')
     page.screenshot(path=str(FRAMES/'settings-en.png'),full_page=True)
+    page.locator('#tab-stream').click()
     page.locator('#obs-check').scroll_into_view_if_needed()
     page.screenshot(path=str(FRAMES/'obs-guide-en.png'))
     runtime.started_at = time.time()-60*60

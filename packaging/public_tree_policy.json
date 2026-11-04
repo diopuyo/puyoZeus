@@ -2691,7 +2691,7 @@
   },
   "preserve_bytes": {
     "data/verify/g2_second_prefix_runtime_2026-09-14_v40/run_whole_target.sh": {
-      "sha256": "84826a1f6a694c2fa46343c354083958a1afe682481f9c136be190d862f2ffcf",
+      "sha256": "f5bf770ca62f45509b74a5b51fa4a7bd984ae5f0f9782b9257dc9d38a3c9c638",
       "reason": "保持指定の検証入力。固定SHA・比較条件を変えないため元のbytesを保持"
     },
     "docs/verification/live_obs_20261020d/delivery_parity_receipts.json": {
@@ -2699,7 +2699,7 @@
       "reason": "保持指定の検証入力。固定SHA・比較条件を変えないため元のbytesを保持"
     },
     "packaging/release_privacy.py": {
-      "sha256": "ef7ca74738d5d64456c6b5a3947c83ac1bd142741a57b69e4210a6f591e4cd9c",
+      "sha256": "631f8a446deaafc61f995a1c8c8bce11777df788e5ed33bde85e25348917fed6",
       "reason": "旧作業フォルダー名を検出・除去する既存の正規表現。削除すると配布の匿名化が変わる"
     },
     "scripts/smoke_live_parallel.py": {
@@ -2727,7 +2727,7 @@
       "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
     },
     "tests/test_b3_eval_adapter_sealed.py": {
-      "sha256": "409797fb376f046aa647b19ab25b058ebb5bf068a8b3856de38af920b7d98088",
+      "sha256": "03309a79f011764f3abc4ea5002e0dbc0fa2a8bd93f0252ce09801db2251c054",
       "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
     },
     "tests/test_b3_net_ledger.py": {
@@ -2735,11 +2735,11 @@
       "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
     },
     "tests/test_console_init.py": {
-      "sha256": "1c23d1a5fbecaee98b8aefd26b9e875d79d6af829540dd148c24db0a567483b5",
+      "sha256": "4aebb32eae8c87084741464d94df3874eff08a2ce0a7a509eee0577ae4499a8f",
       "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
     },
     "tests/test_release_privacy.py": {
-      "sha256": "b887e4bbf034e68240c9f492f3ee5a2f6e0db87103affe539df5f90028cc6180",
+      "sha256": "93575c6f5a9d3eb5ebc954ee8c1470afc83d253f41e5d02c6103be579ce05574",
       "reason": "匿名化検証の入力・外部学習資産を比較する既存試験の入力。機械置換しない"
     }
   },
@@ -2907,6 +2907,7 @@
     "packaging/smoke_obs_24i.py": "非公開検査台本への依存: packaging/obs_24i_arms.py",
     "tests/test_obs_24g_capture_off.py": "非公開検査台本への依存: packaging/build_live_obs_20261027g.py, packaging/obs_24g_arms.py",
     "packaging/obs_23y_labba.py": "非公開検査台本への依存: packaging/obs_23y_fullframe.py",
-    "tests/test_live_trial_guard_record.py": "非公開検査台本への依存: packaging/check_obs_24c_run.py"
+    "tests/test_live_trial_guard_record.py": "非公開検査台本への依存: packaging/check_obs_24c_run.py",
+    "docs/live_integ_evidence/tests_phase_j.xml": "内部共有先を含む旧試験ログ。実行・組立の入力ではないため公開しない。"
   }
 }

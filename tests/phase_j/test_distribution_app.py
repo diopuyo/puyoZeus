@@ -163,17 +163,21 @@ def test_http_save_preview_and_confirmation(distribution: tuple, monkeypatch: py
     assert not list(runtime.store.directory.glob('pending-*.json'))
 
 
-def test_http_uninstall_requires_confirmation_and_stops(distribution: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_http_uninstall_is_unavailable(distribution: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
     runtime, url = distribution
     launched = []
-    monkeypatch.setattr('src.phase_j.distribution_http.launch_uninstaller', launched.append)
+    monkeypatch.setattr('src.phase_j.distribution_uninstall.launch_uninstaller', launched.append)
     with pytest.raises(HTTPError):
         post(url + '/api/uninstall', {})
     with pytest.raises(HTTPError):
         post(url + '/api/uninstall', {'confirmed': True}, 'https://untrusted.invalid')
     assert not launched and not runtime.stopping
-    assert post(url + '/api/uninstall', {'confirmed': True})['uninstalling']
-    assert launched == [runtime.root] and runtime.stopping
+    with pytest.raises(HTTPError, match='400') as rejected:
+        post(url + '/api/uninstall', {'confirmed': True})
+    assert json.loads(rejected.value.read())['error'] == 'Unknown action'
+    assert not launched and not runtime.stopping
+    with urlopen(url + '/api/state') as response:
+        assert response.status == 200
 
 
 def test_crash_is_saved_locally_without_network(distribution: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -187,7 +191,7 @@ def test_crash_is_saved_locally_without_network(distribution: tuple, monkeypatch
 
 def test_setup_and_overlay_assets_are_served(distribution: tuple) -> None:
     _, url = distribution
-    for path in ('/setup', '/settings', '/', '/overlay_i18n.js', '/overlay_mascot.js', '/setup.js',
+    for path in ('/setup', '/settings', '/', '/overlay_i18n.js', '/overlay_mascot.js',
                  '/brand/app_logo.png', '/favicon.ico', '/mascot/overlay.webp'):
         with urlopen(url + path) as response:
             assert response.status == 200
@@ -281,3 +285,179 @@ def test_single_mascot_override(distribution: tuple, extension: str, mime: str) 
     with urlopen(url + '/mascot/overlay.webp') as response:
         assert response.headers['Content-Type'] == 'image/webp'
         assert response.read().startswith(b'RIFF')
+
+
+
+@pytest.mark.parametrize('completed,legacy_setup', [(False, False), (False, True), (True, False)])
+def test_first_launch_always_opens_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                          completed: bool, legacy_setup: bool) -> None:
+    from argparse import Namespace
+    from src.phase_j import distribution_app as app
+    seen: list[str] = []
+    class Window:
+        def __init__(self, url: str, *args: Any) -> None:
+            seen.append(url)
+            self.finished = threading.Event()
+        def run(self) -> None:
+            pass
+        def open(self, *args: Any) -> None:
+            pass
+    runtime = DistributionRuntime(tmp_path)
+    runtime.settings['completed'] = completed
+    monkeypatch.setattr(app, 'AppWindow', Window)
+    monkeypatch.setattr(app, 'migrate_shortcuts', lambda *args: None)
+    monkeypatch.setattr('src.phase_j.distribution_tray.start_tray', lambda *args: None)
+    monkeypatch.setattr(app.signal, 'signal', lambda *args: None)
+    runtime.settings['port'] = available_port(18080)
+    app.run_application(runtime, Namespace(port=None, setup=legacy_setup, no_browser=True, autostart=False))
+    assert len(seen) == 1 and seen[0].endswith('/settings')
+
+
+def test_setup_redirect_and_removed_script(distribution: tuple) -> None:
+    _, url = distribution
+    with urlopen(url + '/setup') as response:
+        assert response.url == url + '/settings'
+        body = response.read().decode()
+    assert 'id="stop-app"' not in body and 'href="/setup"' not in body
+    assert 'relay-url' not in body and 'releases-url' not in body
+    with pytest.raises(HTTPError) as caught:
+        urlopen(url + '/setup.js')
+    assert caught.value.code == 404
+
+
+def test_onboarding_save_does_not_complete_or_install_shortcuts(distribution: tuple,
+                                                               monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime, url = distribution
+    monkeypatch.setattr('src.phase_j.distribution_runtime.shortcuts', lambda *args: pytest.fail('初回案内では作成しない'))
+    assert post(url + '/api/settings', {'onboarding_seen': True})['saved']
+    saved = load_settings(runtime.root)
+    assert saved['onboarding_seen'] and not saved['completed']
+
+
+def test_moved_options_are_saved_and_apply_shortcuts(distribution: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime, url = distribution
+    calls = []
+    monkeypatch.setattr('src.phase_j.distribution_runtime.shortcuts', lambda root, settings: calls.append(settings))
+    values = dict(completed=True, desktop_shortcut=True, start_menu_shortcut=False,
+                  autostart=True, check_updates=True, port=18472, overlay={'language': 'en'})
+    assert post(url + '/api/settings', values)['saved']
+    saved = load_settings(runtime.root)
+    assert all(saved[key] == value for key, value in values.items())
+    assert saved['language'] == 'en' and len(calls) == 1 and calls[0]['autostart']
+
+
+@pytest.mark.parametrize('variant,expected', [('reference', True), ('jpeg', True), ('black', False),
+                                            ('flat', False), ('missing_camera', False), ('noise', False)])
+def test_obs_stopped_requires_logo_background_and_camera(variant: str, expected: bool) -> None:
+    import cv2
+    import numpy as np
+    from src.phase_j.distribution_input import is_obs_stopped, stopped_reference
+    frame = cv2.resize(stopped_reference(), (1920, 1080), interpolation=cv2.INTER_NEAREST)
+    if variant == 'jpeg':
+        frame = cv2.imdecode(cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])[1], cv2.IMREAD_COLOR)
+    elif variant == 'black':
+        frame[:] = 0
+    elif variant == 'flat':
+        frame[:] = frame[0, 0]
+    elif variant == 'missing_camera':
+        frame[760:960, 860:1060] = frame[-1, 0]
+    elif variant == 'noise':
+        frame = np.random.default_rng(7).integers(0, 256, frame.shape, dtype=np.uint8)
+    assert is_obs_stopped(frame) is expected
+
+
+def test_probe_accepts_twelfth_frame_after_stopped_camera(monkeypatch: pytest.MonkeyPatch) -> None:
+    import cv2
+    from src.phase_j import distribution_input as inputs
+    frame = cv2.resize(inputs.stopped_reference(), (1920, 1080))
+    calls = []
+    class Capture:
+        def set(self, *args: Any) -> None:
+            pass
+        def get(self, *args: Any) -> float:
+            return 30
+        def read(self) -> tuple:
+            calls.append(True)
+            return True, frame
+        def release(self) -> None:
+            pass
+    monkeypatch.setattr(inputs.cv2, 'VideoCapture', lambda *args: Capture())
+    monkeypatch.setattr(inputs, 'inspect_frame', lambda *args: 'ready' if len(calls) == 12 else 'obs_stopped')
+    assert inputs.probe(3)['reason'] == 'ready' and len(calls) == 12
+
+
+def test_retries_only_observed_hd_or_obs_devices(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.phase_j import distribution_input as inputs
+    runtime = DistributionRuntime(tmp_path)
+    runtime.input_waiting = True
+    items = [dict(index=0, name='Webcam'), dict(index=1, name='Capture'), dict(index=2, name='OBS Virtual Camera')]
+    scans = []
+    monkeypatch.setattr('src.phase_j.distribution_config.devices', lambda: items)
+    def discover(devices: list[dict]) -> dict:
+        scans.append([item['index'] for item in devices])
+        return dict(selected=None, devices=[{**item, 'input_resolution': [1920, 1080] if item['index'] == 1 else [640, 480]} for item in devices])
+    monkeypatch.setattr(inputs, 'discover', discover)
+    runtime.scan_inputs()
+    runtime.scan_inputs()
+    assert scans == [[0, 1, 2], [1, 2]]
+
+
+def test_manual_start_waits_without_deadline_then_stops(distribution: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.phase_j import distribution_runtime as module
+    runtime, url = distribution
+    searched = threading.Event()
+    calls = []
+    def scan() -> dict:
+        calls.append(True)
+        runtime.input_probe = dict(selected=None, reason='not_game', devices=[])
+        if len(calls) >= 3:
+            searched.set()
+        return runtime.input_probe
+    monkeypatch.setattr(runtime, 'scan_inputs', scan)
+    monkeypatch.setattr(module, 'shortcuts', lambda *args: None)
+    monkeypatch.setattr(module, 'AUTOSTART_RETRY_SECONDS', .01)
+    assert not post(url + '/api/start', {})['started']
+    assert searched.wait(3) and runtime.input_waiting
+    assert runtime.input_probe['message'].startswith('試合が映るのを待っています')
+    assert post(url + '/api/pause', {})['stopped']
+    runtime.start_thread.join(3)
+    assert not runtime.start_thread.is_alive() and not runtime.input_waiting and not runtime.child
+
+
+@pytest.mark.parametrize('reason', ['obs_stopped', 'not_game'])
+def test_wait_starts_analysis_when_match_appears(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
+    from src.phase_j import distribution_runtime as module
+    from src.phase_j.distribution_input import MESSAGES
+    runtime = DistributionRuntime(tmp_path)
+    runtime.port = 18080
+    launches = []
+    calls = []
+    def scan() -> dict:
+        calls.append(True)
+        runtime.input_probe = dict(reason=reason, message=MESSAGES[reason], selected={} if len(calls) == 1 else {'index': 1})
+        return runtime.input_probe
+    class Child:
+        def poll(self) -> None:
+            return None
+    monkeypatch.setattr(runtime, 'scan_inputs', scan)
+    monkeypatch.setattr(runtime, '_watch_child', lambda *args: None)
+    monkeypatch.setattr(module, 'AUTOSTART_RETRY_SECONDS', .01)
+    monkeypatch.setattr(module, 'distribution_user_config', lambda *args: {})
+    monkeypatch.setattr(module, 'prepare_output', lambda *args: None)
+    monkeypatch.setattr(module, 'create_job', lambda: None)
+    monkeypatch.setattr(module, 'assign_job', lambda *args: None)
+    monkeypatch.setattr(module.subprocess, 'Popen', lambda *args, **kwargs: launches.append(args[0]) or Child())
+    runtime.request_start()
+    runtime.start_thread.join(3)
+    assert len(calls) == 2 and len(launches) == 1
+    assert 'src.phase_j.launcher' in launches[0] and not runtime.input_waiting
+
+
+def test_autostart_waits_until_stopped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.phase_j import distribution_runtime as module
+    runtime = DistributionRuntime(tmp_path)
+    calls = []
+    monkeypatch.setattr(runtime, 'start', lambda: calls.append(True))
+    monkeypatch.setattr(runtime.cancel_start, 'wait', lambda delay: runtime.stop(final=False))
+    runtime.start_autostart()
+    assert calls == [True] and not runtime.input_waiting

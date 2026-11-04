@@ -162,7 +162,8 @@ def test_runtime_start_writes_the_complete_configuration(root: Path, existing: s
     runtime.start()
     written = json.loads((root / 'puyo_live.json').read_text(encoding='utf-8'))
     assert written == distribution_user_config(runtime.settings, root, 8777)
-    assert written['overlay']['x'] == 123 and written['device_index'] == 2
+    assert 'x' not in written['overlay'] and 'y' not in written['overlay']
+    assert written['device_index'] == 2
     assert len(calls) == 1 and '--require-manifest' in calls[0][0]
     assert calls[0][1]['cwd'] == root / 'app'
     assert all(calls[0][1]['env'][key] == (RELEASE_LIVE_ENV_DEFAULTS[key] if existing is None else existing)
@@ -171,7 +172,8 @@ def test_runtime_start_writes_the_complete_configuration(root: Path, existing: s
 
 
 def test_generated_config_does_not_share_mutable_overlay(root: Path) -> None:
-    settings = validate_settings({'overlay': {'x': 123}})
+    settings = validate_settings({'overlay': {'x': 123, 'scale': 75}})
     first = distribution_user_config(settings, root, 8766)
-    first['overlay']['x'] = 999
-    assert distribution_user_config(settings, root, 8766)['overlay']['x'] == 123
+    assert 'x' not in first['overlay']
+    first['overlay']['scale'] = 80
+    assert distribution_user_config(settings, root, 8766)['overlay']['scale'] == 75

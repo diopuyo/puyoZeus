@@ -7,6 +7,7 @@ from time import perf_counter
 from typing import Any, Callable
 
 from .live_verify_split import VerifyFailure
+from .live_screen_errors import check_screen
 from . import live_verify_entry as entry
 
 
@@ -47,7 +48,8 @@ class ScreenWorker:
     def _verify(self, image: Any, captured_at: float, generation: int, size: Any = None) -> ScreenResult:
         from .live_border_grace import verify_screen
         started = perf_counter()
-        passed = verify_screen(self.verifier, image, captured_at, size, generation)
+        passed = check_screen('screen_verify_worker', verify_screen,
+                              self.verifier, image, captured_at, size, generation)
         failure = getattr(self.verifier, 'failure', None)
         return ScreenResult(generation, captured_at, passed,
                             bool(getattr(self.verifier, 'feedback', False)), perf_counter()-started,

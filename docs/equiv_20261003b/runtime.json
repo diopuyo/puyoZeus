@@ -1,7 +1,7 @@
 {
   "command": [
     "--video",
-    "\\mnt\\c\\Users\\ryouj\\.gemini\\antigravity\\scratch\\puyo_analyzer\\data\\frames\\video_zenchi_c0BQoMJwwQU.mp4",
+    "\\mnt\\c\\Users\\<user>\\.gemini\\antigravity\\scratch\\puyo_analyzer\\data\\frames\\video_zenchi_c0BQoMJwwQU.mp4",
     "--out",
     "D:\\puyo_analyzer\\packaging\\obs_test_2026-10-03b\\runtime\\output\\overlay.mp4",
     "--start-sec",
@@ -131,7 +131,7 @@
     "exchange_event_switch_smoothing": true,
     "exchange_event_model_dir": "models\\exchange_event_v3",
     "dump_exchange_events": "D:\\puyo_analyzer\\packaging\\obs_test_2026-10-03b\\runtime\\output\\events.jsonl",
-    "video": "\\mnt\\c\\Users\\ryouj\\.gemini\\antigravity\\scratch\\puyo_analyzer\\data\\frames\\video_zenchi_c0BQoMJwwQU.mp4",
+    "video": "\\mnt\\c\\Users\\<user>\\.gemini\\antigravity\\scratch\\puyo_analyzer\\data\\frames\\video_zenchi_c0BQoMJwwQU.mp4",
     "out": "D:\\puyo_analyzer\\packaging\\obs_test_2026-10-03b\\runtime\\output\\overlay.mp4",
     "max_sec": 0.0,
     "start_sec": 0.0,

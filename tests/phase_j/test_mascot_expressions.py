@@ -8,6 +8,7 @@ from playwright.sync_api import Browser, Page, expect
 
 from scripts.render_overlay_design import snapshot
 from tests.phase_j.test_distribution_app import distribution
+from tests.phase_j.test_distribution_browser import select_language, open_appearance
 from tests.phase_j.test_overlay_browser import browser
 
 
@@ -120,24 +121,22 @@ def test_settings_save_reload_and_url_override(browser: Browser, distribution: t
     runtime, url = distribution
     page = browser.new_page()
     page.goto(url + '/settings')
-    for name in ('mascot_expressions', 'mascot_flip_right'):
-        assert page.locator(f'[name={name}]').is_checked() == (name == 'mascot_expressions')
-        page.locator(f'[name={name}]').check()
-    page.locator('[name=mascot_band_edges]').fill('20,40,60,80')
-    page.locator('#save-settings').click()
+    open_appearance(page)
+    assert page.locator('[name=mascot_dopamine_mode]').is_checked()
+    page.locator('[name=mascot_dopamine_mode]').uncheck()
     page.wait_for_function("document.querySelector('#save-status').textContent.includes('保存')")
     page.reload()
-    for name in ('mascot_expressions', 'mascot_flip_right'):
-        assert page.locator(f'[name={name}]').is_checked()
-        assert runtime.settings['overlay'][name] is True
-    assert runtime.settings['overlay']['mascot_band_edges'] == [20, 40, 60, 80]
-    assert page.locator('[name=mascot_band_edges]').input_value() == '20,40,60,80'
+    assert not page.locator('[name=mascot_dopamine_mode]').is_checked()
+    assert runtime.settings['overlay']['mascot_dopamine_mode'] is False
+    for name in ('mascot_expressions', 'mascot_flip_right', 'mascot_band_edges'):
+        assert page.locator(f'[name={name}]').count() == 0
+        assert name not in runtime.settings['overlay']
     page.goto(url + '/?preview=sample&mascot=true&mascot_expressions=true')
-    assert page.evaluate('PuyoExpressions.band(.3)') == '30'
+    assert page.evaluate('PuyoExpressions.band(.3)') == '50'
     page.goto(url + '/?preview=sample&mascot_band_edges=10,30,70,90')
     assert page.evaluate('PuyoExpressions.band(.3)') == '50'
     page.goto(url + '/?preview=sample&mascot_band_edges=90,70,30,10')
-    assert page.evaluate('PuyoExpressions.band(.3)') == '30'
+    assert page.evaluate('PuyoExpressions.band(.3)') == '50'
     page.goto(url + '/?preview=sample&mascot=true&mascot_expressions=false&mascot_flip_right=false')
     assert expression(page) == 'off'
     assert page.locator('#mascot img').evaluate('(e)=>e.style.scale') == '1'

@@ -30,6 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from src.analyzer import AnalysisResult
+from src.phase_j.local_http import LocalHTTPHandler
 
 # ============================
 # 定数定義
@@ -162,7 +163,7 @@ class StreamState:
 # ============================
 
 
-class _OverlayRequestHandler(BaseHTTPRequestHandler):
+class _OverlayRequestHandler(LocalHTTPHandler):
     """
     BaseHTTPRequestHandler のサブクラス。
     StreamOverlayServer からインスタンス変数 state を受け取る。

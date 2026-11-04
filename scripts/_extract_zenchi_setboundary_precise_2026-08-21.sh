@@ -1,7 +1,7 @@
 #!/bin/bash
 # セット境界の精密特定: (A)WIN30到達直前の1秒刻み (B)セット2ゲーム開始直前の1秒刻み
 set -e
-cd "/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+cd "/c/Users/<user>/.gemini/antigravity/scratch/puyo_analyzer"
 SRC="data/frames/video_zenchi_c0BQoMJwwQU.mp4"
 OUTDIR="data/verify/zenchi_boundary_confirm_2026-08-21/setboundary_precise"
 mkdir -p "$OUTDIR"

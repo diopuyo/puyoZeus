@@ -14,13 +14,15 @@ WORK_ROOT = re.compile(r'^(?:file:/+)?(?:[A-Za-z]:[/\\]|/mnt/[a-z]/)puyo1_work[/
 
 def portable_path(value: str) -> str:
     """来歴のパスを匿名のビルドルートからの名前にする。"""
-    if not ABSOLUTE_PREFIX.match(value):
+    if not ABSOLUTE_PREFIX.match(value) and not value.startswith('<build>/'):
         return value
     relative = USER_ROOT.sub('', value)
     relative = WORK_ROOT.sub('', relative)
     if relative == value:
         relative = re.sub(r'^(?:file:/+)?(?:[A-Za-z]:[/\\]|/mnt/[a-z]/|/)', '', value)
-    return '<build>/' + relative.replace('\\', '/')
+    relative = relative.replace('\\', '/').removeprefix('<build>/')
+    relative = re.sub(r'^.*?(?:\.gemini/antigravity/scratch/|\.codex/worktrees/[^/]+/)?puyo_analyzer/', '', relative)
+    return '<build>/' + relative
 
 
 def portable_provenance(value: Any) -> Any:

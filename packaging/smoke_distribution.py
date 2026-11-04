@@ -1,4 +1,4 @@
-"""試験専用のインストール先で初期設定から実入力の試合待ちまで検証する。"""
+"""試験専用のインストール先で設定から実入力の試合待ちまで検証する。"""
 from __future__ import annotations
 
 import argparse
@@ -34,20 +34,15 @@ def wait_ready(url: str) -> None:
 
 def configure(browser: Browser, url: str) -> dict:
     page = browser.new_page(viewport=dict(width=1440, height=1080))
-    page.goto(url + '/setup')
-    page.locator('#language').select_option('ja')
-    page.wait_for_function("[...document.querySelector('#device').options].some(o=>o.text.includes('OBS Virtual Camera'))")
-    choices = page.locator('#device option').evaluate_all('(nodes)=>nodes.map(n=>({value:n.value,text:n.textContent}))')
-    choice = next(c for c in choices if 'OBS Virtual Camera' in c['text'])
-    page.locator('#device').select_option(choice['value'])
-    for key in ('desktop_shortcut', 'start_menu_shortcut', 'autostart', 'check_updates'):
+    page.goto(url + '/settings')
+    page.locator('[name=language]').select_option('ja')
+    for key in ('desktop-shortcut', 'start-menu-shortcut', 'autostart', 'check-updates'):
         page.locator('#' + key).uncheck()
-    page.locator('#mascot').check()
-    page.screenshot(path=str(OUTPUT / 'initial_setup_ja.png'), full_page=True)
-    page.locator('#test').click()
-    page.wait_for_function("document.getElementById('input-test').naturalWidth>0")
-    page.locator('#start').click()
-    page.wait_for_function("document.getElementById('status').textContent.includes('保存しました')")
+    page.locator('[name=mascot]').check()
+    page.screenshot(path=str(OUTPUT / 'initial_settings_ja.png'), full_page=True)
+    page.locator('#save-app-settings').click()
+    page.wait_for_function("document.getElementById('app-save-status').textContent.includes('保存しました')")
+    page.locator('#toggle-runtime').click()
     page.goto(url + '/?language=ja')
     page.locator('#state').wait_for(state='visible')
     deadline = time.monotonic() + WAIT_SECONDS
@@ -59,7 +54,8 @@ def configure(browser: Browser, url: str) -> dict:
             previous = status
         if status == '試合待ち':
             page.screenshot(path=str(OUTPUT / 'installed_waiting_ja.png'))
-            result = dict(selected_input=choice, state=status, latest=get(url + '/latest'))
+            result = dict(selected_input=get(url + '/api/state')['diagnostics']['input'],
+                          state=status, latest=get(url + '/latest'))
             page.close()
             return result
         time.sleep(POLL_SECONDS)

@@ -63,7 +63,7 @@ ASSET_LIST = PACKAGING_DIR / 'bundle_assets.txt'
 SITE_PACKAGES = Path('Lib/site-packages')
 PTH_LINES = ('python312.zip', '.', '..\\app', 'Lib\\site-packages', 'import site')
 LICENSE_PATTERNS = ('LICEN*', 'COPYING*', 'NOTICE*')
-SKIP_DIRS = frozenset({'__pycache__'})
+SKIP_DIRS = frozenset({'__pycache__', '_backup_pre_expand_yellow'})
 PRUNE_DIR_NAMES = frozenset({'tests'})
 PRUNE_PATHS = ('torch/include',)
 # torch/lib の *.lib は C++ 拡張をリンクする時だけ必要 (dnnl.lib 653MB 等、実測で torch の約 7 割)
@@ -156,7 +156,7 @@ def prune_site_packages(python: Path) -> int:
 def precompile(python: Path, *targets: Path) -> None:
     """バイトコードを事前生成する。未生成だと初回起動が scipy.stats 等のコンパイルで 150 秒超になる (実測)。
     unchecked-hash は zip 展開で mtime がずれても無効化されない。配布物は凍結なので元ソースとの照合は不要。"""
-    subprocess.run([str(python / 'python.exe'), '-m', 'compileall', '-q', '-f', '-j', '1',
+    subprocess.run([str(python / 'python.exe'), '-s', '-m', 'compileall', '-q', '-f', '-j', '1',
                     '--invalidation-mode', 'unchecked-hash', '-s', str(python.parent),
                     *map(str, targets)], check=True)
 
@@ -316,7 +316,7 @@ def export_onnx_files(bundle: Path, work: Path) -> list[Path]:
     code = ('import sys, runpy; sys.path[:0] = [%r, %r, %r]; sys.argv = [%r, %r]; runpy.run_path(%r, run_name="__main__")'
             % (str(work / 'onnxtools'), str(bundle / 'app'), str(PACKAGING_DIR.parent), 'export_onnx.py',
                str(bundle / 'app' / 'models'), str(PACKAGING_DIR / 'export_onnx.py')))
-    subprocess.run([str(bundle / 'python' / 'python.exe'), '-c', code], check=True, cwd=bundle / 'app')
+    subprocess.run([str(bundle / 'python' / 'python.exe'), '-s', '-c', code], check=True, cwd=bundle / 'app')
     return sorted((bundle / 'app' / 'models' / 'onnx').glob('*'))
 
 
@@ -330,7 +330,7 @@ def reuse_onnx_files(bundle: Path, cache: Path) -> list[Path]:
             'print(json.dumps({n: cnn_onnx.state_digest(torch.load(%r + "/" + n, map_location="cpu", '
             'weights_only=True)) for n in %r}))'
             % (str(bundle / 'app'), str(bundle / 'app' / 'models'), list(EXPORT_MODELS)))
-    result = subprocess.run([str(bundle / 'python' / 'python.exe'), '-c', code], check=True,
+    result = subprocess.run([str(bundle / 'python' / 'python.exe'), '-s', '-c', code], check=True,
                             cwd=bundle / 'app', capture_output=True, text=True)
     digests = json.loads(result.stdout.strip().splitlines()[-1])
     index = json.loads((cache / 'index.json').read_text(encoding='utf-8'))

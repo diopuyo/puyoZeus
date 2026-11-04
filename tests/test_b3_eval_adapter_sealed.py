@@ -10,8 +10,8 @@ from src.b3_eval_adapter import (EvaluatorTrace, SOURCE_UNAVOIDABLE, death_event
                                  run_false_death_scan, score_m_time_agree, write_replay_record)
 from src.b3_eval_sealed import (OpeningPlan, SealedError, build_manifest, manifest_sha, open_sealed, verify_manifest)
 
-EXEV = Path("C:/Users/ryouj/.codex/worktrees/exev/puyo_analyzer")
-EXEV_LINUX = Path("/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer")
+EXEV = Path("C:/Users/Example/.codex/worktrees/exev/puyo_analyzer")
+EXEV_LINUX = Path("/mnt/c/Users/Example/.codex/worktrees/exev/puyo_analyzer")
 
 
 def _exev_root():

@@ -30,17 +30,22 @@ def test_settings_actions_match_server(browser: Browser, distribution: tuple,
     page.on('request', lambda request: posts.append(request.url) if request.method == 'POST' else None)
     with page.expect_response(lambda response: response.url.endswith('/api/state')):
         page.goto(url + '/settings' + fragment)
-    for selector in ('#save-settings', '#send-logs', '#stop-app', 'a[href="/setup"]',
-                     '#uninstall-app', '#live-diagnostics', '#rescan-input', '#obs-enabled',
-                     '#obs-check', '#obs-apply'):
-        if distribution_mode:
-            expect(page.locator(selector)).to_be_visible()
-        else:
-            expect(page.locator(selector)).to_be_hidden()
     if distribution_mode and fragment:
         expect(page.locator('#log-dialog')).to_be_visible()
+        page.locator('#cancel-logs').click()
+    if distribution_mode:
+        for selector in ('#toggle-runtime', '#copy-obs-url', '#obs-check', '#obs-apply'):
+            expect(page.locator(selector)).to_be_visible()
+        expect(page.locator('#save-settings, #save-app-settings')).to_have_count(0)
+        page.locator('#tab-other').click()
+        expect(page.locator('#send-logs')).to_be_visible()
     else:
-        expect(page.locator('#log-dialog')).to_be_hidden()
+        for selector in ('#save-settings', '#send-logs', '#save-app-settings', '#toggle-runtime'):
+            expect(page.locator(selector)).to_be_hidden()
+    expect(page.locator('#log-dialog')).to_be_hidden()
+    if distribution_mode:
+        page.locator('#tab-appearance').click()
+        page.locator('details').filter(has=page.locator('#placement')).locator('summary').first.click()
     expect(page.locator('#copy')).to_be_visible()
     expect(page.locator('#overlay')).to_be_visible()
     assert not errors
@@ -54,26 +59,24 @@ def test_setup_uses_current_catalog(browser: Browser, distribution: tuple) -> No
     _, url = distribution
     page = browser.new_page()
     page.goto(url+'/setup')
-    expect(page.locator('#theme option')).to_have_count(2)
-    # 採用した四配置を出す。旧配置URLの読み込み互換は別試験で確認する。
-    expect(page.locator('#layout option')).to_have_count(4)
-    expect(page.locator('#theme')).to_have_value('pop')
-    expect(page.locator('#mascot')).to_be_checked()
-    page.locator('#language').select_option('en')
-    expect(page.locator('#theme option[value=pop]')).to_have_text('Pop (black)')
+    expect(page.locator('[name=theme] option')).to_have_count(2)
+    # L字の四隅を含めた七つの選択肢。旧URLの互換は別試験で確認する。
+    expect(page.locator('[name=layout] option')).to_have_count(7)
+    expect(page.locator('[name=theme]')).to_have_value('pop')
+    expect(page.locator('[name=mascot]')).to_be_checked()
+    select_language(page, 'en')
+    expect(page.locator('[name=theme] option[value=pop]')).to_have_text('Pop (black)')
     page.close()
 
 
 @pytest.mark.parametrize('language,label', [('ja', 'アンインストールを開始'), ('en', 'Start uninstall')])
-def test_uninstall_cancel_keeps_app(browser: Browser, distribution: tuple, language: str, label: str) -> None:
+def test_uninstall_controls_are_absent(browser: Browser, distribution: tuple, language: str, label: str) -> None:
     runtime, url = distribution
     page = browser.new_page()
     page.goto(url + f'/settings?language={language}')
-    page.locator('[name=language]').select_option(language)
-    expect(page.locator('#uninstall-app')).to_have_text(label)
-    expect(page.locator('#uninstall-help')).to_contain_text('zip' if language == 'ja' else 'ZIP')
-    page.on('dialog', lambda dialog: dialog.dismiss())
-    page.locator('#uninstall-app').click()
+    select_language(page, language)
+    expect(page.locator('#uninstall-app, #uninstall-help, #uninstall-status')).to_have_count(0)
+    expect(page.get_by_role('button', name=label, exact=True)).to_have_count(0)
     assert not runtime.stopping
     page.close()
 
@@ -137,19 +140,21 @@ def assert_dynamic_language_messages(page: Page, url: str) -> None:
         'scene': 'Test scene', 'browser_sources': ['Overlay'],
         'warning': '手元で確認してください / Review locally'}))
     page.evaluate('appNotice()')
+    page.locator('#tab-stream').click()
     page.locator('#obs-check').click()
     expect(page.locator('#obs-result')).to_contain_text('Test scene: Overlay')
+    page.locator('#tab-other').click()
     page.locator('#send-logs').click()
     expect(page.locator('#confirm-logs')).to_be_enabled()
     page.locator('#confirm-logs').click()
     expect(page.locator('#log-status')).to_contain_text('logs/reports')
     page.locator('#cancel-logs').click()
     for language in ('en', 'ja', 'en'):
-        page.locator('[name=language]').select_option(language)
+        select_language(page, language)
         english = language == 'en'
         expect(page.locator('#report-local-notice')).to_have_text(
-            'The destination is being prepared for 0.6.0. Reviewed reports are saved locally (logs/reports).'
-            if english else '0.6.0 では送信先を準備中です。確認した内容は手元 (logs/reports) に保存します')
+            'The destination is being prepared. Reviewed reports are saved locally (logs/reports).'
+            if english else '送信先を準備中です。確認した内容は手元 (logs/reports) に保存します')
         expect(page.locator('#log-status')).to_have_text(
             'Saved locally (logs/reports).' if english else '手元 (logs/reports) に保存しました')
         expect(page.locator('#input-reason')).to_have_text('Input checked' if english else '入力を確認しました')
@@ -162,18 +167,19 @@ def test_settings_language_save_and_log_review(browser: Browser, distribution: t
     monkeypatch.setattr('src.phase_j.distribution_runtime.shortcuts', lambda *args: None)
     page = browser.new_page()
     page.goto(url + '/settings')
-    page.locator('[name=language]').select_option('en')
-    expect(page.locator('h1')).to_have_text('puyoZeus Live Display Settings')
-    expect(page).to_have_title('puyoZeus Live Display Settings')
+    select_language(page, 'en')
+    expect(page.locator('h1')).to_have_text('puyoZeus Live')
+    expect(page).to_have_title('puyoZeus Live')
     assert not re.search(r'[ぁ-んァ-ヶ一-龠]', page.locator('main').inner_text()), page.locator('main').inner_text()
+    page.locator('#tab-appearance').click()
     page.locator('[name=mascot]').check()
-    page.locator('[name=x]').fill('730')
-    page.locator('[name=y]').fill('594')
-    page.locator('#save-settings').click()
+    assert page.locator('[name=x], [name=y]').count() == 0
+    page.locator('[name=mascot]').uncheck()
+    page.locator('[name=mascot]').check()
     expect(page.locator('#save-status')).to_have_text('Saved')
     assert runtime.settings['overlay']['mascot'] is True
-    assert runtime.settings['overlay']['x'] == 730
-    assert runtime.settings['overlay']['y'] == 594
+    assert 'x' not in runtime.settings['overlay'] and 'y' not in runtime.settings['overlay']
+    page.locator('#tab-other').click()
     page.locator('#send-logs').click()
     expect(page.locator('#log-dialog h2')).to_have_text('puyoZeus Live — Review report')
     expect(page.locator('#log-preview')).to_contain_text('installation_id')
@@ -181,8 +187,8 @@ def test_settings_language_save_and_log_review(browser: Browser, distribution: t
     page.locator('#cancel-logs').click()
     expect(page.locator('#log-dialog')).not_to_be_visible()
     page.locator('[name=language]').select_option('ja')
-    expect(page.locator('h1')).to_have_text('puyoZeus Live 表示設定')
-    expect(page).to_have_title('puyoZeus Live 表示設定')
+    expect(page.locator('h1')).to_have_text('puyoZeus Live')
+    expect(page).to_have_title('puyoZeus Live')
     assert_dynamic_language_messages(page, url)
     page.close()
 
@@ -237,3 +243,87 @@ def test_hidden_probability_does_not_drive_mascot(browser: Browser, distribution
     page.evaluate('renderSnapshot', data)
     expect(page.locator('#mascot img')).to_have_attribute('src', '/mascot/50.webp')
     page.close()
+
+
+
+@pytest.mark.parametrize('language', ['ja', 'en'])
+def test_first_settings_intro_and_moved_options(browser: Browser, distribution: tuple,
+                                                monkeypatch: pytest.MonkeyPatch, language: str) -> None:
+    import os
+    from src.phase_j.distribution_config import load_settings
+    runtime, url = distribution
+    monkeypatch.setattr('src.phase_j.distribution_runtime.shortcuts', lambda *args: None)
+    page = browser.new_page(viewport=dict(width=1100, height=800))
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    page.goto(url + '/settings?language=' + language)
+    select_language(page, language)
+    expect(page.locator('#getting-started')).to_be_visible()
+    expect(page.locator('#getting-started')).to_contain_text('Getting started' if language == 'en' else 'はじめに')
+    expect(page.locator('#stop-app, a[href="/setup"], #relay-url, #releases-url')).to_have_count(0)
+    if os.environ.get('SETUP_REMOVAL_JOB'):
+        page.screenshot(path=str(Path(os.environ['SETUP_REMOVAL_JOB']) / f'ux_first_{language}.png'))
+    page.locator('#dismiss-intro').click()
+    expect(page.locator('#getting-started')).to_be_hidden()
+    page.locator('#tab-other').click()
+    page.locator('#desktop-shortcut').check()
+    page.locator('#start-menu-shortcut').uncheck()
+    page.locator('#autostart').check()
+    page.locator('#check-updates').check()
+    page.locator('details').filter(has=page.locator('#app-port')).locator('summary').click()
+    with page.expect_response(lambda r: r.url.endswith('/api/settings') and '18672' in (r.request.post_data or '')):
+        page.locator('#app-port').fill('18672')
+    expect(page.locator('#save-status')).to_have_text('Saved' if language == 'en' else '保存しました')
+    saved = load_settings(runtime.root)
+    assert not saved['completed'] and saved['autostart'] and saved['desktop_shortcut']
+    assert saved['check_updates'] and not saved['start_menu_shortcut'] and saved['port'] == 18672
+    page.reload()
+    expect(page.locator('#getting-started')).to_be_hidden()
+    expect(page.locator('#autostart')).to_be_checked()
+    assert not errors
+    page.close()
+
+
+@pytest.mark.parametrize('language', ['ja', 'en'])
+@pytest.mark.parametrize('reason', ['not_game', 'obs_stopped'])
+def test_settings_wait_message_and_stop(browser: Browser, distribution: tuple, monkeypatch: pytest.MonkeyPatch,
+                                        language: str, reason: str) -> None:
+    import os
+    from src.phase_j.distribution_input import MESSAGES
+    runtime, url = distribution
+    monkeypatch.setattr('src.phase_j.distribution_runtime.shortcuts', lambda *args: None)
+    def scan() -> dict:
+        runtime.input_probe = dict(selected=None, reason=reason, message=MESSAGES[reason])
+        return runtime.input_probe
+    monkeypatch.setattr(runtime, 'scan_inputs', scan)
+    page = browser.new_page(viewport=dict(width=1100, height=800))
+    page.goto(url + '/settings?language=' + language)
+    select_language(page, language)
+    expect(page.locator('#toggle-runtime')).to_be_enabled()
+    page.locator('#toggle-runtime').click()
+    expect(page.locator('#toggle-runtime')).to_have_text('Stop' if language == 'en' else '停止')
+    expect(page.locator('#toggle-runtime')).to_be_enabled()
+    expected = MESSAGES['waiting' if reason == 'not_game' else reason].split(' / ')[language == 'en']
+    expect(page.locator('#input-reason')).to_have_text(expected)
+    expect(page.locator('#app-notice')).to_contain_text(expected)
+    if os.environ.get('SETUP_REMOVAL_JOB'):
+        page.screenshot(path=str(Path(os.environ['SETUP_REMOVAL_JOB']) / f'ux_{reason}_{language}.png'))
+    page.locator('#toggle-runtime').click()
+    expect(page.locator('#toggle-runtime')).to_have_text('Start' if language == 'en' else '起動')
+    runtime.start_thread.join(3)
+    assert not runtime.input_waiting and runtime.child is None
+    page.close()
+
+
+def select_language(page: Page, language: str) -> None:
+    selected = page.locator('[role=tab][aria-selected=true]').get_attribute('id')
+    page.locator('#tab-other').click()
+    page.locator('[name=language]').select_option(language)
+    page.locator('#' + selected).click()
+
+
+def open_appearance(page: Page) -> None:
+    page.locator('#tab-appearance').click()
+    details = page.locator('details').filter(has=page.locator('[name=mascot_dopamine_mode]'))
+    if not details.evaluate('(node)=>node.open'):
+        details.locator('summary').click()

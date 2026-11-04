@@ -49,8 +49,8 @@ def test_vertical_bar_is_visible_inside_panel(browser: Browser) -> None:
     page.close()
 
 
-@pytest.mark.parametrize('scene,title', [('no_puyo_screen', '試合待ち'), ('ready', '認識中'),
-                                        ('verifying', '入力を確かめています'), ('overlay_feedback', '入力の設定を確認')])
+@pytest.mark.parametrize('scene,title', [('no_puyo_screen', '試合待ち'), ('ready', '解析中'),
+                                        ('verifying', '試合待ち'), ('overlay_feedback', '要対応')])
 def test_setup_status_and_missing_camera(browser: Browser, distribution: tuple, scene: str, title: str) -> None:
     runtime, url = distribution
     page = browser.new_page()
@@ -59,14 +59,15 @@ def test_setup_status_and_missing_camera(browser: Browser, distribution: tuple, 
     page.route('**/api/state', lambda route: route.fulfill(json=state))
     page.route('**/api/discover', lambda route: route.fulfill(json=dict(devices=[], selected=None, message='入力なし')))
     page.goto(url+'/setup')
-    expect(page.locator('#runtime-title')).to_have_text(title)
-    expect(page.locator('#camera-help')).to_be_visible()
-    expect(page.locator('#test')).to_be_disabled()
-    page.locator('#layout').select_option('vertical')
+    expect(page).to_have_url(url+'/settings')
+    expect(page.locator('#runtime-state')).to_have_text(title)
+    expect(page.locator('#stop-app, #test')).to_have_count(0)
+    page.locator('#tab-appearance').click()
+    page.locator('[name=layout]').select_option('vertical')
     # PROMPT 6: 配置の変更で選択済みのテーマを変えない。
-    expect(page.locator('#theme')).to_have_value('pop')
-    page.locator('#layout').select_option('l-left')
-    expect(page.locator('#preview-placement')).to_contain_text('1536 × 864 / (384, 0)')
+    expect(page.locator('[name=theme]')).to_have_value('pop')
+    page.locator('[name=layout]').select_option('l-top-right')
+    expect(page.locator('#placement')).to_contain_text('位置 (384, 0)、1536 × 864')
     page.close()
 
 
@@ -79,9 +80,9 @@ def test_setup_stop_and_error_next_action(browser: Browser, distribution: tuple)
     page.route('**/api/discover', lambda route: route.fulfill(json=dict(devices=[], selected=None, message='入力なし')))
     page.route('**/api/stop', lambda route: route.fulfill(json=dict(stopped=True)))
     page.goto(url+'/setup')
-    expect(page.locator('#runtime-title')).to_have_text('起動・実行エラー')
-    expect(page.locator('#retry')).to_be_visible()
-    page.locator('#stop-setup').click()
-    expect(page.locator('#runtime-title')).to_have_text('終了しました')
-    expect(page.locator('#start')).to_be_disabled()
+    expect(page.locator('#app-notice')).to_contain_text('起動できませんでした')
+    expect(page.locator('#toggle-runtime')).to_be_enabled()
+    expect(page.locator('#stop-setup, #stop-app')).to_have_count(0)
+    page.locator('#tab-other').click()
+    expect(page.get_by_text('終了はトレイ（通知領域）のメニューから。', exact=True)).to_be_visible()
     page.close()

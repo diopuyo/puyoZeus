@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.phase_j.live_color_roi import full_image
 
 import json
+from functools import lru_cache
 import os
 from pathlib import Path
 import subprocess
@@ -17,14 +18,23 @@ PROBE_FRAMES = 12
 MARKER_COLORS = ((225, 55, 197), (41, 220, 179), (248, 196, 51), (54, 79, 230))
 MARKER_CELL = 6
 MARKER_TOLERANCE = 0.92
-FEEDBACK_HELP = 'OBS の仮想カメラの出力を「ソース」にして、ゲームの映像だけを選んでください。'
+FEEDBACK_HELP = '表示が映り込んでいます。OBS の仮想カメラの出力を「ソース」→ ゲームの映像にしてください。'
+STOPPED_SIZE = (96, 54)
+STOPPED_MEAN_ERROR = 8
+STOPPED_PIXEL_ERROR = 24
+STOPPED_MATCH_FRACTION = .95
+STOPPED_DETAIL_ERROR = 12
+STOPPED_LOGO_ROWS, STOPPED_LOGO_COLUMNS = slice(6, 32), slice(35, 61)
+STOPPED_CAMERA_ROWS, STOPPED_CAMERA_COLUMNS = slice(38, 48), slice(43, 53)
 MESSAGES = {
+    'waiting': '試合が映るのを待っています / Waiting for a match to appear',
+    'obs_stopped': 'OBS の仮想カメラが止まっています。OBS の「仮想カメラ開始」を押してください / OBS Virtual Camera has stopped. Click Start Virtual Camera in OBS.',
     'ready': 'ゲーム画面を確認しました / Game input verified',
     'no_input': '入力が見つかりません / No input found',
     'unavailable': 'OBS の仮想カメラが開始されていないか、入力を読み取れません / Start OBS Virtual Camera or check the input',
     'wrong_size': '入力を1920×1080に設定してください / Set input to 1920×1080',
     'not_game': 'ゲーム画面ではありません。試合を映して再検索してください / Not a game screen; show a match and scan again',
-    'feedback': FEEDBACK_HELP + ' / Set Virtual Camera output to Source and select only the game capture.',
+    'feedback': FEEDBACK_HELP + ' / The overlay appears in the input. Set OBS Virtual Camera output to Source and select the game video.',
     'timeout': '入力の応答がありません / Input timed out',
 }
 
@@ -38,6 +48,8 @@ def marker_image() -> np.ndarray:
 
 def has_feedback(frame: np.ndarray) -> bool:
     """移動・縮小された表示でも目印を照合し、単色領域では反応しない。"""
+    if frame is None or not frame.size or frame.ndim != 3 or frame.shape[2] != 3:
+        return False
     from .live_verify_reasons import feedback_score
     color = np.array(MARKER_COLORS[0][::-1])
     mask = cv2.inRange(full_image(frame), np.maximum(0, color - 25), np.minimum(255, color + 25))
@@ -57,8 +69,34 @@ def has_feedback(frame: np.ndarray) -> bool:
     return False
 
 
+@lru_cache(maxsize=1)
+def stopped_reference() -> np.ndarray | None:
+    """提供された停止画面を縮小した照合専用の参照画像。"""
+    data = Path(__file__).with_name('obs_camera_stopped.png').read_bytes()
+    return cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+
+
+def is_obs_stopped(frame: np.ndarray) -> bool:
+    """背景だけでなく中央のOBSロゴと下部の停止記号も一致を要求する。"""
+    if frame is None or not frame.size or frame.ndim != 3 or frame.shape[2] != 3:
+        return False
+    reference = stopped_reference()
+    if reference is None:
+        return False
+    small = cv2.resize(full_image(frame), STOPPED_SIZE, interpolation=cv2.INTER_AREA)
+    error = np.abs(small.astype(np.float32) - reference.astype(np.float32))
+    # 参照は96×54。中央上部のロゴと下部の斜線入りカメラを別に照合する。
+    logo = error[STOPPED_LOGO_ROWS, STOPPED_LOGO_COLUMNS]
+    camera = error[STOPPED_CAMERA_ROWS, STOPPED_CAMERA_COLUMNS]
+    return bool(error.mean() <= STOPPED_MEAN_ERROR
+        and np.mean(np.max(error, axis=2) <= STOPPED_PIXEL_ERROR) >= STOPPED_MATCH_FRACTION
+        and logo.mean() <= STOPPED_DETAIL_ERROR and camera.mean() <= STOPPED_DETAIL_ERROR)
+
+
 def inspect_frame(frame: np.ndarray, verifier: Callable | None = None) -> str:
     from .live_device import PuyoScreenVerifier
+    if is_obs_stopped(frame):
+        return 'obs_stopped'
     if has_feedback(frame):
         return 'feedback'
     if frame.shape[:2] != (1080, 1920):
@@ -67,6 +105,8 @@ def inspect_frame(frame: np.ndarray, verifier: Callable | None = None) -> str:
 
 
 def probe(index: int) -> dict[str, Any]:
+    import base64
+    from .live_preview import thumbnail
     from .live_device import PuyoScreenVerifier
     capture = cv2.VideoCapture(index, cv2.CAP_DSHOW)
     result: dict[str, Any] = dict(reason='unavailable')
@@ -81,6 +121,7 @@ def probe(index: int) -> dict[str, Any]:
                 continue
             result = dict(reason=inspect_frame(frame, verifier), input_resolution=list(frame.shape[1::-1]),
                           fps=capture.get(cv2.CAP_PROP_FPS))
+            result['preview'] = base64.b64encode(thumbnail(frame)).decode('ascii')
             if result['reason'] in ('ready', 'feedback'):
                 break
         return result
@@ -91,7 +132,7 @@ def probe(index: int) -> dict[str, Any]:
 def isolated_probe(index: int) -> dict[str, Any]:
     executable = str(Path(sys.executable).with_name('python.exe')) if os.name == 'nt' else sys.executable
     try:
-        run = subprocess.run([executable, '-m', __name__, str(index)], capture_output=True,
+        run = subprocess.run([executable, '-s', '-m', __name__, str(index)], capture_output=True,
             timeout=PROBE_TIMEOUT, encoding='utf-8', errors='replace', cwd=Path(__file__).resolve().parents[2],
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         return json.loads(run.stdout.strip().splitlines()[-1])
@@ -107,7 +148,12 @@ def discover(items: list[dict], probe_fn: Callable = isolated_probe) -> dict[str
     reason = 'ready' if selected else next((item['reason'] for item in ordered
         if item['reason'] == 'feedback'), ordered[0]['reason'] if ordered else 'no_input')
     observed = selected or (ordered[0] if ordered else {})
-    return dict(devices=results, selected=selected, reason=reason, message=MESSAGES[reason],
+    message = MESSAGES[reason]
+    name = observed.get('name', '')
+    if reason == 'wrong_size' and 'obs virtual camera' not in name.lower():
+        message = (f'この入力 ({name}) はゲームの映像ではないようです。OBS の仮想カメラ (OBS Virtual Camera) を選んでください'
+                   f' / This input ({name}) does not appear to be game video. Select OBS Virtual Camera.')
+    return dict(devices=results, selected=selected, reason=reason, message=message,
                 input_resolution=observed.get('input_resolution'), fps=observed.get('fps'))
 
 

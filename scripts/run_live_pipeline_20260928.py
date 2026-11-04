@@ -484,10 +484,10 @@ def run_comparison(options: argparse.Namespace) -> dict[str, Any]:
     """基準は無改変のrun_e3 worker。新経路と全30Hz観測で照合する。"""
     base = options.output
     options.output, options.no_render = base / 'reference', True
-    reference = [sys.executable, '-m', 'scripts.run_e3_exchange_eval_20260926',
+    reference = [sys.executable, '-s', '-m', 'scripts.run_e3_exchange_eval_20260926',
                  '--worker', *build_command(options)]
     run_child(reference, options.output)
-    candidate = [sys.executable, '-m', 'scripts.run_live_pipeline_20260928',
+    candidate = [sys.executable, '-s', '-m', 'scripts.run_live_pipeline_20260928',
         '--video', str(options.video), '--status', str(options.status),
         '--start-sec', str(options.start_sec), '--end-sec', str(options.end_sec),
         '--warmup-sec', str(options.warmup_sec), '--port', str(options.port),

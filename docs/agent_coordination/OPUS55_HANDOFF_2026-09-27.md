@@ -4,7 +4,7 @@
 
 ## 体制（user確定）
 - **Claude = 統括**（方針・設計・採否・合否）。**Codex = サブエージェント**（実装・テスト・調査）。人の判断が要らない所は全て進める。Codexの細部拘りはClaudeが要不要を裁定。
-- Codex起動: `/c/Users/ryouj/AppData/Local/OpenAI/Codex/bin/247581e40ee272fb/codex.exe exec -s workspace-write -C <worktree> -o <result.txt> - < prompt.md`（PATH外。パスは ~/.codex/config.toml の CODEX_CLI_PATH で再確認）。**タスクごと新規セッション**（resume は2回まで。長いセッションの resume は1回145万tokに膨張した）。401が出たら user に再ログイン依頼。
+- Codex起動: `/c/Users/<user>/AppData/Local/OpenAI/Codex/bin/247581e40ee272fb/codex.exe exec -s workspace-write -C <worktree> -o <result.txt> - < prompt.md`（PATH外。パスは ~/.codex/config.toml の CODEX_CLI_PATH で再確認）。**タスクごと新規セッション**（resume は2回まで。長いセッションの resume は1回145万tokに膨張した）。401が出たら user に再ログイン依頼。
 - 画面の見た目のデザインはCodexに任せる（Claudeは読みやすさ・必要データ・本番表示不変だけ検収）。
 - user判断が要るのは: 予算、本番採用（production_config.py 登録）、main へのマージ、ゲーム仕様、保護データ。
 

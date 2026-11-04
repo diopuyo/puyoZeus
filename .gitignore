@@ -140,3 +140,17 @@ config/device_calibration/*.json
 logs/**/*.png
 logs/**/*.jpg
 logs/**/*.jpeg
+
+# ローカルの資格情報と秘密鍵
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+id_rsa
+id_ed25519
+id_ecdsa
+*.key
+*.pem
+*.p12
+*.pfx

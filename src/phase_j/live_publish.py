@@ -156,7 +156,7 @@ def input_hold(payload: dict[str, Any], row: dict[str, Any], now: float,
     """未確認入力では架空の勝率を作らず、HOLDの文字だけを表示する。"""
     state = row.get('input_calibration', dict(phase='verifying', progress=0))
     phase, progress = state['phase'], state['progress']
-    message = {'overlay_feedback': '表示の映り込み：仮想カメラの出力をソースにしてください', 'verifying': '入力確認中', 'no_puyo_screen': '試合待ち',
+    message = {'obs_stopped': 'OBS の仮想カメラを開始してください', 'overlay_feedback': '表示の映り込み：仮想カメラの出力をソースにしてください', 'verifying': '入力確認中', 'no_puyo_screen': '試合待ち',
                'calibrating': f'色を較正中 {progress}%'}[phase]
     payload['display'].update(visibility='visible', status='hold', input_status=phase,
         calibration_progress=progress, message=message, update_reason='hold_started',

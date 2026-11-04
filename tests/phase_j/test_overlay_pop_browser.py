@@ -38,28 +38,12 @@ def test_settings_drag_reset_and_language(browser: Browser, server: object) -> N
     page.goto(f'http://127.0.0.1:{server.address()[1]}/settings')
     # 採用された黒とクリームの二つ。
     assert page.locator('[name=theme] option').count() == 2
-    # 採用された中央・小さい帯・縦・L 字の四つ。
-    assert page.locator('[name=layout] option').count() == 4
+    # L字の四隅を独立した選択肢として表示する。
+    assert page.locator('[name=layout] option').count() == 7
     page.locator('[name=layout]').select_option('center')
-    expect(page.locator('#overlap-warning')).to_contain_text('主要なゲーム表示を避けた位置')
-    handle = page.locator('#drag-handle')
-    expect(handle).to_be_visible()
-    handle.scroll_into_view_if_needed()
-    b = handle.bounding_box()
-    page.mouse.move(b['x']+b['width']/2, b['y']+b['height']/2)
-    page.mouse.down()
-    page.mouse.move(b['x']-150, b['y']-100, steps=8)
-    page.mouse.up()
-    expect(page.locator('#url')).to_have_value(__import__('re').compile(r'.*[?&]x=\d+.*'))
+    assert page.locator('#drag-handle, [data-position], [name=x], [name=y]').count() == 0
     saved = json.loads(page.locator('#json').input_value())['overlay']
-    assert isinstance(saved['x'], int) and isinstance(saved['y'], int)
-    page.locator('[data-position=top-left]').click()
-    expect(page.locator('[name=x]')).to_have_value('0')
-    page.locator('[data-position=center]').click()
-    expect(page.locator('[name=x]')).to_have_value('')
-    page.locator('[name=x]').fill('300')
-    page.locator('[name=y]').fill('300')
-    expect(page.locator('#overlap-warning')).to_contain_text('注意')
+    assert 'x' not in saved and 'y' not in saved
     page.locator('[name=language]').select_option('en')
     expect(page.locator('[name=theme] option[value=pop]')).to_have_text('Pop (black)')
     expect(page.locator('[name=theme] option[value=pop-cream]')).to_have_text('Pop (cream)')
@@ -74,7 +58,8 @@ def test_position_and_perch(browser: Browser, server: object, layout: str) -> No
     page.wait_for_function("document.querySelector('#mascot img').naturalWidth>0")
     box = page.locator('#panel').bounding_box()
     mascot = page.locator('#mascot').bounding_box()
-    assert box['x'] == 42 and box['y'] == 420
+    assert box['x'] != 42 and box['y'] != 420
+    assert page.evaluate('overlayOptions.x === undefined && overlayOptions.y === undefined')
     if layout == 'ribbon':
         assert mascot['y'] == box['y']+box['height']+8
     else:

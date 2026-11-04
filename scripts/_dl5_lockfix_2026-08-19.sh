@@ -1,7 +1,7 @@
 #!/bin/bash
 # ラッチ修正検証用の再DL 5本 (2026-08-19)。高lock 4本 + 健常対照 1本。
 cd <home>/.gemini/antigravity/scratch/puyo_analyzer
-MASTER="<home>/AppData/Local/Temp/claude/C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/22abd085-8e57-4d2a-857e-8516be642774/scratchpad/yt_cookies_master.txt"
+MASTER="<home>/AppData/Local/Temp/claude/C--Users-<user>--gemini-antigravity-scratch-puyo-analyzer/22abd085-8e57-4d2a-857e-8516be642774/scratchpad/yt_cookies_master.txt"
 NODE24="<home>/.nvm/versions/node/v24.19.0/bin/node"
 FFMPEG="<home>/.gemini/antigravity/scratch/puyo_analyzer/venv/bin"
 dl() {

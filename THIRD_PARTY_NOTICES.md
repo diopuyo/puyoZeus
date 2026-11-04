@@ -2,7 +2,7 @@
 
 puyoZeus Live のコードは MIT License（2026 diopuyo）です。同梱する第三者の部品・由来コードは、それぞれのライセンスと著作権表示に従います。この一覧は原文に代わるものではありません。
 
-以下は2026-11-02に、11月1日の OBS 試験版（24w2）の Python 環境・LICENSES と、10月22日の棚卸しを照合した結果です。0.6.0 は ZIP で配布します。常駐版で追加する部品と未収録の原文を区別しています。パスは特記のない限り展開先からの相対パスです。試験版の起動ファイルは利用手順の根拠にしていません。
+以下は2026-11-02に、11月1日の OBS 試験版（24w2）の Python 環境・LICENSES と、10月22日の棚卸しを照合した結果です。0.6.1 は ZIP で配布します。第三者部品は 0.6.0 と同じです。常駐版で追加する部品と未収録の原文を区別しています。パスは特記のない限り展開先からの相対パスです。試験版の起動ファイルは利用手順の根拠にしていません。
 
 ## Python と Python パッケージ
 
@@ -12,7 +12,7 @@ Python 3.12.3 embeddable: Python Software Foundation License（PSF-2.0）。原�
 
 - attrs 26.1.0: MIT。原文: `LICENSES/attrs-26.1.0/LICENSE`。
 - filelock 4.0.7: MIT。原文: `LICENSES/filelock-4.0.7/LICENSE`。
-- flatbuffers 25.12.19: Apache 2.0。原文: 原文未収録（末尾の確認項目参照）。
+- flatbuffers 25.12.19: Apache 2.0。原文: `LICENSES/flatbuffers-25.12.19/UPSTREAM-v25.9.23-LICENSE.txt`（下記組立記録参照）。
 - fsspec 2026.9.0: BSD-3-Clause。原文: `LICENSES/fsspec-2026.9.0/LICENSE`。
 - Jinja2 3.1.6: BSD-3-Clause。原文: `LICENSES/jinja2-3.1.6/LICENSE.txt`。
 - joblib 1.5.3: BSD-3-Clause。原文: `LICENSES/joblib-1.5.3/LICENSE.txt`。
@@ -64,7 +64,7 @@ Python 3.12.3 embeddable: Python Software Foundation License（PSF-2.0）。原�
 
 Inno Setup はインストーラーを作る場合に関係する別の部品です。今回の公開対象はzipですが、setup.exeも作る場合は Inno Setup License の原文と同梱条件を別途確認してください。
 
-### 専用の設定窓（2026-11-02、配布既定ONのPC1案・user確認待ち）
+### 専用の設定窓（2026-11-02、常駐版の設定窓）
 
 `distribution_app_window` 用に以下の8パッケージを固定版で取得します。typing_extensions は既存部品と共通です。2026-11-02にwheelと原文を確認しました。`build_release.py` はwheelを展開して原文を `LICENSES/` へ集め、不足する原文を `packaging/licenses/app_window/` から補います。実際の最終配布物の組み立ては別途確認してください。
 
@@ -85,25 +85,16 @@ WebView2 Runtime自体と.NET Frameworkはこの追加wheel群には含まれま
 
 ゲーム認識用の切り抜きテンプレートはゲーム権利者の素材で、コードの MIT の対象ではありません。得点の数字・勝敗のロゴ・×の印・全消しのテロップを同梱する方針です。ゲーム全体の画面切り出し・検証用画像を公開リポジトリや配布物に入れる方針ではありません。本ソフトは非公式です。
 
-独自のマスコット (ゼウスくん)・ロゴの画像は、著作者 diopuyo の決定 (2026-11-02) により、コードと同じ MIT License (ルートの LICENSE) で公開します。フォントはOSのものを指定する構成で、棚卸しではWebフォントや外部JavaScriptライブラリの同梱はありませんでした。
+独自のマスコット (ゼウスくん)・ロゴの画像は、著作者 diopuyo の決定 (2026-11-02) により、コードと同じ MIT License (ルートの LICENSE) で公開します。次の2つのWebフォントを同梱しています。各字体の SIL Open Font License 1.1 原文を同じフォルダに保持します。
 
-## 最終zipの組立時に補う・照合し直す項目
+- Dela Gothic One: `app/src/phase_j/fonts/DelaGothicOne-Regular.woff2`、原文 `DelaGothicOne-Regular-OFL.txt`。
+- Noto Sans JP: `app/src/phase_j/fonts/NotoSansJP.woff2`、原文 `NotoSansJP-OFL.txt`。
 
-- [ ] 専用窓の追加wheel群とWebView2 SDKの原文・NOTICEが `LICENSES/` に入り、上記の版・格納先と一致していることを確認する。
+元ファイルと変換元の記録はソースの `src/phase_j/fonts/README.md` にあります。
 
-- [ ] 最終zipの部品名・版・同梱バイナリをこの一覧と照合し、試験版との差を反映する。追加3部品の原文を含める。
-- [ ] flatbuffersのApache-2.0原文が未収録。対応する原文・著作権表示を追加する。
-- [ ] ONNX Runtimeの `python/Lib/site-packages/onnxruntime/LICENSE` と `ThirdPartyNotices.txt` を保持する（試験版には両方あり、`LICENSES/` への集約はなし）。
-- [ ] NumPyの原文16件をディレクトリ構造付きで保持する。同名の原文を上書きしない。setuptools内包部品の原文も残す。
-- [ ] Pythonの `LICENSE.txt`、torchの LICENSE / NOTICE、OpenCV・SciPy等の第三者表記を欠落させない。
-- [ ] Rust依存crate、ama / puyoai / rapidhash / LLVM由来コード、ama_reference.exeの内包部品・ランタイムの原文を揃え、最終バイナリの由来と一致させる。
-- [ ] Microsoftランタイムの配布元・版・条件文書を照合し、必要な原文を収録する。
-- [ ] pystrayのLGPL原文・対応ソースの入手方法を明示し、差し替え可能な構成を最終zipで確認する。
-- [ ] FFmpeg DLL、不要な開発用部品・フォント・外部JSが混入していないかを実物で確認する。追加部品があれば表記を足す。
-- [ ] 認識用テンプレートと、公開しない画面切り出し・検証用画像を区別して検査する (マスコット・ロゴは MIT に決定済み)。
-- [ ] ルートの LICENSE とこの文書をzipに同梱する。READMEの起動ファイル・設定URL・削除手順を最終常駐版で確認する。
+## 正式ZIPの確認状況
 
-未確認項目が残っているため、この文書は最終配布物のライセンス対応完了を宣言するものではありません。
+旧試験版で未確認だった項目の一覧は、この節と次の組立記録へ整理しました。0.6.1 の基点ZIPでは、ライセンス183ファイル中183ファイルが比較対象と一致しています。字体2つと対応OFL原文2つも同梱されています。以下の旧試験版についての記述は当時の棚卸し記録です。収録後の格納先・由来は次節を参照してください。今後組み立てるZIPも、実物とこの一覧を照合してください。
 
 ## 11/2 リリース候補の組立追補（仮モデル）
 
@@ -115,7 +106,7 @@ pystrayのCOPYINGとCOPYING.LGPLをそのまま収録し、LICENSES/PYSTRAY_SOUR
 
 Rustの原文は上記ビルド元のCargo.lockにあるregistry由来51パッケージに対して102ファイルをLICENSES/rustへ収録する。Cargo.lockはリンクされる部品以外も含みうるため、全51部品がバイナリにリンクされているという意味ではない。由来コード4原文はLICENSES/puyo_coreに収録する。
 
-flatbuffersは同梱25.12.19、原文は上流v25.9.23のLICENSE (Apache-2.0)。版によらない原文としてPC1が11/2に採用を承認した（取得元とSHAはLICENSES/SOURCES.json）。Microsoft VCランタイムはSystem32から取り出したDLLを同梱せず、Python自身とwheelが持つ分だけ保持する。不足時は起動前検査の案内とREADMEに従い、Microsoft公式のX64再頒布可能パッケージを導入する。末尾チェック項目は窓の追補を含め12項目として検査する。
+flatbuffersは同梱25.12.19、原文は上流v25.9.23のLICENSE (Apache-2.0)。版によらない原文としてPC1が11/2に採用を承認した（取得元とSHAはLICENSES/SOURCES.json）。Microsoft VCランタイムはSystem32から取り出したDLLを同梱せず、Python自身とwheelが持つ分だけ保持する。不足時は起動前検査の案内とREADMEに従い、Microsoft公式のX64再頒布可能パッケージを導入する。旧試験版の未確認事項は上の「正式ZIPの確認状況」へ整理しています。
 
 ## 上流バイナリに含まれる公開ビルドパス（2026-11-03）
 
@@ -188,3 +179,12 @@ flatbuffersは同梱25.12.19、原文は上流v25.9.23のLICENSE (Apache-2.0)。
 - `python/Lib/site-packages/sklearn/tree/_utils.cp312-win_amd64.pyd` — 1件: `C:/Users/runneradmin`
 - `python/Lib/site-packages/sklearn/utils/_vector_sentinel.cp312-win_amd64.pyd` — 1件: `C:/Users/runneradmin`
 - `python/python312.dll` — 2件: `C:/Users/Barney')`
+
+
+### 配布版の映像入力と FFmpeg
+
+Windows 配布版は OBS 仮想カメラを DirectShow で読み取ります。
+OpenCV の FFmpeg プラグイン DLL は、動画ファイル入力を配布版に持たせない方針と
+ライセンス・容量の整理のため意図的に同梱していません。
+DirectShow の入力にこの DLL は必要ありません。開発用の動画再生には別途 FFmpeg
+プラグインを用意します。配布版で動画ファイルの読込・書出しを保証するものではありません。

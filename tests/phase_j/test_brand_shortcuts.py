@@ -16,17 +16,18 @@ def test_upgrade_migrates_only_same_installation(tmp_path: Path, monkeypatch: py
     desktop.mkdir()
     monkeypatch.setattr(windows, 'shortcut_directories', lambda: {'desktop_shortcut': desktop})
     name = windows.shortcut_name(root)
-    old = desktop / name.replace('puyoZeus Live-', prefix, 1)
-    other = desktop / windows.shortcut_name(tmp_path / 'other').replace('puyoZeus Live-', prefix, 1)
+    old = desktop / next(n for n in windows.legacy_names(root) if n.startswith(prefix))
+    other = desktop / next(n for n in windows.legacy_names(tmp_path / 'other') if n.startswith(prefix))
     old.write_text('旧リンク')
     other.write_text('別インストール')
 
     def create(command: list[str], **kwargs: object) -> None:
         env = kwargs['env']
-        assert env['PUYO_TARGET'] == str(root / 'puyoZeus Live.bat')
+        assert env['PUYO_TARGET'] == str(root / 'puyoZeus Live.exe')
         Path(env['PUYO_LINK']).write_text('新リンク')
 
     monkeypatch.setattr(windows.subprocess, 'run', create)
+    monkeypatch.setattr(windows, 'remove_owned_link', lambda path, root: path.unlink(missing_ok=True))
     windows.migrate_shortcuts(root, {'desktop_shortcut': True})
     assert (desktop / name).read_text() == '新リンク'
     assert not old.exists() and other.exists()
@@ -37,7 +38,7 @@ def test_upgrade_migrates_only_same_installation(tmp_path: Path, monkeypatch: py
 @pytest.mark.skipif(os.name != 'nt', reason='Windows専用ショートカット')
 def test_failed_migration_preserves_old_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(windows, 'shortcut_directories', lambda: {'desktop_shortcut': tmp_path})
-    old = tmp_path / windows.shortcut_name(tmp_path).replace('puyoZeus Live-', 'PuyoLive-', 1)
+    old = tmp_path / windows.legacy_names(tmp_path)[1]
     old.write_text('旧リンク')
 
     def fail(*args: object, **kwargs: object) -> None:

@@ -100,11 +100,8 @@ def test_settings_copies_individual_choice_and_serves_contents(browser: Browser,
     origin = f'http://127.0.0.1:{server.address()[1]}'
     assert page.request.get(origin+'/overlay_contents.js').status == 200
     page.goto(origin+'/settings')
-    visible = page.locator('#controls fieldset').filter(has=page.locator('[name=content_pending]')).inner_text()
-    for old in ('段', '来る', ' Q', ' M', ' H', 'k1', '評価', '上限補完', '予測不能'):
-        assert old not in visible
-    assert '猶予（N手）' not in visible
-    assert '通常判定 / 撃ち合い判定' not in visible
+    controls = page.locator('#controls fieldset').filter(has=page.locator('[name=content_pending]'))
+    assert controls.is_hidden()  # 表示内容の欄は廃止。内部の既存設定は互換のため維持する。
     assert page.locator('[name=content_pending]').is_checked()
     assert not page.locator('[name=content_hands]').is_checked()
     assert page.locator('[name=content_hands]').is_hidden()

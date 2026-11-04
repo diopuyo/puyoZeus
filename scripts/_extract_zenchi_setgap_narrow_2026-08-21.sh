@@ -1,7 +1,7 @@
 #!/bin/bash
 # 3480~3700s を5秒刻みで走査し、セット境界(リザルト演出~キャラ選択~新セット開始)を精密特定
 set -e
-cd "/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"
+cd "/c/Users/<user>/.gemini/antigravity/scratch/puyo_analyzer"
 SRC="data/frames/video_zenchi_c0BQoMJwwQU.mp4"
 OUTDIR="data/verify/zenchi_boundary_confirm_2026-08-21/setgap_narrow"
 mkdir -p "$OUTDIR"
