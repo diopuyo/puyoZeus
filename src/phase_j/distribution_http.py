@@ -96,6 +96,7 @@ class DistributionHandler(LocalHTTPHandler):
         if self.runtime.inner_port:
             self.snapshot()
         self.json(dict(settings={k: v for k, v in self.runtime.settings.items() if k != 'obs_password'},
+            obs_password_saved=bool(self.runtime.settings.get('obs_password')),
             feedback_enabled=bool(feedback_site_url()),
             diagnostics=self.runtime.diagnostics(), os_language=self.runtime.os_language,
             selected_input=self.runtime.preferred_device,
@@ -205,6 +206,8 @@ class DistributionHandler(LocalHTTPHandler):
         if path == '/api/obs':
             from .distribution_obs import integrate
             runtime.obs_result = integrate(runtime.settings, f'http://127.0.0.1:{runtime.port}/', data.get('apply') is True)
+            if (runtime.obs_result.get('applied') or runtime.obs_result.get('already_added')) and not runtime.settings['stream_obs_done']:
+                runtime.configure({'stream_obs_done': True})
             return runtime.obs_result
         if path == '/api/devices':
             return dict(devices=devices())

@@ -55,12 +55,18 @@ def shortcut_directories() -> dict[str, Path]:
 
 
 def migrate_shortcuts(root: Path, settings: dict[str, Any]) -> None:
-    """同じインストール先の旧名リンクだけを新名へ移行する。"""
+    """通常リンクは自分のものだけ削除し、自動起動の旧名は移行する。"""
     if os.name == 'nt':
         legacy = legacy_names(root)
         directories = shortcut_directories()
+        for key, directory in directories.items():
+            if key != 'autostart':
+                for name in [shortcut_name(root), *legacy]:
+                    remove_owned_link(directory / name, root)
+        directories = {key: value for key, value in directories.items() if key == 'autostart'}
         refresh_existing_shortcuts(root, settings, directories)
-        missing_startup = settings.get('autostart') and not (directories['autostart'] / shortcut_name(root)).exists()
+        missing_startup = (settings.get('autostart') and 'autostart' in directories
+                           and not (directories['autostart'] / shortcut_name(root)).exists())
         if missing_startup or any((directory / name).exists()
                for directory in directories.values() for name in legacy):
             shortcuts(root, settings)
@@ -85,7 +91,7 @@ def refresh_existing_shortcuts(root: Path, settings: dict[str, Any], directories
               "$s.IconLocation=$env:PUYO_ICON;$s.WorkingDirectory=$env:PUYO_ROOT;$s.Save()}")
     for key, directory in directories.items():
         path = directory / shortcut_name(root)
-        if settings.get(key) and path.is_file():
+        if key == 'autostart' and settings.get(key) and path.is_file():
             subprocess.run([system_tool('powershell'), '-NoProfile', '-NonInteractive', '-Command', script],
                            env=shortcut_environment(root, key, path), check=True,
                            creationflags=subprocess.CREATE_NO_WINDOW)
@@ -105,7 +111,7 @@ def shortcuts(root: Path, settings: dict[str, Any], remove: bool = False) -> Non
     for key, directory in shortcut_directories().items():
         path = directory / shortcut_name(root)
         legacy = [directory / name for name in legacy_names(root)]
-        if remove or not settings[key]:
+        if remove or key != 'autostart' or not settings.get(key, False):
             for old in [path, *legacy]:
                 remove_owned_link(old, root)
             continue

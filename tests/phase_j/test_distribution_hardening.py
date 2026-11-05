@@ -237,7 +237,7 @@ def test_shortcuts_only_rewrite_changed_content(tmp_path: Path, monkeypatch: pyt
     from src.phase_j import distribution_windows as windows
     locations = {name: tmp_path / name for name in ('desktop_shortcut', 'start_menu_shortcut', 'autostart')}
     monkeypatch.setattr(windows, 'shortcut_directories', lambda: locations)
-    settings = validate_settings({})
+    settings = validate_settings({'autostart': True})
     calls, real_run = [], windows.subprocess.run
     def run(command: list[str], **kwargs: Any) -> Any:
         calls.append(command)
@@ -245,7 +245,7 @@ def test_shortcuts_only_rewrite_changed_content(tmp_path: Path, monkeypatch: pyt
         return real_run(command, **kwargs)
     monkeypatch.setattr(windows.subprocess, 'run', run)
     windows.shortcuts(tmp_path, settings)
-    link = locations['start_menu_shortcut'] / windows.shortcut_name(tmp_path)
+    link = locations['autostart'] / windows.shortcut_name(tmp_path)
     stamp = link.stat().st_mtime_ns
     windows.shortcuts(tmp_path, settings)
     assert len(calls) == 1 and link.stat().st_mtime_ns == stamp
@@ -253,7 +253,7 @@ def test_shortcuts_only_rewrite_changed_content(tmp_path: Path, monkeypatch: pyt
     windows.shortcuts(tmp_path, settings)
     assert len(calls) == 2 and link.stat().st_mtime_ns == stamp
     windows.shortcuts(tmp_path, {**settings, 'autostart': True})
-    assert len(calls) == 3 and (locations['autostart'] / windows.shortcut_name(tmp_path)).exists()
+    assert len(calls) == 2 and (locations['autostart'] / windows.shortcut_name(tmp_path)).exists()
 
 
 def test_send_logs_window_returns_to_settings(tmp_path: Path) -> None:

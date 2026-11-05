@@ -489,3 +489,13 @@ html,body,#stage{background:transparent;overflow:hidden}
 #stage[data-layout=side][data-theme=pop] .tab-in{font-size:13px;padding:3px 8px;gap:4px}
 #stage[data-layout=side][data-theme=pop][data-winner="1P"] .tab{right:auto;left:4px}
 #stage[data-layout=side][data-place=center] #panel{left:838px;top:180px;width:244px;height:560px}
+
+/* カードは中央の隙間に収め、上段の判定と下段の試合全体を分ける。 */
+#stage[data-layout=ribbon][data-theme=pop] #panel[data-layout=card]{
+  left:706px;top:674px;width:500px;height:242px;padding:16px 18px;
+  grid-template-columns:110px 1fr 110px;grid-template-rows:70px 1fr;
+  grid-template-areas:"one gauge two" "spark spark spark";gap:12px}
+#panel[data-layout=card] #bar{align-self:center;height:30px}
+#stage[data-theme=pop] #panel[data-layout=card] .num{--num-size:40px}
+#panel[data-layout=card] .plate{padding:0 4px}
+#panel[data-layout=card] #whole{position:relative;inset:auto;grid-area:spark;min-height:0}

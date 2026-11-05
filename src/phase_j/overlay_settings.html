@@ -51,10 +51,10 @@ button{cursor:pointer;background:#184762}fieldset{border:0;padding:12px 0;margin
 <label><input name="mascot_eyes" type="checkbox"> 目を動かす</label>
 <label>目のスピード<select name="mascot_speed"><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
 <label><input name="mascot_dopamine_mode" type="checkbox"> ドーパミンモード</label>
-<small>1P視点の5段階。通常の表情は最低1.5秒保持し、決着・待機はすぐ反映します。</small>
+<small>ゼウスくんが楽しそうになるよ！</small>
 <label>ゼウスくんのドーパミン<select name="mascot_dopamine"><option value="low">普通</option><option value="normal">高い</option><option value="high">エレクション</option></select></label>
 <label><input name="mascot_bloodshot" type="checkbox">目の充血</label>
-<small>起動から30分・45分・60分で充血が強くなります。再起動でリセット。</small>
+<small>ゼウスくんの目が乾いていくよ！</small>
 </fieldset>
 <label>デザイン<select name="theme"></select></label>
 <div id="theme-samples" aria-label="テーマの見本"></div><label hidden>50%の示し方<select name="midline"><option value="split">A 上下の淡い塗り分け</option><option value="line">B 細い実線＋50目盛り</option><option value="glow">C 柔らかな光帯</option><option value="adaptive" selected>D 勝率線の上下色分け（既定）</option></select></label>
@@ -99,11 +99,9 @@ button{cursor:pointer;background:#184762}fieldset{border:0;padding:12px 0;margin
 <section class="output" data-distribution-only hidden><h2>いまの状態</h2><pre id="live-diagnostics" style="white-space:pre-wrap"></pre>
 <p id="input-reason" role="status"></p></section>
 <section class="output" data-distribution-only hidden><h2>アプリの設定</h2>
-<label><input id="desktop-shortcut" type="checkbox">デスクトップにショートカットを作る</label>
-<label><input id="start-menu-shortcut" type="checkbox">スタートメニューにショートカットを作る</label>
 <label><input id="autostart" type="checkbox">Windows 起動時に自動起動する</label>
 <label><input id="check-updates" type="checkbox">起動時に更新を確認する</label>
-<details><summary>詳細</summary><label>アプリのポート番号<input id="app-port" type="number" min="1024" max="65535"></label><small>ポート番号の変更はアプリの次回起動時に反映されます。</small></details>
+<details><summary>詳細設定</summary><label>アプリのポート番号<input id="app-port" type="number" min="1024" max="65535"></label><small>ポート番号の変更はアプリの次回起動時に反映されます。</small></details>
 <button id="save-app-settings" type="button">設定を保存</button><p id="app-save-status" data-i18n-transient role="status"></p></section>
 <section class="output" data-distribution-only hidden><h2>OBS への追加</h2>
 <h3>ブラウザソース</h3><p>OBS にブラウザソースを追加し、幅 1920・高さ 1080 に設定します。</p>

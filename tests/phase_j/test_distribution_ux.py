@@ -202,7 +202,8 @@ def test_autosave_updates_existing_long_url(browser: Browser, distribution: tupl
 def test_tabs_and_input_preview(browser: Browser, distribution: tuple, language: str) -> None:
     runtime, url = distribution
     runtime.settings['language'] = language
-    runtime.settings['onboarding_seen'] = True
+    runtime.settings.update(onboarding_seen=True, stream_obs_done=True,
+                            stream_camera_done=True, stream_analysis_done=True)
     runtime.preview_image = live_preview.thumbnail(np.zeros((180, 320, 3), dtype=np.uint8))
     page = browser.new_page(viewport=dict(width=1100, height=800))
     errors: list[str] = []
@@ -248,8 +249,8 @@ def test_status_badge_and_sentence_share_state(browser: Browser, distribution: t
     page.wait_for_function('Boolean(window.lastDistributionState)')
     page.route('**/api/state', lambda route: route.abort())
     labels = ['Stopped', 'Waiting for a match', 'Analyzing'] if language == 'en' else ['停止中', '試合待ち', '解析中']
-    texts = ['Press Start when you are ready.', 'Waiting for a match to appear', 'Watching the game video.'] if language == 'en' else [
-        '準備ができたら「起動」を押してください。', '試合が映るのを待っています', 'ゲームの映像を見ています。']
+    texts = ['When ready, press Start analysis.', 'Waiting for a match to appear', 'Watching the game video.'] if language == 'en' else [
+        '準備ができたら「解析を始める」を押してください。', '試合が映るのを待っています', 'ゲームの映像を見ています。']
     # A successful input scan must not overwrite the waiting sentence, including on language/form refresh.
     for running, calibration, phase, index in [(False, '', '', 0), (True, 'verifying', '', 1),
                                                (True, 'ready', 'between_matches', 1), (True, 'ready', 'playing', 2)]:
@@ -271,12 +272,14 @@ def test_visible_url_and_one_click_obs(browser: Browser, distribution: tuple, la
     def setup(route: Any) -> None:
         enabled_at_setup.append(runtime.settings['obs_enabled'])
         assert route.request.post_data_json == {'apply': True}
-        route.fulfill(json=dict(scene='puyoZeus Live', browser_sources=['Overlay'], warning=''))
+        route.fulfill(json=dict(scene='puyoZeus Live', browser_sources=['Overlay'], warning='', applied=True))
     page.route('**/api/obs', setup)
     page.goto(url + '/settings')
     expect(page.locator('#stream-url')).to_have_value(url + '/')
-    expect(page.locator('#copy-obs-url')).to_be_in_viewport()
+    expect(page.locator('#copy-obs-url')).to_be_hidden()
     expect(page.locator('#obs-enabled')).to_be_hidden()
+    page.locator('#obs-manual summary').click()
+    expect(page.locator('#copy-obs-url')).to_be_visible()
     page.locator('#copy-obs-url').click()
     page.wait_for_function('window.copiedURL===location.origin+"/"')
     page.locator('#obs-apply').click()

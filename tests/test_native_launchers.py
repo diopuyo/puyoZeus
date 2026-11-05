@@ -9,6 +9,35 @@ import subprocess
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize('key', ['desktop_shortcut', 'start_menu_shortcut'])
+@pytest.mark.parametrize('name_index', range(4))
+@pytest.mark.parametrize('owned', [False, True])
+def test_removed_shortcuts_only_delete_owned(key: str, name_index: int, owned: bool,
+                                            tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """旧設定がONでも通常リンクを作らず、他の展開先を削除しない。"""
+    from src.phase_j import distribution_windows as windows
+    root, directory = tmp_path / 'app', tmp_path / 'links'
+    root.mkdir()
+    directory.mkdir()
+    names = [windows.shortcut_name(root), *windows.legacy_names(root)]
+    link = directory / names[name_index]
+    target = (root if owned else tmp_path / 'app-other') / 'puyoZeus Live.exe'
+    script = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:PUYO_LINK);"
+              "$s.TargetPath=$env:PUYO_TARGET;$s.Save()")
+    subprocess.run([windows.system_tool('powershell'), '-NoProfile', '-NonInteractive', '-Command', script],
+                   env={**os.environ, 'PUYO_LINK': str(link), 'PUYO_TARGET': str(target)},
+                   check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+    before = link.read_bytes()
+    monkeypatch.setattr(windows, 'shortcut_directories', lambda: {key: directory})
+    windows.migrate_shortcuts(root, {key: True})
+    windows.shortcuts(root, {key: True})
+    assert link.exists() is not owned
+    if not owned:
+        assert link.read_bytes() == before
+    assert len(list(directory.glob('*.lnk'))) == int(not owned)
+
 def test_shortcut_migration_targets_exe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from src.phase_j import distribution_windows as windows
     directories = {key: tmp_path / key for key in ('desktop_shortcut', 'start_menu_shortcut', 'autostart')}
@@ -26,10 +55,10 @@ def test_shortcut_migration_targets_exe(tmp_path: Path, monkeypatch: pytest.Monk
         directory.mkdir()
         (directory / windows.legacy_names(tmp_path)[0]).write_text('old VBS link', encoding='utf-8')
     windows.migrate_shortcuts(tmp_path, dict.fromkeys(directories, True))
-    assert len(calls) == 3
+    assert len(calls) == 1
     assert all(item['PUYO_TARGET'] == str(tmp_path / 'puyoZeus Live.exe') for item in calls)
     assert all(item['PUYO_ICON'] == str(tmp_path / 'app/src/phase_j/brand/app_logo.ico') for item in calls)
-    assert [item['PUYO_ARGUMENTS'] for item in calls] == ['', '', '-c "pass" --autostart']
+    assert [item['PUYO_ARGUMENTS'] for item in calls] == ['-c "pass" --autostart']
 
 
 @pytest.mark.parametrize('old', ['puyoZeus Live.exe', 'puyoZeus Live.vbs', 'other'])

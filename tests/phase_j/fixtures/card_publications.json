@@ -1,0 +1,1405 @@
+{
+  "source": {
+    "source": "b3_time_gate.jsonl from a local replay (build_24w_20261101 full_w2_on)",
+    "sha256": "85428a1380737ee4b3815f00c1e99b70078074977543caab29a048395e36ef81",
+    "lines": 41865,
+    "publications": 3544
+  },
+  "rows": [
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 981966.6666666667
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 981966,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 981.933秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-29458",
+          "input_generation": 29458,
+          "input_digest": "sha256:8ade2fd2d35aaca263a8f03c5eadfa13ba05ac9487e8acf70fb354f9eecaa04c",
+          "calculation_latency_ms": 46.79229995235801,
+          "calculation_age_ms": 33.333333333416704,
+          "p1_win_probability": 0.5047103453298635,
+          "p2_win_probability": 0.4952896546701365,
+          "advantage_score": 0.37662634976719106,
+          "is_even": true,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "static"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 984866.6666666666
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 984.867秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-29546",
+          "input_generation": 29546,
+          "input_digest": "sha256:b18a00144a612651e8e476d1ca990520450365659e90770cb0363c93f40adc5c",
+          "calculation_latency_ms": 40.581499924883246,
+          "calculation_age_ms": 0.0,
+          "p1_win_probability": 0.49332845566180694,
+          "p2_win_probability": 0.5066715443381931,
+          "advantage_score": -0.5334570153160012,
+          "is_even": true,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "static"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 988233.3333333334
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 988.233秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-29647",
+          "input_generation": 29647,
+          "input_digest": "sha256:fef50818be01f10b325d0d530ac01fe6d6a10f629565d28af4d5d340567530a1",
+          "calculation_latency_ms": 46.025600051507354,
+          "calculation_age_ms": 0.0,
+          "p1_win_probability": 0.5233934920902934,
+          "p2_win_probability": 0.4766065079097066,
+          "advantage_score": 1.8733079943973403,
+          "is_even": true,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "static"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 990800.0
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 990800,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 990.767秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-29723",
+          "input_generation": 29723,
+          "input_digest": "sha256:e27645d647340660d432971b24f0e63da0ea7cae208f2e7f8bdbd21077fb29db",
+          "calculation_latency_ms": 20.6387999933213,
+          "calculation_age_ms": 33.33333333330302,
+          "p1_win_probability": 0.514085966896821,
+          "p2_win_probability": 0.48591403310317904,
+          "advantage_score": 1.1265574938543113,
+          "is_even": true,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "static"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 994300.0
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 994.300秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-29829",
+          "input_generation": 29829,
+          "input_digest": "sha256:f45f5c53490825e6d2e61c04a6a4f19deda66acde6d20707c8bc04584173b8fc",
+          "calculation_latency_ms": 50.41180015541613,
+          "calculation_age_ms": 0.0,
+          "p1_win_probability": 0.5147515643744063,
+          "p2_win_probability": 0.4852484356255937,
+          "advantage_score": 1.1806166003870093,
+          "is_even": true,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "static"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 996266.6666666666
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 996.267秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-29888",
+          "input_generation": 29888,
+          "input_digest": "sha256:013f3951c2ef5865767d7a8daaf567626656b96be449420f159264f19c5df261",
+          "calculation_latency_ms": 42.15760016813874,
+          "calculation_age_ms": 0.0,
+          "p1_win_probability": 0.5113480679864431,
+          "p2_win_probability": 0.48865193201355694,
+          "advantage_score": 0.9084453515280058,
+          "is_even": true,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "static"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 999600.0
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 999.600秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-29988",
+          "input_generation": 29988,
+          "input_digest": "sha256:e67a54dce9c1db8023d42303d5ce37f0c85f782ce87b1f1ae5480d131ea14056",
+          "calculation_latency_ms": 45.11080007068813,
+          "calculation_age_ms": 0.0,
+          "p1_win_probability": 0.609596469314666,
+          "p2_win_probability": 0.39040353068533395,
+          "advantage_score": 8.939069211188396,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1002200.0
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1002.200秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-30066",
+          "input_generation": 30066,
+          "input_digest": "sha256:d1ea2a11ce206ef5a9bb2033efd5e1b4b9a9eabdc713ee5c39092e973a93c722",
+          "calculation_latency_ms": 48.64709987305105,
+          "calculation_age_ms": 0.0,
+          "p1_win_probability": 0.5127041234051877,
+          "p2_win_probability": 0.4872958765948123,
+          "advantage_score": 1.0209866255057158,
+          "is_even": true,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "static"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1005933.3333333333
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1005.933秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-30178",
+          "input_generation": 30178,
+          "input_digest": "sha256:551da6f2a97e3919b5dfc0afa9b97454f3d426bcb4b553e8b93df8ae1c9b8e52",
+          "calculation_latency_ms": 60.45469990931451,
+          "calculation_age_ms": 0.0,
+          "p1_win_probability": 0.5463731943073011,
+          "p2_win_probability": 0.45362680569269886,
+          "advantage_score": 3.7185706745080216,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1009500.0
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 1009500,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1009.333秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-30280",
+          "input_generation": 30280,
+          "input_digest": "sha256:811a7da95588ee1b2a3c803db115ef35af1429b25988931de0c852073cc4e39f",
+          "calculation_latency_ms": 84.73140001296997,
+          "calculation_age_ms": 166.66666666662877,
+          "p1_win_probability": 0.5776675175659205,
+          "p2_win_probability": 0.4223324824340795,
+          "advantage_score": 6.281397892539566,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1013833.3333333334
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 1013833,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1013.800秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-30414",
+          "input_generation": 30414,
+          "input_digest": "sha256:c223fa25b3b48d800d4144af04e3255b51101274a6c1df39979fe1c7d6c57711",
+          "calculation_latency_ms": 60.46379986219108,
+          "calculation_age_ms": 33.333333333416704,
+          "p1_win_probability": 0.6969438443178735,
+          "p2_win_probability": 0.3030561556821265,
+          "advantage_score": 17.066461838715085,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1017666.6666666666
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1017.667秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-30530",
+          "input_generation": 30530,
+          "input_digest": "sha256:71d61e30e0176d9266401ecfd4d631148cfa7d2037825d757b0ba70e49638f21",
+          "calculation_latency_ms": 50.92890001833439,
+          "calculation_age_ms": 0.0,
+          "p1_win_probability": 0.5401408279820539,
+          "p2_win_probability": 0.4598591720179461,
+          "advantage_score": 3.216468181454146,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1021200.0
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 1021200,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1021.167秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-30635",
+          "input_generation": 30635,
+          "input_digest": "sha256:3856b21c297a038ba7fd0c4ae47ee732dd6efe90b66bcea93fe6ede281002a55",
+          "calculation_latency_ms": 20.401400048285723,
+          "calculation_age_ms": 33.333333333416704,
+          "p1_win_probability": 0.64625305224952,
+          "p2_win_probability": 0.35374694775048,
+          "advantage_score": 12.0569278005602,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "static"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1025700.0
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1025.700秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-30771",
+          "input_generation": 30771,
+          "input_digest": "sha256:1fa4527a1dab6e18c201e68651b84f0dd63c16e4859b27340ef573616945de8e",
+          "calculation_latency_ms": 34.67410011216998,
+          "calculation_age_ms": 0.0,
+          "p1_win_probability": 0.616779587871792,
+          "p2_win_probability": 0.383220412128208,
+          "advantage_score": 9.51617234766912,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1028800.0
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1028.800秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-30864",
+          "input_generation": 30864,
+          "input_digest": "sha256:8b720ce2b89cba31836f3b765245ec7e2c9e7323da035a32b64ec50d35a7f5be",
+          "calculation_latency_ms": 32.00669982470572,
+          "calculation_age_ms": 0.0,
+          "p1_win_probability": 0.6413498776341093,
+          "p2_win_probability": 0.35865012236589067,
+          "advantage_score": 11.628283910759546,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1033766.6666666666
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 1033766,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1033.733秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-31012",
+          "input_generation": 31012,
+          "input_digest": "sha256:f3dfb88e140bf1c336419dc5cc129aafdf96ebbf840146c80f335aa8bc676fb5",
+          "calculation_latency_ms": 41.780299972742796,
+          "calculation_age_ms": 33.33333333330302,
+          "p1_win_probability": 0.8957668520963169,
+          "p2_win_probability": 0.1042331479036831,
+          "advantage_score": 43.20814646164807,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1037900.0000000001
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 1037900,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1037.867秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-31136",
+          "input_generation": 31136,
+          "input_digest": "sha256:2f902de6738c81f87c3f89e78d754d097b7d0fb7088a98c0c2651bf7203f597e",
+          "calculation_latency_ms": 61.0593999736011,
+          "calculation_age_ms": 33.33333333353039,
+          "p1_win_probability": 0.5034333028717451,
+          "p2_win_probability": 0.49656669712825485,
+          "advantage_score": 0.27591933771579025,
+          "is_even": true,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1041533.3333333333
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 1041533,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1041.500秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-31245",
+          "input_generation": 31245,
+          "input_digest": "sha256:0c9c37fca8455d6a5350d5766673a91a660335ce268e11e19542b8538affe483",
+          "calculation_latency_ms": 23.468900006264448,
+          "calculation_age_ms": 33.33333333330302,
+          "p1_win_probability": 0.09620980007519335,
+          "p2_win_probability": 0.9037901999248067,
+          "advantage_score": -44.77672631655983,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1045933.3333333334
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 1045933,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1045.900秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-31377",
+          "input_generation": 31377,
+          "input_digest": "sha256:35e8ab440c99899633ae1cfadf6abf53002760d561e047d9e2798efdc6a08619",
+          "calculation_latency_ms": 30.496099963784218,
+          "calculation_age_ms": 33.33333333330302,
+          "p1_win_probability": 0.055595510503740384,
+          "p2_win_probability": 0.9444044894962597,
+          "advantage_score": -56.61848377798405,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1049966.6666666667
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 1049966,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1049.933秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-31498",
+          "input_generation": 31498,
+          "input_digest": "sha256:626da10a6d4f256ed41e65d31caa87373c96b8e52c055181bcbb06d863f34f15",
+          "calculation_latency_ms": 50.533799920231104,
+          "calculation_age_ms": 33.33333333330302,
+          "p1_win_probability": 0.057085743468434764,
+          "p2_win_probability": 0.9429142565315652,
+          "advantage_score": -56.057137695562204,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1054200.0
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "physical_prediction",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "frame-31626",
+          "input_generation": 31626,
+          "input_digest": "sha256:650a27be62f9fd5378c62cdfb88c413742204336e786bbfa96527b626a6dcda0",
+          "calculation_latency_ms": 47.13559988886118,
+          "calculation_age_ms": 1.116700004786253,
+          "p1_win_probability": 0.024798001824684772,
+          "p2_win_probability": 0.9752019981753153,
+          "advantage_score": -73.77772926271999,
+          "is_even": false,
+          "origin": "physical_prediction",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "unavoidable_death"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1057400.0
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 1057400,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1057.333秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-31720",
+          "input_generation": 31720,
+          "input_digest": "sha256:824811f640fa5acf2b8c268fa61e4efc1f46149a6872ea92159c874c6d0de1c7",
+          "calculation_latency_ms": 42.14499983936548,
+          "calculation_age_ms": 66.66666666683341,
+          "p1_win_probability": 0.00581102309317366,
+          "p2_win_probability": 0.9941889769068264,
+          "advantage_score": -96.77308125976255,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1057866.6666666665
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "hold",
+        "update_reason": "hold_started",
+        "primary_hold_reason": "calculation_pending",
+        "all_hold_reasons": [
+          "calculation_pending"
+        ],
+        "hold_started_ms": 1057866,
+        "hold_elapsed_ms": 0,
+        "score_roi_alignment": {
+          "1P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          },
+          "2P": {
+            "ready": true,
+            "samples": 12,
+            "offset": [
+              0,
+              0
+            ]
+          }
+        },
+        "input_status": "ready",
+        "calibration_progress": 100,
+        "match_phase": "playing",
+        "message": "B3 基準 1057.833秒"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "b3-frame-31735",
+          "input_generation": 31735,
+          "input_digest": "sha256:30322d35993e2d663f320c6798f73923f4d5194058f6e527af8d26d3f5650c1c",
+          "calculation_latency_ms": 25.778100127354264,
+          "calculation_age_ms": 33.33333333330302,
+          "p1_win_probability": 0.00217644430301556,
+          "p2_win_probability": 0.9978235556969844,
+          "advantage_score": -99.99980304451049,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "exchange"
+        }
+      }
+    },
+    {
+      "identity": {
+        "session_id": "24w2",
+        "match_id": 11
+      },
+      "timing": {
+        "source_available_ms": 1058233.3333333333
+      },
+      "display": {
+        "visibility": "visible",
+        "status": "live",
+        "update_reason": "prediction_committed",
+        "primary_hold_reason": null,
+        "all_hold_reasons": [],
+        "hold_started_ms": null,
+        "hold_elapsed_ms": null,
+        "match_phase": "playing",
+        "message": "決着・2P勝利"
+      },
+      "evaluations": {
+        "practical": {
+          "availability": "available",
+          "request_id": "frame-31747",
+          "input_generation": 31747,
+          "input_digest": "sha256:645bb8bb7013c9dc1ee7f2270e11b2bb6527659104154598c691dde9dad8f347",
+          "calculation_latency_ms": 4.502099938690662,
+          "calculation_age_ms": 0.5897001828998327,
+          "p1_win_probability": 0.0,
+          "p2_win_probability": 1.0,
+          "advantage_score": -100.0,
+          "is_even": false,
+          "origin": "model",
+          "calibration_id": "b3-stage2-display",
+          "evaluated_positions": 1,
+          "source": "confirmed_death"
+        }
+      }
+    }
+  ]
+}

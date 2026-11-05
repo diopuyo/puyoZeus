@@ -8,7 +8,7 @@ from tests.phase_j.test_overlay_browser import browser
 from tests.phase_j.test_distribution_app import distribution
 
 THEMES = ['pop', 'pop-cream']
-LAYOUTS = ['center', 'minimal', 'vertical', 'l-left']
+LAYOUTS = ['center', 'minimal', 'card', 'vertical', 'l-left']
 
 
 @pytest.mark.parametrize('theme', THEMES)
@@ -100,7 +100,7 @@ def test_legacy_ribbon_uses_center(browser: Browser, query: str) -> None:
 ])
 def test_two_designs_four_layouts(browser: Browser, distribution: tuple, path: str,
                                  theme_selector: str, layout_selector: str, preview: str) -> None:
-    ui_layouts = ['center', 'minimal', 'vertical', 'l-top-left', 'l-top-right',
+    ui_layouts = ['center', 'minimal', 'card', 'vertical', 'l-top-left', 'l-top-right',
                   'l-bottom-left', 'l-bottom-right']
     _, url = distribution
     page = browser.new_page(viewport={'width':1500,'height':1100})
@@ -125,6 +125,6 @@ def test_two_designs_four_layouts(browser: Browser, distribution: tuple, path: s
             }''', arg=preview)
             stage = page.frame_locator(preview).locator('#stage')
             expect(stage).to_have_attribute('data-pop', 'cream' if theme == 'pop-cream' else 'black')
-            expect(stage).to_have_attribute('data-layout', 'l' if layout.startswith('l-') else {'center':'side','vertical':'side','minimal':'mini'}[layout])
+            expect(stage).to_have_attribute('data-layout', 'l' if layout.startswith('l-') else {'center':'side','vertical':'side','minimal':'mini','card':'ribbon'}[layout])
             expect(stage).to_have_attribute('data-vgraph', '1' if layout in ['center','vertical'] else '0')
     page.close()

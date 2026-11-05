@@ -19,6 +19,28 @@ def isolated_shortcut_directories(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(distribution_windows, 'shortcut_directories', lambda: directories)
 
 
+@pytest.fixture(autouse=True)
+def site_feedback_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """0.6.2 で出荷の既定は ON。試験は OFF から始め、ON の試験だけが明示して入れる (本番のサイトへ送らない)。"""
+    from src import production_config
+    monkeypatch.setattr(production_config, 'DISTRIBUTION_SITE_FEEDBACK', False)
+
+
+def install_site_send_guard() -> None:
+    """どの試験からも本番の配布サイトへ通信させない (旗を ON にする試験の送り先の差し替え漏れも止める)。"""
+    from urllib.parse import urlsplit
+    from src.phase_j.distribution_config import DISTRIBUTION_SITE_URL
+    site_host = urlsplit(DISTRIBUTION_SITE_URL).hostname
+
+    def audit(event: str, args: tuple) -> None:
+        if event == 'urllib.Request' and urlsplit(str(args[0])).hostname == site_host:
+            raise AssertionError(f'試験から本番の配布サイトへの通信は禁止: {args[0]}')
+    sys.addaudithook(audit)
+
+
+install_site_send_guard()
+
+
 def install_shortcut_write_guard() -> None:
     """直接のファイル操作とPowerShellへのリンクパスの引き渡しを監視する。"""
     if os.name != 'nt':

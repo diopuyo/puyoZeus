@@ -18,6 +18,10 @@ PROBE_FRAMES = 12
 MARKER_COLORS = ((225, 55, 197), (41, 220, 179), (248, 196, 51), (54, 79, 230))
 MARKER_CELL = 6
 MARKER_TOLERANCE = 0.92
+MARKER_COLOR_MARGIN = 25
+# 半分の縮尺では色差間引き後の単色部分が2×2画素（輪郭面積1）になる。
+MARKER_MIN_AREA, MARKER_MAX_AREA = 1, 120
+MARKER_SEARCH_WIDTH, MARKER_SEARCH_HEIGHT = MARKER_CELL * 4, MARKER_CELL * 3
 FEEDBACK_HELP = '表示が映り込んでいます。OBS の仮想カメラの出力を「ソース」→ ゲームの映像にしてください。'
 STOPPED_SIZE = (96, 54)
 STOPPED_MEAN_ERROR = 8
@@ -50,23 +54,51 @@ def has_feedback(frame: np.ndarray) -> bool:
     """移動・縮小された表示でも目印を照合し、単色領域では反応しない。"""
     if frame is None or not frame.size or frame.ndim != 3 or frame.shape[2] != 3:
         return False
-    from .live_verify_reasons import feedback_score
-    color = np.array(MARKER_COLORS[0][::-1])
-    mask = cv2.inRange(full_image(frame), np.maximum(0, color - 25), np.minimum(255, color + 25))
+    frame = full_image(frame)
+    mask = _marker_mask(frame)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    candidates = [cv2.boundingRect(contour) for contour in contours if 2 <= cv2.contourArea(contour) <= 120]
-    for scale in (1.0, .8, .7, .5):
-        template = cv2.resize(marker_image(), None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
-        for x, y, width, height in candidates:
-            margin = MARKER_CELL * 5
-            crop = frame[max(0, y-margin):y+height+margin, max(0, x-margin):x+width+margin]
-            if min(crop.shape[:2]) < max(template.shape[:2]):
+    candidates = [cv2.boundingRect(contour) for contour in contours
+                  if MARKER_MIN_AREA <= cv2.contourArea(contour) <= MARKER_MAX_AREA]
+    for x, y, width, height in candidates:
+        # 候補の色セルを含む目印の全体が入る、参照の最大幅・高さまでを探す。
+        crop = frame[max(0, y-MARKER_SEARCH_HEIGHT):y+height+MARKER_SEARCH_HEIGHT,
+                     max(0, x-MARKER_SEARCH_WIDTH):x+width+MARKER_SEARCH_WIDTH]
+        if _matches_marker(crop):
+            return True
+    return False
+
+
+def _matches_marker(crop: np.ndarray) -> bool:
+    """理想参照との相関が低すぎる窓では、合格不可能な変換参照を省く。"""
+    from .feedback_templates import reference_groups
+    from .live_verify_reasons import feedback_score
+    for original, variants in reference_groups(MARKER_TOLERANCE):
+        if crop.shape[0] < original.shape[0] or crop.shape[1] < original.shape[1]:
+            continue
+        correlation = cv2.minMaxLoc(cv2.matchTemplate(crop, original, cv2.TM_CCOEFF_NORMED))[1]
+        feedback_score(correlation)
+        if correlation >= MARKER_TOLERANCE:
+            return True
+        for template, lower in variants:
+            if correlation < lower:
                 continue
-            correlation = cv2.minMaxLoc(cv2.matchTemplate(crop, template, cv2.TM_CCOEFF_NORMED))[1]
-            feedback_score(correlation)
-            if correlation >= MARKER_TOLERANCE:
+            score = cv2.minMaxLoc(cv2.matchTemplate(crop, template, cv2.TM_CCOEFF_NORMED))[1]
+            feedback_score(score)
+            if score >= MARKER_TOLERANCE:
                 return True
     return False
+
+
+def _marker_mask(frame: np.ndarray) -> np.ndarray:
+    """色の不一致で候補探索から落ちないよう、601復号後の色も探す。"""
+    from .live_color_roi import simulate_dshow
+    color = np.array(MARKER_COLORS[0][::-1], dtype=np.uint8).reshape(1, 1, 3)
+    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+    for candidate in (color, simulate_dshow(color)):
+        center = candidate.reshape(3).astype(int)
+        mask |= cv2.inRange(frame, np.maximum(0, center - MARKER_COLOR_MARGIN),
+                            np.minimum(255, center + MARKER_COLOR_MARGIN))
+    return mask
 
 
 @lru_cache(maxsize=1)

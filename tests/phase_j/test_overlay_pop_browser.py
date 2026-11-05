@@ -39,7 +39,7 @@ def test_settings_drag_reset_and_language(browser: Browser, server: object) -> N
     # 採用された黒とクリームの二つ。
     assert page.locator('[name=theme] option').count() == 2
     # L字の四隅を独立した選択肢として表示する。
-    assert page.locator('[name=layout] option').count() == 7
+    assert page.locator('[name=layout] option').count() == 8
     page.locator('[name=layout]').select_option('center')
     assert page.locator('#drag-handle, [data-position], [name=x], [name=y]').count() == 0
     saved = json.loads(page.locator('#json').input_value())['overlay']

@@ -29,7 +29,7 @@ def test_upgrade_migrates_only_same_installation(tmp_path: Path, monkeypatch: py
     monkeypatch.setattr(windows.subprocess, 'run', create)
     monkeypatch.setattr(windows, 'remove_owned_link', lambda path, root: path.unlink(missing_ok=True))
     windows.migrate_shortcuts(root, {'desktop_shortcut': True})
-    assert (desktop / name).read_text() == '新リンク'
+    assert not (desktop / name).exists()
     assert not old.exists() and other.exists()
     windows.shortcuts(root, {'desktop_shortcut': True}, remove=True)
     assert not (desktop / name).exists() and other.exists()

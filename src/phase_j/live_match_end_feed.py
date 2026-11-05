@@ -15,13 +15,15 @@ def enabled() -> bool:
                           str(int(LIVE_MATCH_END_FEED_ON_HOLD_DEFAULT))) == '1'
 
 
-def eligible(image: np.ndarray, verifier: Any) -> bool:
+def eligible(image: np.ndarray, verifier: Any, feedback_present: bool | None = None) -> bool:
     """同じ画像の両側を確認。得点か枠は各側に必要で、位置異常は拒否する。"""
     from .distribution_input import has_feedback
     from .live_device import (PuyoScreenVerifier, GRID_MARGIN, GRID_POSITION_TOLERANCE,
                               frame_border_matches)
     base = getattr(verifier, 'base', verifier)
-    if not isinstance(base, PuyoScreenVerifier) or has_feedback(image):
+    if not isinstance(base, PuyoScreenVerifier):
+        return False
+    if feedback_present if feedback_present is not None else has_feedback(image):
         return False
     for side, region in zip(('1P', '2P'), base.regions):
         crop = image[region.y-GRID_MARGIN:region.y+region.height+GRID_MARGIN,

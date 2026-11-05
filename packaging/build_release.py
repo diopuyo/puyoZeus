@@ -290,7 +290,7 @@ def arrange_release_documents(bundle: Path) -> None:
         (bundle / name).unlink(missing_ok=True)
 
 
-def finish_bundle(output: Path, version: str, model: Path, rc_models: Path = RC_MODELS, model_label: str = '24w2-temporary') -> Path:
+def finish_bundle(output: Path, version: str, model: Path, rc_models: Path = RC_MODELS, model_label: str = '24w2-temporary', signed_launcher_dir: Path | None = None) -> Path:
     bundle = output / 'build/PuyoLive'
     retain_python_vc_runtime(bundle, output)
     write_python_runtime_configs(bundle)
@@ -317,7 +317,7 @@ def finish_bundle(output: Path, version: str, model: Path, rc_models: Path = RC_
         shutil.copy2(ROOT / 'packaging/Uninstall.bat', bundle / name)
     shutil.copy2(ROOT / 'packaging/UninstallCleanup.ps1', bundle / 'tools/UninstallCleanup.ps1')
     arrange_launchers(bundle)
-    build_launchers(bundle, version)
+    build_launchers(bundle, version, signed_launcher_dir=signed_launcher_dir)
     (bundle / 'mascot').mkdir(exist_ok=True)
     arrange_release_documents(bundle)
     precompile(bundle / 'python', bundle / 'app', bundle / 'python/Lib/site-packages')
@@ -345,6 +345,15 @@ def artifacts(output: Path, bundle: Path, version: str, zip_only: bool = False) 
     return result
 
 
+def validate_readme_version(version: str) -> None:
+    """説明書が別の版のままなら、組み立てを始める前に止める。"""
+    readme = ROOT / 'packaging/README_ja.txt'
+    heading = readme.read_text('utf-8-sig').splitlines()[0]
+    expected = f'# puyoZeus Live {version} —'
+    if not heading.startswith(expected):
+        raise ValueError(f'README の見出しの版が --version {version} と一致しません: {heading}')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=DEFAULT_OUTPUT)
@@ -354,7 +363,10 @@ def main() -> None:
     parser.add_argument('--package-only', action='store_true')
     parser.add_argument('--zip-only', action='store_true')
     parser.add_argument('--rc-models', type=Path, default=RC_MODELS)
+    parser.add_argument('--signed-launcher-dir', type=Path, default=None,
+                        help='SignPath Foundation 署名済みの入口 exe のフォルダー（既定は従来方式）')
     args = parser.parse_args()
+    validate_readme_version(args.version)
     if not args.zip_only:
         compiler()
     output = safe_output(args.output)
@@ -363,7 +375,8 @@ def main() -> None:
         build(output, DEFAULT_ASSET_ROOT, False, reuse_python=True, with_onnx=True,
               onnx_cache=INPUTS / 'onnx_cache', b3_model=args.model, b3_timing_table=TABLE,
               include_system_vc_runtime=False)
-    bundle = finish_bundle(output, args.version, args.model, args.rc_models, args.model_label)
+    bundle = finish_bundle(output, args.version, args.model, args.rc_models, args.model_label,
+                           signed_launcher_dir=args.signed_launcher_dir)
     print(json.dumps(artifacts(output, bundle, args.version, args.zip_only), ensure_ascii=False, indent=2))
 
 

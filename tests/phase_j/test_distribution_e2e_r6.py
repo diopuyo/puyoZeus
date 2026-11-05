@@ -91,19 +91,20 @@ def test_restart_creates_new_analysis_child(tmp_path: Path, monkeypatch: pytest.
 def test_feedback_blocks_accepted_frames_then_recovers(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.phase_j.live_device import DeviceConfig, FrameContinuity
     from tests.phase_j.test_dshow_color import FakeDevice
-    clock, statuses = [0.0], []
+    import time
+    start, statuses = time.perf_counter(), []
     clean = np.zeros((1080, 1920, 3), dtype=np.uint8)
     marked = clean.copy()
     marker = marker_image()
     marked[20:20 + marker.shape[0], 948:948 + marker.shape[1]] = marker
     device = FakeDevice(clean)
-    device.read = lambda: (True, marked if 1 <= clock[0] < 2 else clean)
+    device.read = lambda: (True, marked if 1 <= time.perf_counter() - start < 2 else clean)
     monkeypatch.setenv('PUYO_LIVE_VERIFY_ASYNC', '0')
     monkeypatch.setenv('PUYO_LIVE_ASYNC_SCREEN_VERIFY', '0')
     monkeypatch.setattr(FrameContinuity, 'ready', lambda *args: True)
     source = DirectShowSource(DeviceConfig('synthetic', 0, color_correction='off'), 3,
         lambda: None, lambda *args: device, lambda image: True,
-        lambda: clock[0], lambda delay: clock.__setitem__(0, clock[0] + delay),
+        time.perf_counter, time.sleep,
         on_status=statuses.append)
     frames = list(source)
     assert 'overlay_feedback' in statuses and device.released
@@ -112,21 +113,29 @@ def test_feedback_blocks_accepted_frames_then_recovers(monkeypatch: pytest.Monke
 
 
 def test_feedback_on_accepted_synthetic_input() -> None:
-    source = DirectShowSource.__new__(DirectShowSource)
-    source._feedback_checked_at = float('-inf')
-    source._feedback_present = False
+    import time
+    from src.phase_j.live_device import DeviceConfig
+    source = DirectShowSource(DeviceConfig('synthetic', 0), 0, lambda: None)
     source.on_status, source.sleep = Mock(), Mock()
     image = np.zeros((1080, 1920, 3), dtype=np.uint8)
     marker = marker_image()
     image[20:20 + marker.shape[0], 948:948 + marker.shape[1]] = marker
-    source._check_feedback(image, 0)
-    assert source._hold_input(True, True, image, 0, Mock(), 0, Mock())
-    source.on_status.assert_called_with('overlay_feedback')
-    clean = np.zeros_like(image)
-    source._check_feedback(clean, VERIFY_PERIOD_SEC / 2)
-    assert source._feedback_present
-    source._check_feedback(clean, VERIFY_PERIOD_SEC)
-    assert not source._hold_input(True, True, clean, VERIFY_PERIOD_SEC, Mock(), 0, Mock())
+    def wait_result(stamp: float) -> None:
+        deadline = time.perf_counter() + 3
+        while source._feedback_worker.result(stamp)[1] != stamp and time.perf_counter() < deadline:
+            time.sleep(.01)
+        assert source._feedback_worker.result(stamp)[1] == stamp
+    try:
+        source._check_feedback(image, 0)
+        wait_result(0)
+        assert source._hold_input(True, True, image, 0, Mock(), 0, Mock())
+        source.on_status.assert_called_with('overlay_feedback')
+        clean = np.zeros_like(image)
+        source._check_feedback(clean, VERIFY_PERIOD_SEC)
+        wait_result(VERIFY_PERIOD_SEC)
+        assert not source._hold_input(True, True, clean, VERIFY_PERIOD_SEC, Mock(), 0, Mock())
+    finally:
+        source._close_feedback()
 
 
 @pytest.mark.parametrize('name', ['HD Webcam', 'OBS Virtual Camera'])
@@ -166,8 +175,9 @@ def test_recovery_and_feedback_labels(distribution: tuple, browser: Browser, lan
     expected = (['Waiting for a match', 'Restarting analysis'] if language == 'en'
                 else ['試合待ち', '解析を再開しています'])
     if restarting:
-        assert rendered == expected
+        assert rendered[0] == expected[0]
+        assert ('step ②' if language == 'en' else '手順②') in rendered[1]
     else:
         assert rendered[0] == ('Needs attention' if language == 'en' else '要対応')
-        assert ('overlay appears' if language == 'en' else '表示が映り込んでいます') in rendered[1]
+        assert ('Overlay detected' if language == 'en' else '表示が映り込んでいます') in rendered[1]
     page.close()

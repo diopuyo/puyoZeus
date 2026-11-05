@@ -5,7 +5,7 @@ window.OverlayOptions=(()=>{
   const DEFAULT_SCALE=80, PERCENT=100, BAND_EDGES=[10,30,70,90], EDGE_COUNT=4;
   // 設定ページに出す選択肢はここだけで管理する。
   const catalog={themes:{pop:'ポップ (黒)','pop-cream':'ポップ (クリーム)'},
-    layouts:{center:'真ん中の柱',minimal:'小さい帯',vertical:'縦','l-top-left':'L字・左上','l-top-right':'L字・右上','l-bottom-left':'L字・左下','l-bottom-right':'L字・右下'}};
+    layouts:{center:'真ん中の柱',minimal:'小さい帯',card:'カード',vertical:'縦','l-top-left':'L字・左上','l-top-right':'L字・右上','l-bottom-left':'L字・左下','l-bottom-right':'L字・右下'}};
   const aliases={'battle-a':'pop',esports:'pop',normal:'pop',classic:'pop',noir:'pop',neon:'pop',arena:'pop',stylish:'pop',plain:'pop'};
   const enums={layout:['center','card','ribbon','minimal','data','l-right','l-left','l','vertical','l-top-left','l-top-right','l-bottom-left','l-bottom-right'],
     corner:['top-left','top-right','bottom-left','bottom-right'],font:['small','medium','large'],
@@ -64,7 +64,7 @@ window.OverlayOptions=(()=>{
     const mode=selected.mascot_dopamine_mode!==false;
     return {...Object.fromEntries(contentFlags.map(key=>[key,defaultContents.includes(key)])),layout,midline:'adaptive',theme:'pop',corner:isL?layout.slice(2):'top-left',scale:DEFAULT_SCALE,font:'medium',
       mascot_dopamine:'normal',mascot_speed:'1',mascot_bloodshot:false,debug_panel:false,vgraph:false,mascot_band_edges:[...BAND_EDGES],language:'auto',mascot:true,mascot_dopamine_mode:mode,mascot_motion:mode,mascot_eyes:true,mascot_expressions:mode,mascot_flip_right:false,mascot_position:'card',mascot_size:'medium',
-      band:true,numbers:true,recent:layout!=='minimal',full:isL,status:true,
+      band:true,numbers:true,recent:!['minimal','card'].includes(layout),full:isL||layout==='card',status:true,
       details:isL||layout==='data',...selected};
   }
   /** @param {object} options @returns {object} */

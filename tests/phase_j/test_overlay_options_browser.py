@@ -52,8 +52,8 @@ def test_switches_work_on_every_layout(browser: Browser, key: str, selector: str
         for enabled in ['true', 'false']:
             page = new_page(browser, f'{layout}&{key}={enabled}')
             # 廃止された切替指定より、配置ごとの 0.6.0 初期値を優先する。
-            visible = key == 'numbers' or (key == 'recent' and layout != 'minimal')
-            visible = visible or (key == 'full' and layout.startswith('l'))
+            visible = key == 'numbers' or (key == 'recent' and layout not in ('minimal', 'card', 'data'))
+            visible = visible or (key == 'full' and (layout.startswith('l') or layout in ('card', 'data')))
             assert page.locator(selector).is_visible() == visible
             page.close()
 

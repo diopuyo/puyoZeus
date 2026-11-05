@@ -1,6 +1,7 @@
 ﻿"""署名を保った同梱Pythonの写しを配布の入口にする。"""
 from __future__ import annotations
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -24,8 +25,61 @@ def verify_copy(source: Path, target: Path) -> None:
                    creationflags=subprocess.CREATE_NO_WINDOW)
 
 
-def build_launchers(bundle: Path, version: str) -> None:
+def verify_signpath(target: Path) -> None:
+    """有効な署名と証明書の署名者名の両方を必須にする。"""
+    shell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
+    script = ("$ErrorActionPreference='Stop';"
+              "$s=Get-AuthenticodeSignature -LiteralPath $env:PUYO_SIGNED_COPY;"
+              "$name='';if($s.SignerCertificate){"
+              "$name=$s.SignerCertificate.GetNameInfo('SimpleName',$false)};"
+              "@{status=$s.Status.ToString();signer=$name}|ConvertTo-Json -Compress")
+    result = subprocess.run([str(shell), '-NoProfile', '-NonInteractive', '-Command', script],
+                            env={**os.environ, 'PUYO_SIGNED_COPY': str(target)}, check=True,
+                            capture_output=True, text=True,
+                            creationflags=subprocess.CREATE_NO_WINDOW)
+    signature = json.loads(result.stdout)
+    if (signature.get('status') != 'Valid'
+            or 'SignPath Foundation' not in signature.get('signer', '')):
+        raise ValueError(f'SignPath Foundation の有効な署名がありません: {target}')
+
+
+def verify_launcher_version(target: Path, version: str) -> None:
+    """配布の --version と FileVersion / ProductVersion を一致させる。"""
+    shell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
+    script = ("$ErrorActionPreference='Stop';"
+              "$v=[Diagnostics.FileVersionInfo]::GetVersionInfo($env:PUYO_SIGNED_COPY);"
+              "@{file=$v.FileVersion;product=$v.ProductVersion}|ConvertTo-Json -Compress")
+    result = subprocess.run([str(shell), '-NoProfile', '-NonInteractive', '-Command', script],
+                            env={**os.environ, 'PUYO_SIGNED_COPY': str(target)}, check=True,
+                            capture_output=True, text=True,
+                            creationflags=subprocess.CREATE_NO_WINDOW)
+    metadata = json.loads(result.stdout)
+    if metadata.get('file') != version or metadata.get('product') != version:
+        raise ValueError(f'入口の版が配布の版 {version} と一致しません: {target}')
+
+
+def install_signpath(bundle: Path, source: Path, version: str | None = None) -> None:
+    """両方の検証後に入口を配置し、配置したバイトも検証する。"""
+    names = ('puyoZeus Live.exe', 'アンインストール.exe')
+    for name in names:
+        verify_signpath(source / name)
+    if version is not None:
+        for name in names:
+            verify_launcher_version(source / name, version)
+    for name in names:
+        target = bundle / name
+        shutil.copyfile(source / name, target)
+        verify_signpath(target)
+        if version is not None:
+            verify_launcher_version(target, version)
+    shutil.copytree(ROOT / 'packaging/launcher', bundle / 'tools/launcher', dirs_exist_ok=True)
+
+
+def build_launchers(bundle: Path, version: str, signed_launcher_dir: Path | None = None) -> None:
     """元の署名を変更せず、入口にだけsitecustomizeを読み込ませる。"""
+    if signed_launcher_dir is not None:
+        install_signpath(bundle, signed_launcher_dir, version)
+        return
     for name, original in COPIES.items():
         source, target = bundle / 'python' / original, bundle / name
         shutil.copyfile(source, target)

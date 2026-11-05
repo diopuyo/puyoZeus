@@ -26,10 +26,11 @@ def feedback_site_url() -> str:
 DEFAULT_PORT = 8765
 MAX_PORT_ATTEMPTS = 100
 PREVIEW_WIDTH = 640
-DEFAULTS: dict[str, Any] = dict(completed=False, onboarding_seen=False, language='auto', device_index=0,
+DEFAULTS: dict[str, Any] = dict(completed=False, onboarding_seen=False, stream_obs_done=False,
+    stream_camera_done=False, stream_analysis_done=False, language='auto', device_index=0,
     device_name='OBS Virtual Camera', port=DEFAULT_PORT, check_updates=False,
     relay_url=RELAY_PLACEHOLDER, releases_url='https://puyolive.example.invalid/releases.json',
-    auto_input=True, obs_enabled=False, obs_port=4455, obs_password='', desktop_shortcut=False, start_menu_shortcut=True, autostart=False, overlay={},
+    auto_input=True, obs_enabled=False, obs_port=4455, obs_password='', desktop_shortcut=False, start_menu_shortcut=False, autostart=False, overlay={},
     distribution_app_window=DISTRIBUTION_APP_WINDOW)
 
 
@@ -59,7 +60,9 @@ def validate_settings(data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(data, dict) or set(data) - DEFAULTS.keys():
         raise ValueError('不明な設定 / Unknown settings')
     value = {**DEFAULTS, **data}
-    for key in ('auto_input', 'obs_enabled', 'completed', 'onboarding_seen', 'check_updates', 'desktop_shortcut', 'start_menu_shortcut', 'autostart', 'distribution_app_window'):
+    for key in ('auto_input', 'obs_enabled', 'completed', 'onboarding_seen', 'stream_obs_done',
+                'stream_camera_done', 'stream_analysis_done', 'check_updates', 'desktop_shortcut',
+                'start_menu_shortcut', 'autostart', 'distribution_app_window'):
         if type(value[key]) is not bool:
             raise ValueError(f'{key}: true / false')
     for key, low, high in (('obs_port', 1024, 65535), ('port', 1024, 65535), ('device_index', 0, 64)):

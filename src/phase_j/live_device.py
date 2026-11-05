@@ -91,11 +91,12 @@ class PuyoScreenVerifier:
     """
 
     relaxed = False
+    check_feedback = True
     # live_verify_soft_hold が ON のときだけ、直近の失敗の段を failure に残す (OFF は何も残さず従来と同一)。
     _record_failure = False
     failure: split.VerifyFailure | None = None
 
-    def __init__(self, relaxed: bool = False) -> None:
+    def __init__(self, relaxed: bool = False, check_feedback: bool = True) -> None:
         from src.board_grid_detector import BoardGridDetector
         from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION
         from src.score_ocr import ScoreOcr
@@ -103,6 +104,7 @@ class PuyoScreenVerifier:
         self.score = ScoreOcr.load_default()
         self.regions = (DEFAULT_P1_REGION, DEFAULT_P2_REGION)
         self.relaxed = relaxed
+        self.check_feedback = check_feedback
         self._record_failure = split.enabled()
 
     def _fail(self, stage: str, side: str = '', failed_edges: int | None = None) -> bool:
@@ -137,7 +139,7 @@ class PuyoScreenVerifier:
         from .distribution_input import has_feedback
         if self._record_failure:
             self.failure = None
-        self.feedback = has_feedback(image)
+        self.feedback = self.check_feedback and has_feedback(image)
         reasons.detail('feedback', passed=not self.feedback, value=bool(self.feedback),
                        **reasons.feedback_values())
         if self.feedback:
@@ -264,6 +266,7 @@ class DirectShowSource(FrameSource):
         self._read_ok = True
         self._feedback_checked_at = float('-inf')
         self._feedback_present = False
+        self._feedback_worker = None
 
     def _capture(self) -> Any:
         if not self._buffered_capture:
@@ -301,7 +304,6 @@ class DirectShowSource(FrameSource):
         if ok:
             from .live_preview import offer_frame
             offer_frame(image)
-            self._check_feedback(image, captured)
         if self.config.fast_first_judgment and ok and image is not None and image.ndim >= 2:
             self._check_format((image.shape[1], image.shape[0]))
         if self._buffered_capture:
@@ -312,15 +314,42 @@ class DirectShowSource(FrameSource):
             from .live_color_roi import correct_input
             correct = correct_input if c_enabled('live_color_roi') else (self._color_corrector or correct_601_as_709)
             normalized = timing.measure('color_correction', correct, normalized)
+        if normalized is not None:
+            self._check_feedback(image, captured, normalized if self._correct_color else None)
+        else:
+            self._close_feedback()
         size = (image.shape[1], image.shape[0]) if normalized is not None else None
         return captured, normalized, size
 
-    def _check_feedback(self, image: Any, captured: float) -> None:
-        """画面検証の合否と独立に、色補正前の入力で表示の目印を確認する。"""
-        if captured - self._feedback_checked_at >= VERIFY_PERIOD_SEC:
-            from .distribution_input import has_feedback
-            self._feedback_present = check_screen('feedback', has_feedback, image)
-            self._feedback_checked_at = captured
+    def _check_feedback(self, image: Any, captured: float, corrected: Any = None) -> None:
+        """検査は別スレッドへ渡し、読み取りでは最新の一枚を置くだけ。"""
+        self._feedback_present = False
+        self._feedback_checked_at = float('-inf')
+        if not check_screen('feedback_offer', self._offer_feedback, image, captured, corrected):
+            self._close_feedback()
+
+    def _offer_feedback(self, image: Any, captured: float, corrected: Any) -> bool:
+        from .live_feedback_worker import FeedbackWorker, valid_image
+        if not valid_image(image):
+            if self._feedback_worker is not None:
+                self._feedback_worker.clear()
+            return True
+        if self._feedback_worker is None:
+            self._feedback_worker = FeedbackWorker()
+        self._feedback_worker.offer(image, captured, corrected)
+        return True
+
+    def _close_feedback(self) -> None:
+        worker, self._feedback_worker = self._feedback_worker, None
+        self._feedback_present = False
+        self._feedback_checked_at = float('-inf')
+        if worker is not None:
+            check_screen('feedback_close', worker.close)
+
+    def _feedback_result(self, captured: float) -> bool:
+        if self._feedback_worker is not None:
+            self._feedback_present, self._feedback_checked_at = self._feedback_worker.result(captured)
+        return True
 
     def _feedback_hold(self) -> bool:
         """目印がある間は警告を保ち、次の入力取得は続ける。"""
@@ -359,7 +388,8 @@ class DirectShowSource(FrameSource):
         continuity = FrameContinuity(VERIFY_PERIOD_SEC)
         async_screen = None
         try:
-            verifier = wrap_verifier(self.verifier or PuyoScreenVerifier(relaxed=self.config.relaxed_verify))
+            verifier = wrap_verifier(self.verifier or PuyoScreenVerifier(
+                relaxed=self.config.relaxed_verify, check_feedback=False))
             async_screen = self._screen_state(verifier)
             self._configure(capture)
             while self.clock()-origin < self.duration:
@@ -388,6 +418,7 @@ class DirectShowSource(FrameSource):
                                     dropped_before=getattr(capture, 'dropped_before', 0), source_size=size)
                 self.sleep(max(0.0, captured+1/RECOGNITION_HZ-self.clock()))
         finally:
+            self._close_feedback()
             try:
                 capture.release()
             finally:
@@ -399,7 +430,9 @@ class DirectShowSource(FrameSource):
     def _hold_input(self, verified: bool, ready: bool, image: Any, captured: float,
                     continuity: FrameContinuity, streak: int, verifier: Any) -> bool:
         """画面として合格しても、映り込みがあれば保留を通知する。"""
-        if ready and self._feedback_hold():
+        if not check_screen('feedback_result', self._feedback_result, captured):
+            self._close_feedback()
+        if image is not None and self._feedback_hold():
             return True
         if verified:
             return False
@@ -415,7 +448,7 @@ class DirectShowSource(FrameSource):
         if ready:
             if self._match_end_hold_verifier is None:
                 self._match_end_hold_verifier = PuyoScreenVerifier(relaxed=self.config.relaxed_verify)
-            allowed = eligible(image, self._match_end_hold_verifier)
+            allowed = eligible(image, self._match_end_hold_verifier, feedback_present=self._feedback_present)
         self.on_match_end_hold(image if allowed else None, captured)
 
     def _async_check(self, state: Any, image: Any, size: Any,

@@ -10,7 +10,7 @@ from tests.phase_j.test_overlay_browser import browser
 from tests.phase_j.test_distribution_app import distribution
 from tests.phase_j.test_distribution_browser import select_language, open_appearance
 
-LAYOUTS = ('center', 'minimal', 'vertical', 'l-top-left', 'l-top-right',
+LAYOUTS = ('center', 'minimal', 'card', 'vertical', 'l-top-left', 'l-top-right',
            'l-bottom-left', 'l-bottom-right')
 REMOVED = ('x', 'y', 'corner', 'mascot_flip_right', 'mascot_band_edges',
            'numbers', 'recent', 'full', 'mascot_motion', 'mascot_expressions')
@@ -83,16 +83,16 @@ def test_header_start_stop_restart(browser: Browser, distribution: tuple) -> Non
     page.route('**/api/start', action)
     page.route('**/api/pause', action)
     button = page.locator('#toggle-runtime')
-    expect(button).to_have_text('起動')
+    expect(button).to_have_text('解析を始める')
     assert calls == []
     capture(page, 'settings_before_start')
     button.click()
-    expect(button).to_have_text('停止')
+    expect(button).to_have_text('解析を止める')
     capture(page, 'settings_running')
     button.click()
-    expect(button).to_have_text('起動')
+    expect(button).to_have_text('解析を始める')
     button.click()
-    expect(button).to_have_text('停止')
+    expect(button).to_have_text('解析を止める')
     assert calls == ['start', 'pause', 'start']
     page.close()
 
@@ -115,7 +115,7 @@ def test_setup_saves_and_moves_to_settings(browser: Browser, distribution: tuple
     capture(page, 'setup_full')
     expect(page.locator('#save-status')).to_have_text('保存しました')
     expect(page).to_have_url(url + '/settings')
-    expect(page.locator('#toggle-runtime')).to_have_text('起動')
+    expect(page.locator('#toggle-runtime')).to_have_text('解析を始める')
     assert not runtime.settings['completed'] and runtime.child is None
     assert runtime.settings['overlay']['layout'] == 'l-bottom-right'
     assert runtime.settings['overlay']['mascot_dopamine_mode'] is False
@@ -145,16 +145,16 @@ def test_legacy_and_new_urls_have_identical_pixels(browser: Browser, distributio
         }''')
         page.evaluate('document.fonts.ready')
         is_l = layout.startswith('l-')
-        assert page.locator('#whole').is_visible() is is_l
-        assert page.locator('.trend').is_visible() is (layout != 'minimal')
-        if layout != 'minimal':
+        assert page.locator('#whole').is_visible() is (is_l or layout == 'card')
+        assert page.locator('.trend').is_visible() is (layout not in ('minimal', 'card'))
+        if layout not in ('minimal', 'card'):
             graph, panel = (page.locator(selector).bounding_box() for selector in ('.trend', '#panel'))
             assert panel['x'] <= graph['x'] and panel['y'] <= graph['y']
             assert graph['x'] + graph['width'] <= panel['x'] + panel['width']
             assert graph['y'] + graph['height'] <= panel['y'] + panel['height']
         options = page.evaluate('overlayOptions')
-        assert options['numbers'] and options['recent'] is (layout != 'minimal')
-        assert options['full'] is is_l
+        assert options['numbers'] and options['recent'] is (layout not in ('minimal', 'card'))
+        assert options['full'] is (is_l or layout == 'card')
         images.append(capture(page, f'overlay_{layout}_{theme}_{kind}'))
     assert images[0] == images[1], f'{layout}/{theme}'
     page.close()

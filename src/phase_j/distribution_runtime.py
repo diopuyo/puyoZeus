@@ -14,10 +14,10 @@ import time
 import traceback
 import uuid
 from typing import Any
-from urllib.request import build_opener
+from urllib.request import Request, build_opener
 
 from .distribution_config import available_port, load_settings, os_language, save_settings
-from .distribution_logs import NoRedirect, ReportStore, tail
+from .distribution_logs import SITE_USER_AGENT, NoRedirect, ReportStore, tail
 from .distribution_summary import NumericSummary
 from .distribution_config import feedback_site_url
 from .distribution_job import assign_job, close_job, create_job
@@ -436,7 +436,8 @@ class DistributionRuntime:
             self.update_checked = True
         try:
             from packaging.version import Version
-            with build_opener(NoRedirect()).open(self.settings['releases_url'], timeout=5) as response:
+            request = Request(self.settings['releases_url'], headers={'User-Agent': SITE_USER_AGENT})
+            with build_opener(NoRedirect()).open(request, timeout=5) as response:
                 data = json.loads(response.read(64 * 1024))
             version = data.get('version') if isinstance(data, dict) else None
             if not isinstance(version, str) or not version:

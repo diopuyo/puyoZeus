@@ -18,8 +18,8 @@ function applyOverlayOptions(options) {
   const isL=stage.dataset.layout==='l',g=OverlayOptions.geometry(options);
   document.querySelector('.scores').hidden=!options.numbers;
   document.querySelector('.trend').hidden=!options.recent;
-  el('details').hidden=true;el('whole').hidden=!isL||!options.full;
-  band.hidden=!isL||!options.band;band.append(el('whole'));
+  el('details').hidden=true;el('whole').hidden=!(isL||options.layout==='card')||!options.full;
+  band.hidden=!isL||!options.band;(options.layout==='card'?panel:band).append(el('whole'));
   if(isL) {
     Object.assign(panel.style,{left:`${g.columnX}px`,top:`${g.y}px`,width:`${g.columnWidth}px`,height:`${g.height}px`});
     Object.assign(band.style,{top:`${g.bandY}px`,height:`${g.bandHeight}px`});

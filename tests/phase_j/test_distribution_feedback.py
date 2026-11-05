@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 import json
 from pathlib import Path
+import re
 import threading
 from typing import Any
 from unittest.mock import patch
@@ -14,7 +15,7 @@ import pytest
 
 from src import production_config
 from src.phase_j.distribution_config import DISTRIBUTION_SITE_URL, load_settings, save_settings, validate_settings
-from src.phase_j.distribution_logs import MAX_REPORT_BYTES, ReportStore, receipt_counts
+from src.phase_j.distribution_logs import MAX_REPORT_BYTES, SITE_USER_AGENT, ReportStore, receipt_counts
 from src.phase_j.distribution_runtime import DistributionRuntime
 from src.phase_j.distribution_summary import MAX_MATCHES, MAX_POINTS, NumericSummary
 from tests.phase_j.test_distribution_app import distribution, post
@@ -29,8 +30,20 @@ def snapshot(match: str = 'private-name', probability: float = 0.7) -> dict[str,
                 pc_name='private-pc', image='private-image')
 
 
-def test_feedback_flag_defaults_off() -> None:
-    assert production_config.DISTRIBUTION_SITE_FEEDBACK is False
+def test_feedback_flag_defaults_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 2026-11-06 user 採用で出荷は ON (試験一式は conftest で OFF から始めるので、出荷の値は原本で確かめる)。
+    # 宛先は公開サイトの 1 か所、更新の確認は既定で行わない。
+    source = Path(production_config.__file__).read_text(encoding='utf-8')
+    assert re.search(r'^DISTRIBUTION_SITE_FEEDBACK = True$', source, re.MULTILINE)
+    monkeypatch.setattr(production_config, 'DISTRIBUTION_SITE_FEEDBACK', True)
+    settings = validate_settings({})
+    assert settings['relay_url'] == 'https://puyolive-site.pages.dev/api/reports'
+    assert settings['releases_url'] == 'https://puyolive-site.pages.dev/releases.json'
+    assert settings['check_updates'] is False
+
+
+def test_feedback_flag_off_keeps_placeholders(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(production_config, 'DISTRIBUTION_SITE_FEEDBACK', False)
     settings = validate_settings({})
     assert settings['relay_url'] == 'https://puyolive-reports.example.invalid/api/reports'
     assert settings['releases_url'] == 'https://puyolive.example.invalid/releases.json'
@@ -142,6 +155,9 @@ def test_compact_report_keeps_version_required_by_site(tmp_path: Path) -> None:
 @pytest.mark.parametrize('body,expected', [
     (b'{"accepted":0,"duplicates":1}', {'accepted': 0, 'duplicates': 1}),
     (b'{"accepted":true,"duplicates":-1,"message":"private"}', {}),
+    # 配布サイトの受け口の実際の形 (11/6 本番で確認): 受理の件数は inserted
+    (b'{"accepted":true,"inserted":1,"duplicates":0}', {'accepted': 1, 'duplicates': 0}),
+    (b'{"accepted":true,"inserted":-1,"duplicates":0,"message":"private"}', {'duplicates': 0}),
     (b'not-json', {}),
     (b'[]', {}),
 ])
@@ -168,6 +184,7 @@ def test_preview_limit_keeps_unselected_reports(tmp_path: Path) -> None:
 @pytest.mark.parametrize('status', [200, 429, 413])
 def test_local_receipt_and_explicit_confirmation(tmp_path: Path, status: int) -> None:
     received: list[dict[str, Any]] = []
+    agents: list[str] = []
 
     class Receiver(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:
@@ -175,6 +192,7 @@ def test_local_receipt_and_explicit_confirmation(tmp_path: Path, status: int) ->
 
         def do_POST(self) -> None:
             received.append(json.loads(self.rfile.read(int(self.headers['Content-Length']))))
+            agents.append(self.headers['User-Agent'])
             self.send_response(status)
             self.end_headers()
             self.wfile.write(b'{"accepted":1,"duplicates":0,"message":"private-pc"}')
@@ -190,6 +208,8 @@ def test_local_receipt_and_explicit_confirmation(tmp_path: Path, status: int) ->
         assert not received
         assert store.send(preview['token'], True, allow_local=True) is (status == 200)
         assert received == [preview['payload']]
+        # 配布サイトは Python-urllib の名乗りを 403 で拒む (11/6 の実物の送信の失敗)。製品名で名乗る。
+        assert agents == [SITE_USER_AGENT]
         assert store.last_send_result == (dict(accepted=1, duplicates=0) if status == 200 else dict(status=status))
         assert len(list(tmp_path.glob('pending-*.json'))) == int(status != 200)
     finally:
@@ -216,3 +236,11 @@ def test_feedback_browser_gate(distribution: tuple, monkeypatch: pytest.MonkeyPa
             with pytest.raises(HTTPError):
                 post(url + '/api/feedback/open', {})
             browser.assert_not_called()
+
+
+def test_tests_cannot_reach_production_site() -> None:
+    """conftest の見張り: 試験から本番の配布サイトへは要求を作れない (送信の差し替え漏れの保険)。"""
+    from urllib.request import Request, build_opener
+    # 監査の事象 urllib.Request は接続の前 (OpenerDirector.open の入口) で出るので、実際の通信は起きない。
+    with pytest.raises(AssertionError, match='本番の配布サイト'):
+        build_opener().open(Request(DISTRIBUTION_SITE_URL.rstrip('/') + '/api/reports', b'{}', method='POST'), timeout=1)

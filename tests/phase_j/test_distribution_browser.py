@@ -34,6 +34,7 @@ def test_settings_actions_match_server(browser: Browser, distribution: tuple,
         expect(page.locator('#log-dialog')).to_be_visible()
         page.locator('#cancel-logs').click()
     if distribution_mode:
+        page.locator('#obs-manual summary').click()
         for selector in ('#toggle-runtime', '#copy-obs-url', '#obs-check', '#obs-apply'):
             expect(page.locator(selector)).to_be_visible()
         expect(page.locator('#save-settings, #save-app-settings')).to_have_count(0)
@@ -45,8 +46,10 @@ def test_settings_actions_match_server(browser: Browser, distribution: tuple,
     expect(page.locator('#log-dialog')).to_be_hidden()
     if distribution_mode:
         page.locator('#tab-appearance').click()
-        page.locator('details').filter(has=page.locator('#placement')).locator('summary').first.click()
-    expect(page.locator('#copy')).to_be_visible()
+        for selector in ('#copy', '#url', '#json'):
+            expect(page.locator(selector)).to_be_hidden()
+    else:
+        expect(page.locator('#copy')).to_be_visible()
     expect(page.locator('#overlay')).to_be_visible()
     assert not errors
     if not distribution_mode:
@@ -61,7 +64,7 @@ def test_setup_uses_current_catalog(browser: Browser, distribution: tuple) -> No
     page.goto(url+'/setup')
     expect(page.locator('[name=theme] option')).to_have_count(2)
     # L字の四隅を含めた七つの選択肢。旧URLの互換は別試験で確認する。
-    expect(page.locator('[name=layout] option')).to_have_count(7)
+    expect(page.locator('[name=layout] option')).to_have_count(8)
     expect(page.locator('[name=theme]')).to_have_value('pop')
     expect(page.locator('[name=mascot]')).to_be_checked()
     select_language(page, 'en')
@@ -137,12 +140,13 @@ def assert_dynamic_language_messages(page: Page, url: str) -> None:
     state['diagnostics']['calibration'] = None
     page.route('**/api/state', lambda route: route.fulfill(json=state))
     page.route('**/api/obs', lambda route: route.fulfill(json={
-        'scene': 'Test scene', 'browser_sources': ['Overlay'],
+        'scene': 'Test scene', 'browser_sources': ['Overlay'], 'already_added': True, 'virtual_camera': True,
         'warning': '手元で確認してください / Review locally'}))
     page.evaluate('appNotice()')
     page.locator('#tab-stream').click()
+    page.locator('#obs-manual summary').click()
     page.locator('#obs-check').click()
-    expect(page.locator('#obs-result')).to_contain_text('Test scene: Overlay')
+    expect(page.locator('#obs-result')).to_contain_text('表示は追加済み')
     page.locator('#tab-other').click()
     page.locator('#send-logs').click()
     expect(page.locator('#confirm-logs')).to_be_enabled()
@@ -159,7 +163,7 @@ def assert_dynamic_language_messages(page: Page, url: str) -> None:
             'Saved locally (logs/reports).' if english else '手元 (logs/reports) に保存しました')
         expect(page.locator('#input-reason')).to_have_text('Input checked' if english else '入力を確認しました')
         expect(page.locator('#obs-result')).to_have_text(
-            'Test scene: Overlay\n' + ('Review locally' if english else '手元で確認してください'))
+            'Overlay added · Virtual camera running' if english else '表示は追加済み ・ 仮想カメラは開始中')
 
 
 def test_settings_language_save_and_log_review(browser: Browser, distribution: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -258,16 +262,15 @@ def test_first_settings_intro_and_moved_options(browser: Browser, distribution: 
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.goto(url + '/settings?language=' + language)
     select_language(page, language)
-    expect(page.locator('#getting-started')).to_be_visible()
-    expect(page.locator('#getting-started')).to_contain_text('Getting started' if language == 'en' else 'はじめに')
+    expect(page.locator('#stream-steps')).to_have_attribute('open', '')
+    expect(page.locator('#preparation-summary')).to_contain_text('Getting started' if language == 'en' else 'はじめに')
     expect(page.locator('#stop-app, a[href="/setup"], #relay-url, #releases-url')).to_have_count(0)
     if os.environ.get('SETUP_REMOVAL_JOB'):
         page.screenshot(path=str(Path(os.environ['SETUP_REMOVAL_JOB']) / f'ux_first_{language}.png'))
-    page.locator('#dismiss-intro').click()
-    expect(page.locator('#getting-started')).to_be_hidden()
+    page.locator('#preparation-summary').click()
+    expect(page.locator('#stream-steps')).not_to_have_attribute('open', '')
     page.locator('#tab-other').click()
-    page.locator('#desktop-shortcut').check()
-    page.locator('#start-menu-shortcut').uncheck()
+    expect(page.locator('#desktop-shortcut, #start-menu-shortcut')).to_have_count(0)
     page.locator('#autostart').check()
     page.locator('#check-updates').check()
     page.locator('details').filter(has=page.locator('#app-port')).locator('summary').click()
@@ -275,10 +278,10 @@ def test_first_settings_intro_and_moved_options(browser: Browser, distribution: 
         page.locator('#app-port').fill('18672')
     expect(page.locator('#save-status')).to_have_text('Saved' if language == 'en' else '保存しました')
     saved = load_settings(runtime.root)
-    assert not saved['completed'] and saved['autostart'] and saved['desktop_shortcut']
+    assert not saved['completed'] and saved['autostart'] and not saved['desktop_shortcut']
     assert saved['check_updates'] and not saved['start_menu_shortcut'] and saved['port'] == 18672
     page.reload()
-    expect(page.locator('#getting-started')).to_be_hidden()
+    expect(page.locator('#stream-steps')).to_have_attribute('open', '')
     expect(page.locator('#autostart')).to_be_checked()
     assert not errors
     page.close()
@@ -301,7 +304,7 @@ def test_settings_wait_message_and_stop(browser: Browser, distribution: tuple, m
     select_language(page, language)
     expect(page.locator('#toggle-runtime')).to_be_enabled()
     page.locator('#toggle-runtime').click()
-    expect(page.locator('#toggle-runtime')).to_have_text('Stop' if language == 'en' else '停止')
+    expect(page.locator('#toggle-runtime')).to_have_text('Stop analysis' if language == 'en' else '解析を止める')
     expect(page.locator('#toggle-runtime')).to_be_enabled()
     expected = MESSAGES['waiting' if reason == 'not_game' else reason].split(' / ')[language == 'en']
     expect(page.locator('#input-reason')).to_have_text(expected)
@@ -309,7 +312,7 @@ def test_settings_wait_message_and_stop(browser: Browser, distribution: tuple, m
     if os.environ.get('SETUP_REMOVAL_JOB'):
         page.screenshot(path=str(Path(os.environ['SETUP_REMOVAL_JOB']) / f'ux_{reason}_{language}.png'))
     page.locator('#toggle-runtime').click()
-    expect(page.locator('#toggle-runtime')).to_have_text('Start' if language == 'en' else '起動')
+    expect(page.locator('#toggle-runtime')).to_have_text('Start analysis' if language == 'en' else '解析を始める')
     runtime.start_thread.join(3)
     assert not runtime.input_waiting and runtime.child is None
     page.close()

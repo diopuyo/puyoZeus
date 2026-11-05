@@ -50,7 +50,9 @@ LIVE_CHAIN_FORECAST_RECHECK_DEFAULT = False
 LIVE_CHAIN_END_FORMULA_DEFAULT = False
 
 # 2026-11-03: 0.6.1準備。サイト未開設のため未採用・既定OFF。確認後の手動送信だけ。
-DISTRIBUTION_SITE_FEEDBACK = False
+# 2026-11-06 user 採用 (0.6.2 で ON)。本番の受け口 (Pages Functions + D1) が動くことを PC1 で確認済み
+# (管理の集計 200)。11/4 にプレビューで PC1 の collect_feedback.mjs が 41 件回収。送信は確認後の手動だけ。
+DISTRIBUTION_SITE_FEEDBACK = True
 
 # 2026-11-02: 専用の設定窓。PC1の採否決定前につき既定OFF（app_window_20261102）。
 DISTRIBUTION_APP_WINDOW = True  # 2026-11-03 user 承認 (11-02 PC1 案、常駐窓の注文)。0.6.0 で配布。

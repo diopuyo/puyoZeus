@@ -22,6 +22,8 @@ MAX_REPORTS = 20
 LOG_LINES = 100
 MAX_LOG_BYTES = 64 * 1024
 SEND_TIMEOUT = 10
+# 配布サイト (Cloudflare) は Python の既定の名乗り Python-urllib を 403 (error code 1010) で拒むので、製品名で名乗る (11/6)。
+SITE_USER_AGENT = 'puyoZeus-Live'
 PREVIEW_TTL = 15 * 60
 RELAY_PLACEHOLDER = 'https://puyolive-reports.example.invalid/api/reports'
 SECRET_FIELD = re.compile(r'password|passwd|secret|token|api[_-]?key', re.IGNORECASE)
@@ -105,8 +107,9 @@ def receipt_counts(response: Any) -> dict[str, int]:
         return {}
     if not isinstance(data, dict):
         return {}
-    return {key: data[key] for key in ('accepted', 'duplicates')
-            if type(data.get(key)) is int and 0 <= data[key] <= MAX_REPORTS}
+    # 配布サイトの受け口は {accepted: true, inserted: N, duplicates: M} を返す (11/6 確認)。inserted を受理の件数として読む。
+    counts = {'accepted': data.get('inserted', data.get('accepted')), 'duplicates': data.get('duplicates')}
+    return {key: value for key, value in counts.items() if type(value) is int and 0 <= value <= MAX_REPORTS}
 
 
 def compact_report(report: dict[str, Any]) -> dict[str, Any]:
@@ -215,7 +218,8 @@ class ReportStore:
             if not valid:
                 raise ValueError('HTTPS中継URLが必要です')
             body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            request = Request(endpoint, body, {'Content-Type': 'application/json'}, method='POST')
+            request = Request(endpoint, body, {'Content-Type': 'application/json', 'User-Agent': SITE_USER_AGENT},
+                              method='POST')
             with build_opener(NoRedirect()).open(request, timeout=SEND_TIMEOUT) as response:
                 if not 200 <= response.status < 300:
                     raise OSError('中継が受理しませんでした')

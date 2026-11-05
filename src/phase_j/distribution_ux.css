@@ -13,7 +13,7 @@
 #page-stream>#app-notice,#page-stream>#location-notice{margin:0 0 6px}#page-stream>details{grid-column:1/-1}
 .ux-obs label{display:inline-block;margin:4px 8px 4px 0}.ux-obs input{max-width:180px}
 .ux-obs p{font-size:13px;margin:6px 0}.ux-obs>small{display:block}.ux-obs #obs-apply{display:inline-block;margin:8px 0 8px 8px;font-weight:bold}
-.ux-obs>details{margin-top:8px}.ux-video img{max-width:100%;object-fit:contain;background:#111;border-radius:6px}
+.ux-obs>details{margin-top:8px}.ux-video img{width:100%;height:auto;aspect-ratio:16/9;max-width:100%;object-fit:contain;background:#111;border-radius:6px}
 .ux-video label{display:block}.ux-video select{max-width:100%}#input-placeholder{height:130px;background:#101b28;display:grid;place-items:center}
 #runtime-state{border-radius:20px;padding:7px 12px;background:#344458;color:#fff}
 #runtime-state[data-status=waiting]{background:#70551a}#runtime-state[data-status=playing]{background:#166950}#runtime-state[data-status=attention]{background:#9c3636}
@@ -30,3 +30,34 @@
 .distribution-ux details>summary{cursor:pointer;color:#b5cce4;margin:5px 0}
 @media(max-width:760px){#page-stream{display:block}.distribution-ux .ux-appearance{display:block}.ux-tabs button{min-width:80px}}
 .ux-obs-url{display:flex;align-items:center;gap:8px}.ux-obs .ux-obs-url input{min-width:0;max-width:none;flex:1}.ux-obs-url button{white-space:nowrap}
+/* 配信の状態と準備を先に見せ、映像は補助の列に置く。 */
+#page-stream>.stream-actions,#obs-connection{grid-column:1/-1}
+.stream-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+#stream-details{flex-basis:100%}#stream-details .output{margin:0}
+#obs-connection{font-size:14px;line-height:1.7;padding:8px 12px;background:#142638;border-radius:8px;margin:4px 0 12px}
+#page-stream>#stream-steps{grid-column:1;min-width:0}#stream-steps>summary{font-weight:bold;font-size:16px}
+#stream-steps .output p,.distribution-ux #page-stream small{font-size:14px;line-height:1.65}
+#stream-steps .ux-obs label{display:block}#stream-steps .ux-obs #obs-apply{margin:8px 0}
+#step-camera.needs-attention{border:2px solid #ffc16d;background:#382b20}
+.camera-diagram{display:flex;flex-direction:column;gap:5px;align-items:center;border-radius:8px;background:#172331;padding:12px;font-size:14px}
+.camera-diagram>div{display:flex;align-items:center;gap:8px;max-width:100%}
+.camera-diagram .camera-output-window{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:12px;border:1px solid #7892a8;border-radius:6px}
+.camera-output-window>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.camera-output-window strong::after{content:' ▾'}
+.camera-diagram strong,.camera-diagram b{padding:6px 12px;border:1px solid #7892a8;border-radius:5px;background:#273c50}
+#page-stream>.ux-video{align-self:start;grid-column:2;grid-row:6}.ux-video p{font-size:14px}
+#obs-manual input{max-width:100%}.distribution-ux :focus-visible{outline:3px solid #77e5ff;outline-offset:3px}
+#page-stream a{color:#9be9ff}#stream-step-list h2{line-height:1.5}
+@media(max-width:760px){#page-stream>.ux-video{grid-column:auto;grid-row:auto}}
+#page-stream>.stream-content{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) 352px;gap:18px;align-items:start}
+.stream-content>.ux-video{margin-top:34px}.stream-content>#stream-steps{min-width:0}
+#page-stream>.stream-content:has(>#stream-steps:not([open])){grid-template-columns:minmax(0,1fr);gap:12px}
+.stream-content:has(>#stream-steps:not([open]))>.ux-video{margin-top:0;width:100%;max-width:850px;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:0 18px}
+.stream-content:has(>#stream-steps:not([open]))>.ux-video>h2{grid-column:1/-1}
+.ux-video-frame{min-width:0}.ux-video-frame img{display:block}.ux-video-controls>p{margin:0 0 8px}
+#stream-details{flex-basis:auto}#stream-details[open]{flex-basis:100%}
+@media(max-width:760px){#page-stream>.stream-content{display:block}.stream-content>.ux-video{margin-top:12px}.stream-content:has(>#stream-steps:not([open]))>.ux-video{display:block}}
+/* 設定の文字と操作部品の間隔を共通にする。 */
+.distribution-ux label:not([hidden]),.distribution-ux #stream-steps .ux-obs label:not([hidden]){display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.distribution-ux label>input[type=checkbox]{margin:0}
+.distribution-ux #obs-manual>input+button,.distribution-ux #obs-manual>button+button{margin-left:8px}

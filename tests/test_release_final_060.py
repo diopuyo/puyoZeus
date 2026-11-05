@@ -8,11 +8,14 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_model_label_cli_reaches_bundle(monkeypatch) -> None:
+def test_model_label_cli_reaches_bundle(monkeypatch: Any, tmp_path: Path) -> None:
     sys.path.insert(0, str(ROOT / 'packaging'))
     spec = importlib.util.spec_from_file_location('release_final_test', ROOT / 'packaging/build_release.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    (tmp_path / 'packaging').mkdir()
+    (tmp_path / 'packaging/README_ja.txt').write_text('# puyoZeus Live 0.6.0 — ZIP edition', 'utf-8')
+    monkeypatch.setattr(module, 'ROOT', tmp_path)
     finish = Mock(return_value=Path('bundle'))
     monkeypatch.setattr(module, 'safe_output', lambda value: value)
     monkeypatch.setattr(module, 'prepare_inputs', lambda value: None)

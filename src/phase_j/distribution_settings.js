@@ -1,6 +1,7 @@
 'use strict';
 // 確認済みのプレビューIDだけを送信する。再起動時の自動再送はしない。
 let reportPreview=null;
+const DIAGNOSTIC_SECOND_MS=1000, DIAGNOSTIC_DELAY_DIGITS=2;
 const reportLocalNotice='送信先を準備中です。確認した内容は手元 (logs/reports) に保存します / The destination is being prepared. Reviewed reports are saved locally (logs/reports).';
 const localMessage=value=>{const parts=(value||'').split(' / ');return parts[document.documentElement.lang==='en'&&parts.length>1?1:0];};
 const errorMessage=error=>error instanceof Error?error.message:String(error);
@@ -51,7 +52,7 @@ get('confirm-logs').onclick=async()=>{
   reportPreview=null;
 };
 get('dismiss-intro').onclick=()=>{get('getting-started').hidden=true;};
-const APP_CHECKBOXES={'desktop-shortcut':'desktop_shortcut','start-menu-shortcut':'start_menu_shortcut',autostart:'autostart','check-updates':'check_updates'};
+const APP_CHECKBOXES={autostart:'autostart','check-updates':'check_updates'};
 /** @returns {object} */
 function applicationSettings() {
   const values={completed:true,overlay:readControls(),port:Number(get('app-port').value)};
@@ -141,7 +142,9 @@ async function obsAction(apply) {
       const success=result.url_updated?(en?`Updated the overlay URL in OBS scene “${result.scene}” to ${result.url}.`:`OBS の「${result.scene}」の表示の URL を ${result.url} に直しました。`):result.already_added?(en?`The overlay is already in OBS scene “${result.scene}”. The virtual camera is running.`:`OBS の「${result.scene}」にはすでに追加済みです。仮想カメラを開始しました。`):
         (en?`Added the overlay to OBS scene “${result.scene}” and started the virtual camera.`:`OBS の「${result.scene}」に表示を追加し、仮想カメラを開始しました。`);
       setLocalMessage('obs-result',success+'\n'+(en?'Set Virtual Camera output using the gear → Source → game video (to keep the overlay out of the input).':'仮想カメラの出力は、歯車 →「ソース」→ ゲームの映像にしてください (表示が映り込むのを防ぎます)'));
-    } else setLocalMessage('obs-result',result.warning,`${result.scene}: ${result.browser_sources.join(', ')}\n`);
+    } else setLocalMessage('obs-result',`${result.already_added?'表示は追加済み':'表示は未追加'} ・ ${result.virtual_camera?'仮想カメラは開始中':'仮想カメラは停止中'} / ${result.already_added?'Overlay added':'Overlay not added'} · ${result.virtual_camera?'Virtual camera running':'Virtual camera stopped'}`);
+    window.streamObsStatus=result;window.streamObsChecked=Date.now();
+    await appNotice();
   } catch(error) {setLocalMessage('obs-result',errorMessage(error));}
   finally {get('obs-check').disabled=get('obs-apply').disabled=false;}
 }
@@ -156,8 +159,8 @@ function renderDiagnostics() {
  const d=window.lastDiagnostics||{},t=window.PuyoI18n.t;
     get('live-diagnostics').textContent=[
       `${t('入力の解像度')}: ${d.input_resolution?.join(' × ')||'—'}`,
-      `FPS: ${d.fps==null?'—':Number(d.fps).toFixed(1)}`, `${t('較正')}: ${d.calibration||'—'}`,
-      `${t('判定の遅れ')}: ${d.delay_ms==null?'—':Number(d.delay_ms).toFixed(1)+' ms'}`,
+      `${t('1秒あたりの映像枚数')}: ${d.fps==null?'—':Number(d.fps).toFixed(1)}`, `${t('画面の調整')}: ${t(({ready:'済み',verifying:'調整中',calibrating:'調整中',waiting:'映像待ち',unknown:'確認中',error:'確認が必要'})[d.calibration]||'確認中')}`,
+      `${t('表示の遅れ')}: ${d.delay_ms==null?'—':t('約 {seconds} 秒').replace('{seconds}',(Number(d.delay_ms)/DIAGNOSTIC_SECOND_MS).toFixed(DIAGNOSTIC_DELAY_DIGITS))}`,
       `${t('最後の更新')}: ${d.last_update?new Date(d.last_update*1000).toLocaleTimeString():'—'}`
     ].join('\n');
 }

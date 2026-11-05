@@ -133,7 +133,7 @@ def test_autostart_shortcut_has_dedicated_argument(tmp_path: Path,
     monkeypatch.setattr(windows.subprocess, 'run', run)
     windows.shortcuts(tmp_path, dict(autostart=True, desktop_shortcut=True))
     assert [call.kwargs['env']['PUYO_ARGUMENTS'] for call in run.call_args_list] == [
-        '-c "pass" --autostart', '']
+        '-c "pass" --autostart']
     assert '$s.Arguments=$env:PUYO_ARGUMENTS' in run.call_args.args[0][-1]
 
 

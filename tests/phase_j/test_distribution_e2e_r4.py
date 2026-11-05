@@ -21,7 +21,7 @@ window.EventSource=class extends EventTarget {
  static CLOSED=2; constructor(url){super();this.url=url;this.readyState=0;sources.push(this);}
  close(){this.readyState=2;}
 };"""
-LAYOUTS = ['center', 'minimal', 'vertical', 'l-top-left', 'l-top-right',
+LAYOUTS = ['center', 'minimal', 'card', 'vertical', 'l-top-left', 'l-top-right',
            'l-bottom-left', 'l-bottom-right']
 
 

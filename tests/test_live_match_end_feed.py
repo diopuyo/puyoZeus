@@ -170,7 +170,7 @@ def test_source_feeds_hold_without_recognizing(async_verify: str, allowed: bool,
         lambda *args: FakeDevice(FRAME), lambda image: False, lambda: clock[0], sleep)
     source._match_end_hold_verifier = object()
     source.on_match_end_hold = lambda image, stamp: calls.append((image, stamp))
-    monkeypatch.setattr(feed, 'eligible', lambda *args: allowed)
+    monkeypatch.setattr(feed, 'eligible', lambda *args, **kwargs: allowed)
     assert list(source) == []
     assert calls and all(image is (FRAME if allowed else None) for image, _ in calls)
 

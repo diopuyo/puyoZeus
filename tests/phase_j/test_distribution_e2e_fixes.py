@@ -231,7 +231,8 @@ def test_common_shortcut_ownership(tmp_path: Path) -> None:
     windows.migrate_shortcuts(first, settings)
     DistributionRuntime(first).configure({'device_name': 'Fake camera'})
     windows.shortcuts(first, settings, remove=True)
-    assert all((p / 'puyoZeus Live.lnk').exists() for p in directories.values())
+    assert all((p / 'puyoZeus Live.lnk').exists() == (key == 'autostart')
+               for key, p in directories.items())
     windows.shortcuts(second, settings, remove=True)
     assert all(not (p / 'puyoZeus Live.lnk').exists() for p in directories.values())
 
@@ -240,13 +241,14 @@ def test_legacy_shortcuts_are_removed_only_when_owned(tmp_path: Path) -> None:
     from src.phase_j import distribution_windows as windows
     settings = dict.fromkeys(windows.shortcut_directories(), True)
     windows.shortcuts(tmp_path, settings)
+    link = windows.shortcut_directories()['autostart'] / windows.shortcut_name(tmp_path)
     for directory in windows.shortcut_directories().values():
-        link = directory / windows.shortcut_name(tmp_path)
+        directory.mkdir(exist_ok=True)
         for name in windows.legacy_names(tmp_path):
             (directory / name).write_bytes(link.read_bytes())
     windows.migrate_shortcuts(tmp_path, settings)
-    for directory in windows.shortcut_directories().values():
-        assert (directory / 'puyoZeus Live.lnk').exists()
+    for key, directory in windows.shortcut_directories().items():
+        assert (directory / 'puyoZeus Live.lnk').exists() == (key == 'autostart')
         assert not any((directory / name).exists() for name in windows.legacy_names(tmp_path))
 
 

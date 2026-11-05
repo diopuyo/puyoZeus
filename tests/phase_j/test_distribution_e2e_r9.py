@@ -140,11 +140,15 @@ def test_preview_detector_failure_keeps_diagnostics(tmp_path: Path,
 
 def test_feedback_check_clears_on_bad_and_stopped_frames(monkeypatch: pytest.MonkeyPatch) -> None:
     source, _, _ = make_source(monkeypatch, None, 'sync')
-    for index, image in enumerate((*BAD_IMAGES, inputs.stopped_reference(), NORMAL_IMAGE), 1):
-        source._feedback_present = True
-        source._check_feedback(image, index * VERIFY_PERIOD_SEC)
-        assert not source._feedback_present
-        assert not source._feedback_hold()
+    try:
+        for index, image in enumerate((*BAD_IMAGES, inputs.stopped_reference(), NORMAL_IMAGE), 1):
+            source._feedback_present = True
+            source._check_feedback(image, index * VERIFY_PERIOD_SEC)
+            assert not source._feedback_present
+            assert not source._feedback_hold()
+    finally:
+        # 残った検査の worker が後続の試験の差し替えた検出器を呼ばないよう閉じる。
+        source._close_feedback()
 
 
 @pytest.mark.parametrize('language', ['ja', 'en'])
