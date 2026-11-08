@@ -2038,3 +2038,6 @@ RELEASE_LIVE_MODEL_PATHS: dict[str, str] = {
     'b3_timing_table': 'models/b3/timing_table.json',
     'live_24h_model': 'models/b3_ex_L200H_retR/ensemble.json',
 }
+
+# 2026-11-06: 0.6.2で1/22回の生存中停止。原因未確定のため候補の見張りは既定OFF。
+DISTRIBUTION_CHILD_WATCHDOG = False

@@ -47,7 +47,9 @@ def chain_events(side: int, source: str, trigger: float, scores: list[int], fina
     if credit:
         take, rest = max(0, credit-rest), max(0, rest-credit)
         if take:
-            events.append(Event(max(now, stamps[0]), GENERATE, side, source, take))
+            # 得点の列がまだ空 (scores も times も空) の発火でも、全消しの分は 1 段目と同じ時刻に生成する (11/6 IndexError)
+            first = stamps[0] if stamps else trigger+FORMULA_SCORE_DELAY_SEC
+            events.append(Event(max(now, first), GENERATE, side, source, take))
     for points, stamp in zip(scores, stamps):
         amount, carry = gross([points], [stamp], carry, origin)
         total += amount

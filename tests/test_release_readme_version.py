@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / 'packaging'))
 import build_release
 
 
-@pytest.mark.parametrize('version', ['0.6.1', '0.6.2'])
+@pytest.mark.parametrize('version', ['0.6.1', '0.6.2', '0.6.3'])
 def test_readme_version_matches(version: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / 'packaging').mkdir()
     (tmp_path / 'packaging/README_ja.txt').write_text(f'# puyoZeus Live {version} — ZIP 版', 'utf-8-sig')

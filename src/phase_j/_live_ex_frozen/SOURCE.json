@@ -276,7 +276,7 @@
     {
       "source": "src/exchange_projection.py",
       "source_sha256": "a4e69a494ff7285e566fce797e0e510c15e313c9efc23c79cabc1966f4ae15cf",
-      "adapter_sha256": "c66fa37238547f279f8b61bccc4421fb7373f3a5d63b758aa3af732c8b99098b"
+      "adapter_sha256": "a9fae13fe3b6374d74b52857d042517ab399dbe1a6d7d663540616c476fed61a"
     },
     {
       "source": "src/exchange_single_death_proof.py",
@@ -351,7 +351,7 @@
     {
       "source": "src/prefire_context_v410.py",
       "source_sha256": "7cdcc45fb2e0dda55e45a4473eee4cbc4022ca37da915671af641ed98935fad6",
-      "adapter_sha256": "d31bd06f860b2d28932339ed931549075972c3234e4c682e8e8eac73054910d4"
+      "adapter_sha256": "a24062b3b5b8b5abf37b05d38338ed3093eaea5d4a4d53da72d10b07daec8a97"
     },
     {
       "source": "src/prefire_facts_v49d.py",
@@ -614,5 +614,17 @@
     "default_enabled": false,
     "reason": "発火盤の再確認・式による継続を既定OFFの旗で追加。受領元のcommitとsource_sha256は維持。",
     "shared_helper": "src/chain_continuity.py"
-  }
+  },
+  "local_patches": [
+    {
+      "source": "src/prefire_context_v410.py",
+      "origin_commit": "5e63861b",
+      "reason": "全消しの分が残り得点の列が空の発火で stamps[0] が IndexError (216 本の版の段 1 で検出、11/6)"
+    },
+    {
+      "source": "src/exchange_projection.py",
+      "origin_commit": "0f9926f0",
+      "reason": "配布の来歴から個人パスを除去 (説明文の 1 行だけ)。受領票の更新が漏れていた (11/8 に気づいた)"
+    }
+  ]
 }

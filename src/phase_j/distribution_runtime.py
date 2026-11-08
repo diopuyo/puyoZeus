@@ -23,6 +23,7 @@ from .distribution_config import feedback_site_url
 from .distribution_job import assign_job, close_job, create_job
 from .distribution_windows import shortcuts, system_tool
 from .distribution_output import prepare_output
+from . import child_watchdog as watchdog
 from .release_config import distribution_user_config, release_environment
 
 POLL_SECONDS = 1
@@ -250,12 +251,16 @@ class DistributionRuntime:
                 prepare_output(self.root)
                 close_job(self.job)
                 self.job = create_job()
+                heartbeat_path, environment = self._heartbeat_environment()
                 self.child = subprocess.Popen(command, cwd=self.root / 'app', stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
-                    env=self.preview_environment(),
+                    env=environment,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
                 assign_job(self.job, self.child)
                 threading.Thread(target=self._watch_child, args=(self.child,), daemon=True).start()
+                if heartbeat_path is not None:
+                    threading.Thread(target=self._watch_progress,
+                        args=(self.child, heartbeat_path, time.monotonic()), daemon=True).start()
             except Exception:
                 failure = traceback.format_exc()
                 try:
@@ -263,6 +268,48 @@ class DistributionRuntime:
                 finally:
                     self.close_preview()
                     self.record_failure('startup_failure', failure)
+
+    def _heartbeat_environment(self) -> tuple[Path | None, dict[str, str]]:
+        from src import production_config
+        environment = self.preview_environment()
+        environment.pop(watchdog.HEARTBEAT_ENV, None)
+        if not production_config.DISTRIBUTION_CHILD_WATCHDOG:
+            return None, environment
+        path = self.logs / f'child_heartbeat_{uuid.uuid4().hex}.txt'
+        environment[watchdog.HEARTBEAT_ENV] = str(path)
+        return path, environment
+
+    def _watch_progress(self, child: subprocess.Popen, path: Path, started: float) -> None:
+        deadline = watchdog.ProgressDeadline(started)
+        while not self.finished.wait(watchdog.POLL_SEC):
+            with self.control_lock:
+                if (child is not self.child or self.stopping or self.cancel_start.is_set()
+                        or child.poll() is not None):
+                    return
+                stalled = deadline.check(path, time.monotonic())
+                if stalled is not None:
+                    try:
+                        if self._terminate_stalled_child(child, *stalled):
+                            return
+                    except (OSError, subprocess.TimeoutExpired):
+                        # 終了要求の失敗でも見張りを失わず、次の低頻度確認で再試行する。
+                        continue
+
+    def _terminate_stalled_child(self, child: subprocess.Popen, kind: str, seconds: float) -> bool:
+        record = dict(event=kind, stalled_seconds=seconds, pid=child.pid, time=time.time())
+        with (self.logs / 'runtime.log').open('a', encoding='utf-8') as stream:
+            stream.write(f'\n子の停止検知: reason={kind} stalled_seconds={seconds:.3f}\n')
+        with (self.logs / 'child_watchdog.jsonl').open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(record) + '\n')
+        self.stalled_child = child
+        if os.name == 'nt':
+            result = subprocess.run([system_tool('taskkill'), '/PID', str(child.pid), '/T', '/F'],
+                capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW,
+                timeout=CHILD_EXIT_TIMEOUT_SECONDS)
+            return result.returncode == 0
+        else:
+            child.kill()
+            return True
 
     def _discard_failed_child(self) -> None:
         """Jobへの割当より前に失敗した子も、パイプとともに回収する。"""
@@ -346,6 +393,9 @@ class DistributionRuntime:
         with self.control_lock:
             if child is not self.child or self.stopping or self.cancel_start.is_set():
                 return
+            if child is getattr(self, 'stalled_child', None):
+                code = watchdog.WATCHDOG_EXIT_CODE
+                self.stalled_child = None
             if code != 0 and self._schedule_restart(code):
                 retry = True
             else:

@@ -1,4 +1,4 @@
-# puyoZeus Live 0.6.2 — ZIP 版 / ZIP edition
+# puyoZeus Live 0.6.3 — ZIP 版 / ZIP edition
 
 【起動前に必ずすべて展開 / Extract All before launching】
 ZIP をダブルクリックで開いただけでは動きません。ZIP を右クリック →「すべて展開」してから、展開したフォルダの puyoZeus Live.exe を起動してください。「python312.dll が見つからないため、コードの実行を続行できません」と出た場合も、ZIP をすべて展開してから起動し直してください。
@@ -89,6 +89,16 @@ The ZIP root has one launcher, `puyoZeus Live.exe`, and one uninstall entry, `�
 Python と計算ライブラリ、Rust 製の処理モジュールは同梱済みで、Python/Rust の開発環境は不要です。Visual C++ または WebView2 ランタイムが無い場合、起動用 exe が Microsoft 公式の部品を入れるか尋ねます。「はい」の場合だけ取得し、Microsoft の署名を検証して実行します。Windows が権限の確認を表示する場合があります。「いいえ」でも起動は続き、WebView2 が無ければブラウザで開きます。
 
 Open `puyoZeus Live.exe`. The entry is an unchanged copy of Python signed by the Python Software Foundation, designed to launch with Smart App Control enabled. Its EXE icon is the Python icon. The DLL and ._pth files at the top level are required app components; do not delete them. Python, computation libraries and Rust modules are bundled. Missing Visual C++ or WebView2 runtimes are offered with your consent and Microsoft signature verification. Declining continues startup; without WebView2, the app opens in a browser.
+
+## 0.6.3 の変更 / Changes in 0.6.3
+
+- 勝率の判定を学び直しました。学習に使う上級者の対戦のデータを約 2.4 倍に増やしています。
+- 全消しのボーナスが残った状態で連鎖を始めた直後に、撃ち合いの勝率の計算がその時だけ抜けることがあった問題を直しました。
+- 0.6.2 のフォルダーに上書きして更新できます。設定・OBS 連携・自動起動は引き継ぎます。
+
+- Retrained the win probability model with about 2.4 times as much data from high-level matches.
+- Fixed a problem where the exchange win probability could briefly drop out right after a chain was started while an all-clear bonus was still pending.
+- You can overwrite your 0.6.2 folder to update. Settings, OBS integration, and start at sign-in are retained.
 
 ## 0.6.2 の変更 / Changes in 0.6.2
 

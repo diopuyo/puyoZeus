@@ -1,4 +1,4 @@
-﻿"""保存した公開記録を SSE 受信口へ流し、カードと全配置の表示を確認する。"""
+"""保存した公開記録を SSE 受信口へ流し、カードと全配置の表示を確認する。"""
 from __future__ import annotations
 
 from copy import deepcopy

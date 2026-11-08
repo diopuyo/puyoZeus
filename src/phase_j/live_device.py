@@ -378,6 +378,15 @@ class DirectShowSource(FrameSource):
         return None
 
     def __iter__(self) -> Iterator[CapturedFrame]:
+        from .child_watchdog import start_input_heartbeat
+        heartbeat = start_input_heartbeat()
+        try:
+            yield from self._frames(heartbeat)
+        finally:
+            if heartbeat is not None:
+                heartbeat.close()
+
+    def _frames(self, heartbeat: Any = None) -> Iterator[CapturedFrame]:
         capture = self._capture()
         origin, last_verify, verified = self.clock(), float('-inf'), False
         entry_fast_retry = entry.enabled()
@@ -393,6 +402,8 @@ class DirectShowSource(FrameSource):
             async_screen = self._screen_state(verifier)
             self._configure(capture)
             while self.clock()-origin < self.duration:
+                if heartbeat is not None:
+                    heartbeat.beat()
                 captured, normalized, size = self._read(capture)
                 capture = self._maintain(capture, origin, captured)
                 transport_ready = normalized is not None and timing.measure(
@@ -419,13 +430,17 @@ class DirectShowSource(FrameSource):
                 self.sleep(max(0.0, captured+1/RECOGNITION_HZ-self.clock()))
         finally:
             self._close_feedback()
-            try:
-                capture.release()
-            finally:
-                if async_screen is not None:
-                    async_screen.close()
+            self._release_capture(capture, async_screen)
             if self._buffered_capture:
                 self.dropped = capture.dropped
+
+    @staticmethod
+    def _release_capture(capture: Any, async_screen: Any) -> None:
+        try:
+            capture.release()
+        finally:
+            if async_screen is not None:
+                async_screen.close()
 
     def _hold_input(self, verified: bool, ready: bool, image: Any, captured: float,
                     continuity: FrameContinuity, streak: int, verifier: Any) -> bool:
