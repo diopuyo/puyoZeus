@@ -58,17 +58,50 @@ import 自体は失敗しない (`try/except ImportError` で optional import)�
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ctypes
+import sys
 
 import numpy as np
 
 from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, Board
 
+APPLICATION_CONTROL_BLOCKED = 4551
+APPLICATION_CONTROL_MESSAGES = (
+    'an application control policy has blocked this file',
+    'アプリケーション制御ポリシーによってこのファイルがブロックされました',
+)
+
+
+def is_native_policy_blocked(error: BaseException) -> bool:
+    """数値の Windows エラーと、ImportError に残る日英の説明を確認する。"""
+    messages = APPLICATION_CONTROL_MESSAGES
+    if sys.platform == 'win32':
+        # CPython が winerror を残さない場合も OS の表示言語で照合する。
+        localized = ctypes.FormatError(APPLICATION_CONTROL_BLOCKED).strip().casefold()
+        if localized:
+            messages += (localized,)
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if getattr(current, 'winerror', None) == APPLICATION_CONTROL_BLOCKED:
+            return True
+        if any(message in str(current).casefold() for message in messages):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+NATIVE_IMPORT_ERROR: ImportError | None = None
+NATIVE_IMPORT_FAILURE: str | None = None
 try:
     import puyo_core as _native  # type: ignore[import-not-found]
     NATIVE_AVAILABLE: bool = True
-except ImportError:
+except ImportError as error:
     _native = None
     NATIVE_AVAILABLE = False
+    NATIVE_IMPORT_ERROR = error
+    NATIVE_IMPORT_FAILURE = 'native_blocked' if is_native_policy_blocked(error) else 'import_error'
 
 
 def b3_pair_search(grid: np.ndarray, queue: tuple[int, ...], colors: tuple[int, ...],

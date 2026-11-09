@@ -1,5 +1,7 @@
 """説明書の版が違う配布物を作らないための試験。"""
 from pathlib import Path
+import hashlib
+import json
 import sys
 from unittest.mock import Mock
 
@@ -10,7 +12,38 @@ sys.path.insert(0, str(ROOT / 'packaging'))
 import build_release
 
 
-@pytest.mark.parametrize('version', ['0.6.1', '0.6.2', '0.6.3'])
+def test_temperature_asset_is_packaged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """組み立てのコピー対象に較正JSONが入り、原本のバイト列を保つ。"""
+    models, bundle = tmp_path/'models', tmp_path/'bundle'
+    payload = b'model'
+    digest = hashlib.sha256(payload).hexdigest()
+    for relative in ('b3_c2_ens/ensemble_ref3_logit.json', 'b3_ex_L200H_retR/ensemble.json'):
+        manifest = models/relative
+        manifest.parent.mkdir(parents=True)
+        members = []
+        for index in range(3):
+            name = f'member{index}.bin'
+            (manifest.parent/name).write_bytes(payload)
+            members.append(dict(name=name, sha256=digest))
+        manifest.write_text(json.dumps(dict(members=members)), 'utf-8')
+    relative = 'calibration/prob_temperature_v1.json'
+    raw = (ROOT/'tests/fixtures/prob_temperature/prob_temperature_v1.json').read_bytes()
+    (models/'calibration').mkdir()
+    (models/relative).write_bytes(raw)
+    (models/'b3').mkdir()
+    (models/'b3/timing_table.json').write_text('{}', 'utf-8')
+    (bundle/'app/models/b3').mkdir(parents=True)
+    (bundle/'python/Lib/site-packages/puyo_core').mkdir(parents=True)
+    native = tmp_path/'native.pyd'
+    native.write_bytes(payload)
+    monkeypatch.setattr(build_release, 'RC_NATIVE', native)
+    monkeypatch.setattr(build_release, 'RC_NATIVE_SHA', digest)
+    hashes = build_release.copy_rc_assets(bundle, models)
+    assert (bundle/'app/models'/relative).read_bytes() == raw
+    assert hashes[relative] == hashlib.sha256(raw).hexdigest()
+
+
+@pytest.mark.parametrize('version', ['0.6.1', '0.6.2', '0.6.3', '0.6.4'])
 def test_readme_version_matches(version: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / 'packaging').mkdir()
     (tmp_path / 'packaging/README_ja.txt').write_text(f'# puyoZeus Live {version} — ZIP 版', 'utf-8-sig')

@@ -10,6 +10,10 @@ function applyOverlayOptions(options) {
   stage.dataset.layout=options.layout.startsWith('l-')?'l':layouts[options.layout]||'ribbon';
   stage.dataset.theme=options.theme==='pop-cream'?'pop':options.theme;
   stage.dataset.pop=options.theme==='pop-cream'?'cream':'black';
+  stage.dataset.valueDisplay=options.value_display;
+  document.querySelectorAll('.mid-label').forEach(node=>node.textContent=PuyoEvaluation.isEvaluation(options.value_display)?'0':'50');
+  el('whole').querySelector('svg').setAttribute('aria-label',PuyoEvaluation.isEvaluation(options.value_display)?
+    '試合全体の1P評価値。中央は0、両端は±3000':'試合全体の1P勝率。中央線は50%');
   stage.dataset.place=options.layout==='center'?'center':'edge';
   stage.dataset.vgraph=['center','vertical'].includes(options.layout)?'1':'0';stage.dataset.state='wait';
   stage.dataset.midline=options.midline;stage.dataset.font=options.font;
@@ -17,6 +21,7 @@ function applyOverlayOptions(options) {
   panel.dataset.layout=options.layout;stage.dataset.mascot=String(options.mascot);
   const isL=stage.dataset.layout==='l',g=OverlayOptions.geometry(options);
   document.querySelector('.scores').hidden=!options.numbers;
+  el('evaluation').hidden=!options.numbers;
   document.querySelector('.trend').hidden=!options.recent;
   el('details').hidden=true;el('whole').hidden=!(isL||options.layout==='card')||!options.full;
   band.hidden=!isL||!options.band;(options.layout==='card'?panel:band).append(el('whole'));
@@ -45,7 +50,7 @@ function updateFullHistory(p,time) {
   if(fullHistory.length>FULL_HISTORY_LIMIT) fullHistory=fullHistory.filter((_,i)=>i%2===0||i===fullHistory.length-1);
   const duration=Math.max(SECOND_MS,time-fullStart);
   const x=time=>FULL_GRAPH_PAD+(time-fullStart)/duration*(FULL_GRAPH_WIDTH-2*FULL_GRAPH_PAD);
-  const y=p=>FULL_GRAPH_PAD+(1-p)*(FULL_GRAPH_HEIGHT-2*FULL_GRAPH_PAD);
+  const y=p=>FULL_GRAPH_PAD+(1-PuyoEvaluation.graph(p))*(FULL_GRAPH_HEIGHT-2*FULL_GRAPH_PAD);
   const path=fullHistory.map((item,i)=>`${i?'L':'M'}${x(item.time).toFixed(1)} ${y(item.p).toFixed(1)}`);
   el('whole-trace').setAttribute('d',path.join(' '));
   el('whole-time').textContent=`受信開始 0秒 → ${Math.round((time-fullStart)/SECOND_MS)}秒`;

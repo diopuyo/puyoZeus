@@ -75,17 +75,19 @@ window.PuyoBattle=(()=>{
     const recent=samples.filter(item=>item.time>=time-WINDOW_MS);
     const vertical=stage.dataset.vgraph==='1';
     const x=t=>GRAPH_PAD+(1-(time-t)/WINDOW_MS)*(GRAPH_WIDTH-2*GRAPH_PAD);
-    const y=v=>GRAPH_PAD+(1-v)*(GRAPH_HEIGHT-2*GRAPH_PAD);
+    const y=v=>GRAPH_PAD+(1-PuyoEvaluation.graph(v))*(GRAPH_HEIGHT-2*GRAPH_PAD);
     drawHistory(recent,time,vertical,x,y);
   }
   /** @param {object[]} points @param {number} time @param {boolean} vertical @param {Function} x @param {Function} y */
   function drawHistory(points,time,vertical,x,y) {
     const xy=points.map(item=>vertical?
-      [GRAPH_PAD+item.p*(GRAPH_WIDTH-2*GRAPH_PAD),GRAPH_PAD+(time-item.time)/WINDOW_MS*(GRAPH_HEIGHT-2*GRAPH_PAD)]:[x(item.time),y(item.p)]);
+      [GRAPH_PAD+PuyoEvaluation.graph(item.p)*(GRAPH_WIDTH-2*GRAPH_PAD),GRAPH_PAD+(time-item.time)/WINDOW_MS*(GRAPH_HEIGHT-2*GRAPH_PAD)]:[x(item.time),y(item.p)]);
     const line=xy.map(([a,b],i)=>`${i?'L':'M'}${a.toFixed(1)} ${b.toFixed(1)}`).join(' ');
     el('trace').setAttribute('d',line);
     el('trend').querySelector('.guide').setAttribute('d',vertical?`M${GRAPH_WIDTH/2} 0V${GRAPH_HEIGHT}`:`M0 ${GRAPH_HEIGHT/2}H${GRAPH_WIDTH}`);
     el('trend').setAttribute('aria-label',vertical?'1P勝率の推移。右ほど1P有利、下ほど過去、中央線は50%':'1P勝率の推移。上ほど1P有利、中央線は50%');
+    if(PuyoEvaluation.isEvaluation()) el('trend').setAttribute('aria-label',
+      vertical?'1P評価値の推移。右ほど1P有利、中央は0、両端は±3000':'1P評価値の推移。上ほど1P有利、中央は0、両端は±3000');
     for(const [side,edge] of [['one',0],['two',GRAPH_WIDTH]]) {
       let area=el('trend').querySelector('.history-'+side);
       if(!area) {area=document.createElementNS('http://www.w3.org/2000/svg','path');area.setAttribute('class','history-'+side);el('trend').prepend(area);}
@@ -124,5 +126,10 @@ window.PuyoBattle=(()=>{
     if(key!==matchKey||data.timing?.source_available_ms<lastSourceMs) resetHold();
     sync(data);
   };
-  update();return {placeMascot};
+  /** @returns {void} */
+  function redraw() {
+    const last=samples.at(-1);
+    if(last) record(last.p,last.time);
+  }
+  update();return {placeMascot,redraw};
 })();

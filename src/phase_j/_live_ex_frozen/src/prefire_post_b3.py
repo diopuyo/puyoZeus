@@ -207,12 +207,14 @@ class PostB3:
                 self.ledger_history.append((self.state.t, *values))
 
     def _chains(self, stamp: float, raw: list[dict]) -> None:
+        from src.phase_j._live_ex_frozen.src.prefire_chain_identity import normalize, remember
         colors = self.state.colors.known()[1]
         for i, source in enumerate(raw):
             event = source.get('chain_event')
             if not event or source['state']['state'] != 'CHAIN' or len(colors) != 4:
                 continue
-            event = event['namespace']
+            observed = event['namespace']
+            event = normalize(self.chains[i], observed, stamp, source)
             signature = (event['trigger_sec'], event['chain_count'], event['total_score'])
             if signature[0] > stamp:
                 raise ValueError('未来の発火通知')
@@ -228,6 +230,7 @@ class PostB3:
                                       list(colors), self.policy, self.native)
             chain['best'] = min(chain['pool'], key=lambda v: (error(v, chain['observed']), -v['log_weight']))
             self.chains[i] = chain
+            remember(chain, observed, stamp, source)
             if self.fight is None:
                 self.fight = stamp
 

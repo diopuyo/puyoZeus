@@ -38,7 +38,7 @@ def test_frozen_dependency_receipt() -> None:
     manifest = json.loads((root / 'SOURCE.json').read_text(encoding='utf-8'))
     assert manifest['commit'] == '5c02afed204ffca2d7aee5d54008c91754178fab'
     assert manifest['retr_source_commit'] == '0a7a7f63'   # retR v2の受領元 (SHA256SUMS照合済み)
-    assert len(manifest['files']) == 119
+    assert len(manifest['files']) == 120  # 原器119本と、既定OFFの連鎖同一性の試作1本
     for entry in manifest['files']:
         data = (root / entry['source']).read_bytes().replace(b'\r\n', b'\n')
         assert hashlib.sha256(data).hexdigest() == entry['adapter_sha256'], entry['source']

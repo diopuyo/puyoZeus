@@ -1,4 +1,4 @@
-# puyoZeus Live 0.6.3 — ZIP 版 / ZIP edition
+# puyoZeus Live 0.6.4 — ZIP 版 / ZIP edition
 
 【起動前に必ずすべて展開 / Extract All before launching】
 ZIP をダブルクリックで開いただけでは動きません。ZIP を右クリック →「すべて展開」してから、展開したフォルダの puyoZeus Live.exe を起動してください。「python312.dll が見つからないため、コードの実行を続行できません」と出た場合も、ZIP をすべて展開してから起動し直してください。
@@ -89,6 +89,17 @@ The ZIP root has one launcher, `puyoZeus Live.exe`, and one uninstall entry, `�
 Python と計算ライブラリ、Rust 製の処理モジュールは同梱済みで、Python/Rust の開発環境は不要です。Visual C++ または WebView2 ランタイムが無い場合、起動用 exe が Microsoft 公式の部品を入れるか尋ねます。「はい」の場合だけ取得し、Microsoft の署名を検証して実行します。Windows が権限の確認を表示する場合があります。「いいえ」でも起動は続き、WebView2 が無ければブラウザで開きます。
 
 Open `puyoZeus Live.exe`. The entry is an unchanged copy of Python signed by the Python Software Foundation, designed to launch with Smart App Control enabled. Its EXE icon is the Python icon. The DLL and ._pth files at the top level are required app components; do not delete them. Python, computation libraries and Rust modules are bundled. Missing Visual C++ or WebView2 runtimes are offered with your consent and Microsoft signature verification. Declining continues startup; without WebView2, the app opens in a browser.
+
+## 0.6.4 の変更 / Changes in 0.6.4
+
+Windows 11 の「スマート アプリ コントロール」が有効な PC では、計算部品が止められて解析が始まらないことがあります。その場合は画面にその旨を表示します。コード署名の準備を進めています。
+On Windows 11 PCs with Smart App Control enabled, a required computation component may be blocked and analysis may not start. The app will display a notice if this happens. We are preparing code signing.
+
+評価値を 1P 視点の大きな 1 つの数字で表示し、表示を 2 種類に整理しました。局面や撃ち合いの有無に応じて推定勝率のずれを補正します。評価値・グラフ・表情も補正後の勝率に従います。
+The evaluation is shown as one large number from Player 1's perspective, with two display styles. Estimated win probabilities are calibrated by game phase and whether a chain exchange is active. The evaluation, graphs, and expressions follow the calibrated probability.
+
+撃ち合いで、相手の長い連鎖の終わり際に、もう相殺したおじゃまを「これから受ける」と二重に数え、勝率が数秒間逆の向きに傾くことがあった問題を直しました。0.6.3 のフォルダーに上書きして更新できます。設定・OBS 連携・自動起動は引き継ぎます。
+Fixed a problem in chain exchanges where garbage that had already been offset was counted again near the end of the opponent's long chain, tilting the win probability the wrong way for several seconds. You can overwrite your 0.6.3 folder to update. Settings, OBS integration, and start at sign-in are retained.
 
 ## 0.6.3 の変更 / Changes in 0.6.3
 

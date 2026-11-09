@@ -238,6 +238,10 @@ class DistributionRuntime:
             self.error = {}
             self.stopping = False
             try:
+                from src import puyo_core_bridge
+                if puyo_core_bridge.NATIVE_IMPORT_FAILURE == 'native_blocked':
+                    self.record_failure('native_blocked', str(puyo_core_bridge.NATIVE_IMPORT_ERROR))
+                    return
                 if (self.settings['auto_input'] or self.autostart_waiting) and not self.scan_inputs().get('selected'):
                     return
                 if self.stopping:

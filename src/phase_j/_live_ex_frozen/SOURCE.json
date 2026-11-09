@@ -406,7 +406,7 @@
     {
       "source": "src/prefire_post_b3.py",
       "source_sha256": "67096eadc496963283d6af44142c63e5e5de303eac387e5a1c54d09d1bb37f4d",
-      "adapter_sha256": "dea5caaeffca19ac918061abc05daf9918a87b59c5907a928f045560a03806e7"
+      "adapter_sha256": "b840e84d0176305b4b5bfc2df1027f347f6c878176c8a894e18a3a03cde35945"
     },
     {
       "source": "src/prefire_post_v46.py",
@@ -604,6 +604,11 @@
       "source_sha256": "8270b3a60b557099100067e2b9a8a43d8593536607e3855753e3a4f3d46a8b6c",
       "adapter_sha256": "87e470fc9d9729c3512d1c91c37568875e3dd28954ed99e3351f971ea6571e59",
       "source_commit": "ba80b355"
+    },
+    {
+      "source": "src/prefire_chain_identity.py",
+      "source_sha256": "ec2a47242b337dae69cc84eb694a5b2c9b2c3b96653fa2d140f04a7de38f86e5",
+      "adapter_sha256": "70e8655aea323166bc1e5efce5c2bd510c9873255728b265679b04b19c695932"
     }
   ],
   "retr_source_commit": "0a7a7f63",
@@ -626,5 +631,15 @@
       "origin_commit": "0f9926f0",
       "reason": "配布の来歴から個人パスを除去 (説明文の 1 行だけ)。受領票の更新が漏れていた (11/8 に気づいた)"
     }
-  ]
+  ],
+  "quality_exchange_trial": {
+    "date": "2026-11-09",
+    "default": false,
+    "flag": "PUYO_EX_CHAIN_IDENTITY",
+    "files": [
+      "prefire_post_b3.py",
+      "prefire_chain_identity.py"
+    ],
+    "note": "生通知の20コマ以内の再開始で台帳基準を保つ。元の学習側へはpatchだけを作成。"
+  }
 }

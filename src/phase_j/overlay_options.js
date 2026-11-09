@@ -1,6 +1,7 @@
 'use strict';
 // 設定ページと製品表示で同じ設定解決・座標計算を使う。
 window.OverlayOptions=(()=>{
+  const DEFAULT_VALUE_DISPLAY='probability';
   const WIDTH=1920, HEIGHT=1080, MIN_SCALE=70, MAX_SCALE=85;
   const DEFAULT_SCALE=80, PERCENT=100, BAND_EDGES=[10,30,70,90], EDGE_COUNT=4;
   // 設定ページに出す選択肢はここだけで管理する。
@@ -8,7 +9,7 @@ window.OverlayOptions=(()=>{
     layouts:{center:'真ん中の柱',minimal:'小さい帯',card:'カード',vertical:'縦','l-top-left':'L字・左上','l-top-right':'L字・右上','l-bottom-left':'L字・左下','l-bottom-right':'L字・右下'}};
   const aliases={'battle-a':'pop',esports:'pop',normal:'pop',classic:'pop',noir:'pop',neon:'pop',arena:'pop',stylish:'pop',plain:'pop'};
   const enums={layout:['center','card','ribbon','minimal','data','l-right','l-left','l','vertical','l-top-left','l-top-right','l-bottom-left','l-bottom-right'],
-    corner:['top-left','top-right','bottom-left','bottom-right'],font:['small','medium','large'],
+    corner:['top-left','top-right','bottom-left','bottom-right'],font:['small','medium','large'],value_display:['probability','evaluation'],
     midline:['split','line','glow','adaptive'],theme:['pop',...Object.keys(catalog.themes),...Object.keys(aliases)],
     language:['auto','ja','en'],mascot_position:['left','right','card'],mascot_size:['small','medium','large'],mascot_dopamine:['low','normal','high'],mascot_speed:['0.5','1','1.5','2']};
   const contentFlags=['content_pending','content_sent','content_offset','content_rate',
@@ -20,6 +21,8 @@ window.OverlayOptions=(()=>{
   const defaultContents=['pending','return','margin','step','length','k1'].map(key=>`content_${key}`);
   /** @param {object} input @returns {object} */
   function valid(input) {
+    const legacyDisplay={evaluation_main:'evaluation',probability_main:'probability'};
+    input={...input,value_display:legacyDisplay[input.value_display]||input.value_display};
     const result={};
     for(const [key,choices] of Object.entries(enums)) if(choices.includes(input[key])) result[key]=input[key];
     if(result.theme) result.theme=aliases[result.theme]||result.theme;
@@ -64,7 +67,7 @@ window.OverlayOptions=(()=>{
     const mode=selected.mascot_dopamine_mode!==false;
     return {...Object.fromEntries(contentFlags.map(key=>[key,defaultContents.includes(key)])),layout,midline:'adaptive',theme:'pop',corner:isL?layout.slice(2):'top-left',scale:DEFAULT_SCALE,font:'medium',
       mascot_dopamine:'normal',mascot_speed:'1',mascot_bloodshot:false,debug_panel:false,vgraph:false,mascot_band_edges:[...BAND_EDGES],language:'auto',mascot:true,mascot_dopamine_mode:mode,mascot_motion:mode,mascot_eyes:true,mascot_expressions:mode,mascot_flip_right:false,mascot_position:'card',mascot_size:'medium',
-      band:true,numbers:true,recent:!['minimal','card'].includes(layout),full:isL||layout==='card',status:true,
+      value_display:DEFAULT_VALUE_DISPLAY,band:true,numbers:true,recent:!['minimal','card'].includes(layout),full:isL||layout==='card',status:true,
       details:isL||layout==='data',...selected};
   }
   /** @param {object} options @returns {object} */
@@ -80,7 +83,7 @@ window.OverlayOptions=(()=>{
   function isBattle(options) {
     return !options.debug_panel&&['pop','pop-cream','stylish','plain'].includes(options.theme);
   }
-  return {resolve,normalize,geometry,flags,catalog,WIDTH,HEIGHT,isBattle};
+  return {resolve,normalize,geometry,flags,catalog,WIDTH,HEIGHT,isBattle,DEFAULT_VALUE_DISPLAY};
 })();
 
 // 入力・実行状態を同じ言葉で案内する。判定値には触れない。

@@ -112,7 +112,8 @@ window.renderDistributionUX=state=>{
   const key=d.restarting?'waiting':(window.inputChecking||(d.scanning&&!d.input_waiting))?'checking':attention?'attention':playing?'playing':(state.running||d.input_waiting)?'waiting':'stopped';
   const labels={checking:['確認中','Checking'],attention:['要対応','Needs attention'],playing:['解析中','Analyzing'],waiting:['試合待ち','Waiting for a match'],stopped:['停止中','Stopped']};
   const badge=get('runtime-state');badge.textContent=labels[key][en?1:0];badge.dataset.status=key;
-  const messages={attention:state.error?(en?'Could not start. Check Details.':'解析を始められませんでした。「くわしく」を確認してください。'):localMessage(d.input?.message||'映像の入力を確認してください / Check the video input'),
+  const nativeBlocked=en?'Windows Smart App Control blocked a required component, so analysis cannot start. We are preparing code signing. See the distribution site for details.':'Windows のスマート アプリ コントロールが計算部品を止めたため、解析を始められません。コード署名の対応を準備中です。くわしくは配布サイトの案内をご覧ください。';
+  const messages={attention:state.error==='native_blocked'?nativeBlocked:state.error?(en?'Could not start. Check Details.':'解析を始められませんでした。「くわしく」を確認してください。'):localMessage(d.input?.message||'映像の入力を確認してください / Check the video input'),
     checking:en?'Looking for video input…':'映像の入力を探しています…',
     playing:en?'Watching the game video.':'ゲームの映像を見ています。',
     waiting:d.restarting?(en?'Restarting analysis':'解析を再開しています'):localMessage(d.input_waiting&&d.input?.reason!=='ready'&&d.input?.message||'試合が映るのを待っています / Waiting for a match to appear'),

@@ -13,6 +13,7 @@ from .live_24h_model import LEARNING_COLUMNS, RETR_COLUMNS, SECOND_COLUMNS, XC_C
 from .live_ex_delay import DelayedAsyncEx
 from .live_ex_hold import HOLD_SEC
 from .live_xc_fill_frac import XC_FILL_FRAC_COLUMNS, fill_fractions
+from src.prob_temperature import TRANSFORM_PATH, apply_temperature, load_temperature
 
 MS = 1000.0
 
@@ -20,8 +21,10 @@ MS = 1000.0
 class Live24h:
     def __init__(self, output: Path, model: Any = None, settings: dict | None = None,
                  worker_factory: Callable = DelayedAsyncEx, clock: Callable = perf_counter,
-                 use_ama: bool | None = None) -> None:
+                 use_ama: bool | None = None, temperature_path: Path = TRANSFORM_PATH,
+                 temperature_enabled: bool | None = None) -> None:
         self.ama = ama_enabled() if use_ama is None else use_ama
+        self.temperature = load_temperature(temperature_path, temperature_enabled)
         self.clock, self.worker = clock, None
         self.model = model
         self.ex_columns = LEARNING_COLUMNS
@@ -104,7 +107,7 @@ class Live24h:
         probability = self.model.predict_row(dict(row, **values))
         if not math.isfinite(probability) or not 0 <= probability <= 1:
             raise ValueError('24hモデルの予測が有限な確率ではありません')
-        return float(probability)
+        return apply_temperature(float(probability), dict(row, **values), self.temperature)
 
     def predict(self, result: dict) -> float:
         if not self.ama:

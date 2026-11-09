@@ -24,6 +24,7 @@ BOOL_KEYS |= frozenset({'mascot_dopamine_mode', 'vgraph', 'mascot', 'mascot_eyes
 # 試験用の情報パネル (L字配置のときだけ表示)。既定OFF。
 BOOL_KEYS |= frozenset({'debug_panel'})
 ENUMS = dict(layout=LAYOUTS, corner=CORNERS, font=FONT_SIZES, theme=THEMES, midline=MIDLINES,
+             value_display=('probability', 'evaluation'),
              language=('auto', 'ja', 'en'), mascot_position=('left', 'right', 'card'),
              mascot_size=('small', 'medium', 'large'), mascot_dopamine=('low', 'normal', 'high'),
              mascot_speed=('0.5', '1', '1.5', '2'))
@@ -33,6 +34,10 @@ def validate_overlay(value: Any) -> dict[str, Any]:
     """省略キーは保持せず、配置ごとの初期値をブラウザで解決する。"""
     if not isinstance(value, dict):
         raise ValueError('overlay はオブジェクトで指定してください')
+    legacy_display = {'evaluation_main': 'evaluation', 'probability_main': 'probability'}
+    value = dict(value)
+    if isinstance(value.get('value_display'), str):
+        value['value_display'] = legacy_display.get(value['value_display'], value['value_display'])
     unknown = value.keys() - BOOL_KEYS - ENUMS.keys() - {'scale', 'mascot_band_edges'} - POSITION_LIMITS.keys()
     if unknown:
         raise ValueError(f'overlay の未知の設定項目: {sorted(unknown)}')

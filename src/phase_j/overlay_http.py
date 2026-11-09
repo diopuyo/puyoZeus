@@ -16,6 +16,7 @@ BINARY_ASSETS.update({f'/mascot/{band}.webp': (f'brand/mascot_{band}.webp', 'ima
 BINARY_ASSETS.update({f'/fonts/{name}.woff2': (f'fonts/{name}.woff2', 'font/woff2')
                       for name in ('DelaGothicOne-Regular', 'NotoSansJP')})
 ASSETS = {'/overlay_expressions.js': ('overlay_expressions.js', 'text/javascript'),
+    '/overlay_evaluation.js': ('overlay_evaluation.js', 'text/javascript'),
     '/distribution_ux.js': ('distribution_ux.js', 'text/javascript'),
     '/distribution_ux.css': ('distribution_ux.css', 'text/css'),
     '/overlay_24h.js': ('overlay_24h.js', 'text/javascript'),

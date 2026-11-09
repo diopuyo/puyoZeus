@@ -52,6 +52,11 @@ LIVE_CHAIN_END_FORMULA_DEFAULT = False
 # 2026-11-03: 0.6.1準備。サイト未開設のため未採用・既定OFF。確認後の手動送信だけ。
 # 2026-11-06 user 採用 (0.6.2 で ON)。本番の受け口 (Pages Functions + D1) が動くことを PC1 で確認済み
 # (管理の集計 200)。11/4 にプレビューで PC1 の collect_feedback.mjs が 41 件回収。送信は確認後の手動だけ。
+# 2026-11-09 user 採用: OOF 216本・5分割・11,711,018行で学習。
+# newsealed 152試合の LL 0.51925→0.51727、悪化層0。事前の線(2)
+# (newsealedだけの癖の層)は不合格だったことを留保して、0.6.4で既定ON。
+DISTRIBUTION_PROB_TEMPERATURE = True
+
 DISTRIBUTION_SITE_FEEDBACK = True
 
 # 2026-11-02: 専用の設定窓。PC1の採否決定前につき既定OFF（app_window_20261102）。
@@ -2011,6 +2016,10 @@ RELEASE_LIVE_ENV_DEFAULTS: dict[str, str] = {
     'PUYO_OBS_AMA_RUST': '1', 'PUYO_OBS_AMA_RUST_THREADS': '2',
     'PUYO_OBS_CPU_ISOLATION': '0', 'PUYO_OBS_AMA_IDLE': '0',
     'PUYO_OBS_EXACT_SEED': '1', 'PUYO_OBS_PREPARE_EXACT': '1',
+    # 2026-11-09 user 決定 (0.6.4 に入れる)。W67: 長い連鎖の終わり際の再通知で EX が台帳を作り直し、
+    # 送り済み・相殺済みを二重に数える不具合の直し。根拠は codex_jobs/quality_exchange_064_20261109
+    # (場面4 の逆向きを解消、3 本で台帳の再開始 6→2・ちらつき 20→12、公開試験 1,829 件で新しい失敗 0)。
+    'PUYO_EX_CHAIN_IDENTITY': '1',
 }
 # OBS Virtual Cameraのみ24w2と同じ色行列補正。他機器の既定offは維持する。
 RELEASE_OBS_DEVICE_NAME = 'OBS Virtual Camera'

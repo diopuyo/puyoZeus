@@ -52,7 +52,7 @@ def test_selection_and_model_gate(tmp_path: Path, declared: bool, same_time: boo
     value = candidate(calls, declared)
     validate_model(value)
     owner = Live24h(tmp_path, value, dict(xc=xc, xc_same_time=same_time),
-                      lambda _: worker, use_ama=True)
+                      lambda _: worker, use_ama=True, temperature_enabled=False)
     try:
         owner.predict(result())
         expected = fill_fractions(key['xc'] if same_time and xc else raw if xc else {},
@@ -68,7 +68,7 @@ def test_selection_and_model_gate(tmp_path: Path, declared: bool, same_time: boo
 def test_inference_expiry_recomputes(tmp_path: Path, xc_only: bool) -> None:
     calls, worker = [], Worker(extra(xc_net_recv_p1=1., xc_death_room_p1=2.))
     value = candidate(calls)
-    owner = Live24h(tmp_path, value, {}, lambda _: worker, use_ama=True)
+    owner = Live24h(tmp_path, value, {}, lambda _: worker, use_ama=True, temperature_enabled=False)
     count = 0
 
     def selection(_: dict) -> tuple:
@@ -100,7 +100,7 @@ def test_side_swap_commutes() -> None:
 
 def test_ama_off_does_not_infer(tmp_path: Path) -> None:
     calls = []
-    owner = Live24h(tmp_path, candidate(calls), {}, use_ama=False)
+    owner = Live24h(tmp_path, candidate(calls), {}, use_ama=False, temperature_enabled=False)
     try:
         assert owner.predict(result()) == result()['raw_probability']
         assert calls == []

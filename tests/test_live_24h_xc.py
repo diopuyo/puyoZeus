@@ -63,7 +63,7 @@ def test_xc_model_columns(tmp_path: Path, declared: bool) -> None:
     candidate.members = (1, 2, 3)
     validate_model(candidate)
     worker = Worker(dict(epoch=1, serial=2, extra=dict.fromkeys(LEARNING_COLUMNS + XC_COLUMNS, .7)))
-    owner = Live24h(tmp_path, candidate, {}, lambda _: worker, use_ama=True)
+    owner = Live24h(tmp_path, candidate, {}, lambda _: worker, use_ama=True, temperature_enabled=False)
     try:
         owner.predict(result())
         assert set(calls[0]) & set(XC_COLUMNS) == (set(XC_COLUMNS) if declared else set())

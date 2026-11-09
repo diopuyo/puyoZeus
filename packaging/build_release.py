@@ -39,7 +39,7 @@ RC_MODELS = Path(_public_dev_text('<work>/build_20261101_obs_w2_local/stage/Puyo
 RC_NATIVE = Path(_public_dev_text('<work>/codex_jobs/release_rc_build_20261102/native_remap/puyo_core.pyd'))
 RC_NATIVE_SHA = 'd631e3d40cb493eeaf1ad58ce97f5e2d0db2a8823407d5f00617cd15744c136f'
 ZIP_EPOCH_SECONDS = 315532800  # ZIPが表現できる1980-01-01以降へ時刻だけ補正する。
-RC_MODEL_DIRS = ('b3_c2', 'b3_c2_ens', 'b3_ex_L200H_retR', 'ama_plain', 'live_ex', 'v49f')
+RC_MODEL_DIRS = ('b3_c2', 'b3_c2_ens', 'b3_ex_L200H_retR', 'ama_plain', 'live_ex', 'v49f', 'calibration')
 WINDOW_WHEELS = ('pywebview==6.1', 'bottle==0.13.4', 'pythonnet==3.2.1',
                  'clr_loader==0.3.1', 'cffi==2.1.1', 'pycparser==3.12',
                  'typing_extensions==4.16.0')

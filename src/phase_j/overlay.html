@@ -5,6 +5,7 @@
 <title>puyoZeus Live — 対戦分析</title>
 <script>window.overlayDefaults=/*OVERLAY_DEFAULTS*/{};</script>
 <script src="overlay_options.js"></script>
+<script src="overlay_evaluation.js"></script>
 
 
 
@@ -18,6 +19,7 @@
     <div class="player plate one"><span class="name p1">1P</span><span class="number num"><span id="p1">—</span><small class="unit">%</small></span></div>
     <div class="player plate two right"><span class="name p2">2P</span><span class="number num"><span id="p2">—</span><small class="unit">%</small></span></div>
   </div>
+  <div id="evaluation" class="evaluation-score" data-advantage="neutral"><span id="evaluation-value">—</span></div>
   <div class="bar gauge" id="bar" role="img" aria-label="勝率は未取得"><div class="g-hatch"></div><div class="fill one g-one" id="fill"></div><div class="fill two g-two"></div></div>
   <div class="trend spark">
     <div class="trend-meta"><span>1P推移 · 直近30秒</span><span class="prediction" id="prediction" hidden>予想込み</span><span id="trend-end">現在</span></div>
@@ -74,14 +76,15 @@ function unavailable(message,mode='waiting') {
   cancelAnimationFrame(animation);shown=null;lastKind='waiting';clearHistory(false);
   el('panel').dataset.mode=mode;el('panel').dataset.empty='true';el('state').textContent=message;
   el('heading').textContent='勝率';el('p1').textContent=el('p2').textContent='—';
+  el('evaluation-value').textContent='—';el('evaluation').dataset.advantage='neutral';
   el('prediction').hidden=true;el('basis').textContent=el('forecast').textContent='—';
   renderContents(null);
   el('detail-note').textContent='データ待ち';el('bar').setAttribute('aria-label','勝率は未取得');
 }
 /** @param {number} p */
 function paintProbability(p) {
-  shown=p;const percent=Math.round(p*100);
-  el('p1').textContent=String(percent);el('p2').textContent=String(100-percent);
+  shown=p;
+  PuyoEvaluation.paint(p);
   el('fill').style.transform=`scaleX(${p})`;
   if(el('gSplit')) el('gSplit').style.transform=`translateX(${p*100}%)`;
 }
@@ -185,6 +188,7 @@ function renderSnapshot(data) {
   renderContents(winner?null:data.evaluations.b3_contents);
   renderDetails(data,Boolean(winner));lastKind=winner?'terminal':'live';
   el('bar').setAttribute('aria-label',`1P ${Math.round(p*100)}%、2P ${100-Math.round(p*100)}%`);
+  if(PuyoEvaluation.isEvaluation()) PuyoEvaluation.paint(p);
 }
 const COMPLETION_DRIVEN = false;
 const CONNECTION_STALE_MS = 20000;
@@ -255,6 +259,7 @@ if(window.overlayDefaults.distribution_mode&&!new URLSearchParams(location.searc
     for(const key of Object.keys(overlayOptions)) delete overlayOptions[key];
     Object.assign(overlayOptions,options);
     applyOverlayOptions(overlayOptions);el('stage').dataset.state=state;
+    PuyoEvaluation.refresh();
     PuyoI18n.setLanguage(options.language);PuyoMascot.update({});
   });
   });
