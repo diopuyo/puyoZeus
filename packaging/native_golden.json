@@ -1,0 +1,8 @@
+{
+  "format": 1,
+  "seed": 20261013,
+  "samples": 240,
+  "hidden_rows": [0, 1],
+  "reference_dll_sha256": "8b9a979246fa0a8c67bfbe2e06c77496fd8c895eebef1db195319c06f095f77f",
+  "dll_fingerprint": "f743caa4e39121e9ac5d14475478c7859acf2de0dd5cf26452b999f66a4ee2a0"
+}

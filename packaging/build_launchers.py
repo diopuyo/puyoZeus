@@ -25,7 +25,7 @@ def verify_copy(source: Path, target: Path) -> None:
                    creationflags=subprocess.CREATE_NO_WINDOW)
 
 
-def verify_signpath(target: Path) -> None:
+def verify_signpath(target: Path, exact_signer: bool = False) -> None:
     """有効な署名と証明書の署名者名の両方を必須にする。"""
     shell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
     script = ("$ErrorActionPreference='Stop';"
@@ -38,8 +38,9 @@ def verify_signpath(target: Path) -> None:
                             capture_output=True, text=True,
                             creationflags=subprocess.CREATE_NO_WINDOW)
     signature = json.loads(result.stdout)
-    if (signature.get('status') != 'Valid'
-            or 'SignPath Foundation' not in signature.get('signer', '')):
+    signer = signature.get('signer', '')
+    accepted = signer == 'SignPath Foundation' if exact_signer else 'SignPath Foundation' in signer
+    if signature.get('status') != 'Valid' or not accepted:
         raise ValueError(f'SignPath Foundation の有効な署名がありません: {target}')
 
 

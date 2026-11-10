@@ -3,7 +3,7 @@
 Windows 10/11 の .NET Framework 4.x と Python 3.12 を使う。
 
 ```powershell
-python packaging/build_launcher_exe.py --output unsigned --version 0.6.2
+python packaging/build_launcher_exe.py --output unsigned --version 0.6.4
 ```
 
 同じソース・版・アイコン・コンパイラを使えば、出力先を変えても同じバイトに
@@ -11,8 +11,9 @@ python packaging/build_launcher_exe.py --output unsigned --version 0.6.2
 0 にし、唯一の GUID（MVID）を内容の SHA-256 から設定する。署名済み exe には
 この処理を適用しない。異なるコンパイラの出力一致は保証しない。
 
-GitHub Actions の `launcher.yml` を手動実行すると未署名成果物を保存する。
-`SIGNPATH_API_TOKEN` secret がある時だけ署名を依頼する。repository variables:
+GitHub Actions の `launcher.yml` は main への push、手動実行、`v*` タグで
+未署名成果物を保存する。main では版 0.6.4、タグではタグの版を使用する。
+`SIGNPATH_API_TOKEN` secret と次の repository variables がすべてある時だけ署名を依頼する。
 `SIGNPATH_ORGANIZATION_ID`、`SIGNPATH_PROJECT_SLUG`、
 `SIGNPATH_SIGNING_POLICY_SLUG` を設定する。
 SignPath 側で ZIP 内の 2 つの exe を署名する Artifact Configuration と、
@@ -21,7 +22,7 @@ SignPath 側で ZIP 内の 2 つの exe を署名する Artifact Configuration �
 署名後、成果物を新しいフォルダーへ展開し、配布組立時に指定する。
 
 ```powershell
-python packaging/build_release.py --version 0.6.2 --signed-launcher-dir signed <その他の組立引数>
+python packaging/build_release.py --version 0.6.4 --signed-launcher-dir signed <その他の組立引数>
 ```
 
 引数なしでは従来の PSF 署名付き Python の写しを使う。

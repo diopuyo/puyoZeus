@@ -25,6 +25,7 @@ from build_bundle import build, DEFAULT_ASSET_ROOT, write_manifest, precompile, 
 from bundle_archive import is_runtime_file, write_bundle_zip
 from release_privacy import sanitize_bundle_provenance, refresh_model_hashes
 from build_launchers import build_launchers
+from signed_native import install_signed_native
 
 DEFAULT_OUTPUT = Path('D:/puyo_analyzer/b3_data/codex_tasks/dist_app_release')
 INPUTS = Path('D:/puyo_analyzer/packaging')
@@ -290,7 +291,7 @@ def arrange_release_documents(bundle: Path) -> None:
         (bundle / name).unlink(missing_ok=True)
 
 
-def finish_bundle(output: Path, version: str, model: Path, rc_models: Path = RC_MODELS, model_label: str = '24w2-temporary', signed_launcher_dir: Path | None = None) -> Path:
+def finish_bundle(output: Path, version: str, model: Path, rc_models: Path = RC_MODELS, model_label: str = '24w2-temporary', signed_launcher_dir: Path | None = None, signed_native_dir: Path | None = None) -> Path:
     bundle = output / 'build/PuyoLive'
     retain_python_vc_runtime(bundle, output)
     write_python_runtime_configs(bundle)
@@ -318,6 +319,7 @@ def finish_bundle(output: Path, version: str, model: Path, rc_models: Path = RC_
     shutil.copy2(ROOT / 'packaging/UninstallCleanup.ps1', bundle / 'tools/UninstallCleanup.ps1')
     arrange_launchers(bundle)
     build_launchers(bundle, version, signed_launcher_dir=signed_launcher_dir)
+    install_signed_native(bundle, signed_native_dir, version)
     (bundle / 'mascot').mkdir(exist_ok=True)
     arrange_release_documents(bundle)
     precompile(bundle / 'python', bundle / 'app', bundle / 'python/Lib/site-packages')
@@ -365,6 +367,8 @@ def main() -> None:
     parser.add_argument('--rc-models', type=Path, default=RC_MODELS)
     parser.add_argument('--signed-launcher-dir', type=Path, default=None,
                         help='SignPath Foundation 署名済みの入口 exe のフォルダー（既定は従来方式）')
+    parser.add_argument('--signed-native-dir', type=Path, default=None,
+                        help='署名・版・指紋を検査する計算部品のフォルダー（既定は従来方式）')
     args = parser.parse_args()
     validate_readme_version(args.version)
     if not args.zip_only:
@@ -376,7 +380,8 @@ def main() -> None:
               onnx_cache=INPUTS / 'onnx_cache', b3_model=args.model, b3_timing_table=TABLE,
               include_system_vc_runtime=False)
     bundle = finish_bundle(output, args.version, args.model, args.rc_models, args.model_label,
-                           signed_launcher_dir=args.signed_launcher_dir)
+                           signed_launcher_dir=args.signed_launcher_dir,
+                           signed_native_dir=args.signed_native_dir)
     print(json.dumps(artifacts(output, bundle, args.version, args.zip_only), ensure_ascii=False, indent=2))
 
 

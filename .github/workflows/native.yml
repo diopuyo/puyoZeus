@@ -1,0 +1,93 @@
+name: Build and sign native components
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (major.minor.patch)'
+        required: true
+        default: '0.6.4'
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Install fixed build tools
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --target x86_64-pc-windows-gnu
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup default 1.97.1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install maturin==1.9.4 ziglang==0.16.0
+      - name: Build from source
+        id: build
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          $version = $env:INPUT_VERSION
+          if (!$version -and $env:GITHUB_REF_TYPE -eq 'tag') { $version = $env:GITHUB_REF_NAME -replace '^v', '' }
+          if (!$version) { $version = '0.6.4' }
+          python packaging/build_signed_native.py --output unsigned --work native-build --version "$version"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python packaging/signed_native.py unsigned
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Upload unsigned native components
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-unsigned
+          path: |
+            unsigned/*.pyd
+            unsigned/*.dll
+          if-no-files-found: error
+      - name: Check signing configuration
+        id: signing
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+        run: |
+          if ($env:SIGNPATH_API_TOKEN -and $env:SIGNPATH_ORGANIZATION_ID -and $env:SIGNPATH_PROJECT_SLUG -and $env:SIGNPATH_SIGNING_POLICY_SLUG) {
+            'enabled=true' >> $env:GITHUB_OUTPUT
+          }
+      # 人による承認と *.pyd / *.dll の対象定義は SignPath 側で設定する。
+      - name: Request SignPath signature
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+      - name: Verify signed native components
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          NATIVE_VERSION: ${{ steps.build.outputs.version }}
+        run: python packaging/signed_native.py signed --signed-version "$env:NATIVE_VERSION"
+      - name: Upload signed native components
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-signed
+          path: |
+            signed/*.pyd
+            signed/*.dll
+          if-no-files-found: error
