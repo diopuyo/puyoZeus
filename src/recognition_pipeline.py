@@ -536,8 +536,12 @@ class SideResult:
     prefire_snapshot: dict | None = None
     # E34: W48bを有効にした描画・補完だけが保存する。Noneは未取得。
     prefire_origin_hold: bool | None = None
-    # v2.1: 公開盤を補正した時だけ保持する評価用の元盤。履歴へ公開補正を戻さない。
+    # 評価用の別盤。公開盤の補正前、またはW68の仮の対を除いた盤。内部履歴には戻さない。
     evaluation_confirmed_board: Board | None = None
+    # 光の対策を有効にした時だけ、NEXTの消費と隠し段の不確かさを配送する。
+    light_observation: dict | None = None
+    # 光対策ON時だけ、下限予測専用に生確率を渡す。既存の位置引数順を保つ。
+    light_cell_probs: list | None = None
 
 
 @dataclass(frozen=True)
@@ -1906,6 +1910,8 @@ class RecognitionPipeline:
         # (q第14試合1P 881.967秒の幻おじゃま9,9,9の根因B)。default False = bit-identical。
         enable_verification_pending_chain_expiry: bool = False,
         enable_falling_puyo_integrity: bool = False,
+        enable_w68_rollback: bool = False,
+        enable_w68_inference_pending: bool = False,
         enable_score_roi_alignment: bool = False,
         # 2026-10-23: コマ落ちに強い数え方 (<work>/frame_drop_robust_20261023/DESIGN.md)。
         # True のとき、set_media_tick_step() で刻みの幅を受けた後の update() から、状態機械へ
@@ -1936,6 +1942,15 @@ class RecognitionPipeline:
             else self.BG_FP_FORCE_MAX_PUYO
         )
         self._enable_falling_puyo_integrity = enable_falling_puyo_integrity
+        self._w68_inference_pending = None
+        if enable_w68_inference_pending:
+            from src.tsumo_inference_pending import InferencePendingPair
+            self._w68_inference_pending = {
+                side: InferencePendingPair() for side in ("1P", "2P")}
+        self._w68_rollback = None
+        if enable_w68_rollback:
+            from src.tsumo_rollback import TsumoRollback
+            self._w68_rollback = {side: TsumoRollback() for side in ("1P", "2P")}
         self._reader = image_reader
         # ネイティブ (Rust) HSV 分類 (2026-08-20)。既定 OFF = 従来の Python
         # 経路のまま bit-identical。有効時は ImageReader 経由で
@@ -3773,6 +3788,8 @@ class RecognitionPipeline:
         # 配布版の OCR 代替経路。None は環境変数で選択し、従来の呼出順も保持する。
         score_zero_from_ocr: bool | None = None,
         enable_falling_puyo_integrity: bool = False,
+        enable_w68_rollback: bool = False,
+        enable_w68_inference_pending: bool = False,
         enable_score_roi_alignment: bool = False,
         # 2026-10-23: コマ落ちに強い数え方 (__init__ の同名引数を参照)。default False。
         enable_media_tick_counters: bool = False,
@@ -4069,6 +4086,8 @@ class RecognitionPipeline:
             enable_verification_pending_chain_expiry=(
                 enable_verification_pending_chain_expiry),
             enable_falling_puyo_integrity=enable_falling_puyo_integrity,
+            enable_w68_rollback=enable_w68_rollback,
+            enable_w68_inference_pending=enable_w68_inference_pending,
             enable_score_roi_alignment=enable_score_roi_alignment,
             enable_media_tick_counters=enable_media_tick_counters,
             enable_lockdown_score_zero_then_move_release=(
@@ -4440,6 +4459,7 @@ class RecognitionPipeline:
         """
         self._live_delta_cache = None
         self._live_boundary_cache = None
+        self._light_consumption = None
         if self._placement_reconcile is not None:
             self._placement_reconcile.reset()
         self._sm_1p.reset()
@@ -5049,6 +5069,7 @@ class RecognitionPipeline:
             # サイクル66: NEXT 累積制約も試合切り替えでリセット
             self._tsumo_count_1p.clear()
             self._tsumo_count_2p.clear()
+            self._light_consumption = None
             # 試合が変わったらマージンタイムの起点も捨てる
             self._first_move_sec_1p = None
             self._first_move_sec_2p = None
@@ -6098,7 +6119,9 @@ class RecognitionPipeline:
             )
             sides.append(side if published is side.confirmed_board else replace(
                 side, confirmed_board=published,
-                evaluation_confirmed_board=side.confirmed_board))
+                evaluation_confirmed_board=(
+                    side.evaluation_confirmed_board
+                    if side.evaluation_confirmed_board is not None else side.confirmed_board)))
         if sides[0] is result.p1 and sides[1] is result.p2:
             return result
         return replace(result, p1=sides[0], p2=sides[1])
@@ -7764,6 +7787,12 @@ class RecognitionPipeline:
         # フィルタを通す前の姿を控える (2026-09-19)。下流が「画面が何を示していたか」
         # を必要とするため。出力には影響しない (読む側が居なければ no-op)。
         _raw_cnn_board = cnn_board.copy()
+        if self._w68_rollback is not None:
+            self._w68_rollback[side].before_update(
+                sm.context.confirmed_board, cnn_board, time_sec,
+                active=is_active, state=sm.context.state.value,
+                next_shift=slide_motion, chain=chain_event is not None,
+            )
         if (
             self._enable_ojama_write_accounting_guard
             or self._enable_ojama_fall_color_swap_guard
@@ -9376,13 +9405,30 @@ class RecognitionPipeline:
                 self._chain_until_1p if side == "1P" else self._chain_until_2p
             )
             _landing_chain_started = time_sec < _chain_hold
+        from src.light_likelihood import read_probabilities
+        if self._w68_rollback is not None:
+            self._w68_rollback[side].after_update(
+                prev_confirmed, ctx.confirmed_board, time_sec,
+                active=is_active, state=ctx.state.value,
+                next_shift=slide_motion, chain=chain_event is not None,
+            )
+        evaluation_pending_board = None
+        if self._w68_inference_pending is not None:
+            evaluation_pending_board = self._w68_inference_pending[side].project(
+                ctx.confirmed_board, _raw_cnn_board, time_sec,
+                published=published_confirmed, next_shift=slide_motion,
+                active=is_active and ctx.state != BoardState.MENU,
+                state=ctx.state.value,
+            )
         return SideResult(
             side=side,
             state=ctx.state,
             cnn_board=cnn_board,
             raw_cnn_board=_raw_cnn_board,
+            light_cell_probs=read_probabilities(self._reader, frame_bgr, side),
             inferred_board=inferred,
             confirmed_board=published_confirmed,
+            evaluation_confirmed_board=evaluation_pending_board,
             drift=drift_res,
             score=cur_score,
             score_delta=score_d_2p_for_ojama,

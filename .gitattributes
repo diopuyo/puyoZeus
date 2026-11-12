@@ -4,6 +4,8 @@
 tests/g3_isolated_files.txt text eol=lf
 # 配布既定の比較元は24w2原JSONのSHAを改行も含めて検証する。
 tests/fixtures/release_obs_24w2.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+# 撃ち返し補正は PC2 納品 JSON の SHA を改行も含めて保つ。
+src/counter_fire_shift_1b.json -text
 # 凍結検証資産は記録されたblobのバイト列をそのまま保持する。
 data/verify/** -text
 .runtime_snapshots/** -text
@@ -26,3 +28,10 @@ src/state_detectors.py text eol=crlf
 scripts/g3_notify_event.ps1 -text
 # Bへ渡す統合パッチはチェックアウト後も適用可能なLFを保持する。
 docs/patches/rt_live_memory_dv2d_20261002.patch text eol=lf
+# SHA256で検査する較正モデルは配布済みのLFバイト列を保持する。
+tests/fixtures/prob_temperature/prob_temperature_v1.json -text
+models/calibration/prob_temperature_v1.json -text
+
+# 中盤補正の設定とPC2試験ベクトルはSHA照合するため原バイト列を保つ。
+models/calibration/midgame_board_layer.json -text
+tests/fixtures/midgame_board/vectors.json -text

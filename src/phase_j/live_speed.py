@@ -231,6 +231,10 @@ def recognition_config(config: dict[str, Any], live_input: bool) -> dict[str, An
     """実効認識設定を保存前に更新する。通常動画では既存値を変更しない。"""
     if live_input and os.environ.get('PUYO_LIVE_DISABLE_PLACEMENT_RECONCILE') == '1':
         config = dict(config, enable_placement_signal_reconcile=False)
+    if os.environ.get('PUYO_W68_INFERENCE_PENDING') == '1':
+        config = dict(config, enable_w68_inference_pending=True)
+    if os.environ.get('PUYO_W68_ROLLBACK') == '1':
+        config = dict(config, enable_w68_rollback=True)
     if os.environ.get('PUYO_LIVE_ROW1_GUARD') == '1':
         config = dict(config, enable_row1_col2_guard=True)
     if os.environ.get('PUYO_ALIGN_SCORE_ROI') == '1':

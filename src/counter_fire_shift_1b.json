@@ -1,0 +1,105 @@
+{
+  "kind": "shift",
+  "lam": 1.0,
+  "root": [
+    0.16952082951477998
+  ],
+  "parent": [
+    0.20575703229719627,
+    0.16474706922278742,
+    0.16952082951477998,
+    0.16952082951477998,
+    0.16952082951477998,
+    0.16952082951477998
+  ],
+  "values": [
+    0.21260662388744567,
+    0.20499702982847706,
+    0.0,
+    0.03672330318461167,
+    0.2764565015172285,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "event_counts": [
+    1681,
+    449,
+    0,
+    2351,
+    3041,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "candidate": "shift_1b",
+  "base_transform_sha256": "5bb39a21f8e3c7a50e104aba888835fd512005f0f78d9afeb76534c56a317585",
+  "scope": "shift_1b: counter none/smaller, finite onset height only, age [0,1.5], latest onset ownership unchanged; all other cells identity",
+  "adopted": false,
+  "schema_version": 1,
+  "formula": "p_out=sigmoid(logit(p_0.6.4)+side_sign*values[cell])",
+  "side_sign": {
+    "p1": 1,
+    "p2": -1
+  },
+  "cell_order": [
+    "none|max_lt12",
+    "none|max_ge12",
+    "none|height_unknown",
+    "smaller|max_lt12",
+    "smaller|max_ge12",
+    "smaller|height_unknown",
+    "larger|max_lt12",
+    "larger|max_ge12",
+    "larger|height_unknown",
+    "equal|max_lt12",
+    "equal|max_ge12",
+    "equal|height_unknown",
+    "unknown_xc|max_lt12",
+    "unknown_xc|max_ge12",
+    "unknown_xc|height_unknown",
+    "unknown_total|max_lt12",
+    "unknown_total|max_ge12",
+    "unknown_total|height_unknown"
+  ],
+  "mk_xc_definition": {
+    "NaN": "unknown_xc",
+    "0": "none",
+    "1": "compare chain_pred_ojama of both players; smaller/larger/equal; nonfinite total -> unknown_total"
+  },
+  "minimum_train_events": 100,
+  "backoff": [
+    "height_leaf",
+    "mk_xc_parent",
+    "eligible_counter_root"
+  ],
+  "status": "research_candidate_not_adopted",
+  "bootstrap_note": "OOF outputs use fold-trained coefficients; these JSON values are full-OOF fit for held-out newsealed only",
+  "eligible_cells": [
+    0,
+    1,
+    3,
+    4
+  ],
+  "excluded_cells_are_identity": true
+}

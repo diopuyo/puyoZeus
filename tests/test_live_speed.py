@@ -154,10 +154,17 @@ def test_speed_bool_validation(key: str, bad: Any) -> None:
         validate({key: bad})
 
 
+def _clear_recognition_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """配布の既定 (W68 は 0.6.5 で ON) が環境に残っていても、R1b の対象だけを見る。"""
+    for name in ('PUYO_LIVE_DISABLE_PLACEMENT_RECONCILE', 'PUYO_W68_INFERENCE_PENDING', 'PUYO_W68_ROLLBACK',
+                 'PUYO_LIVE_ROW1_GUARD', 'PUYO_ALIGN_SCORE_ROI', 'PUYO_LIVE_MATCH_END_PAIR'):
+        monkeypatch.delenv(name, raising=False)
+
+
 def test_live_r1b_override_leaves_video_and_defaults_intact(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.phase_j.live_speed import recognition_config
     original = dict(enable_placement_signal_reconcile=True, stable_frame_count=3)
-    monkeypatch.delenv('PUYO_LIVE_DISABLE_PLACEMENT_RECONCILE', raising=False)
+    _clear_recognition_flags(monkeypatch)
     assert recognition_config(original, True) is original
     monkeypatch.setenv('PUYO_LIVE_DISABLE_PLACEMENT_RECONCILE', '1')
     assert recognition_config(original, False) is original
@@ -196,6 +203,7 @@ def test_bridge_saves_effective_r1b_setting(tmp_path: Any, monkeypatch: pytest.M
     bridge = object.__new__(ProcessRecognitionBridge)
     bridge.device = 'device.json'
     bridge.config_path = tmp_path / 'recognition.json'
+    _clear_recognition_flags(monkeypatch)
     monkeypatch.setenv('PUYO_LIVE_DISABLE_PLACEMENT_RECONCILE', '1')
     actual = bridge.pipeline_config(enable_placement_signal_reconcile=True)
     assert actual == {'enable_placement_signal_reconcile': False}

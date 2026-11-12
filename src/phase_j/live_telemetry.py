@@ -8,6 +8,8 @@ from threading import Event, Thread
 import time
 from typing import Any
 
+from .live_ex_hold_diagnostics import rejection_diagnostics
+
 SAMPLE_SEC = 1.
 
 
@@ -29,6 +31,7 @@ class RuntimeTelemetry:
             event_evaluation_pid=evaluator.process.pid if evaluator else None,
             evaluation_restarts=evaluator.restarts if evaluator else 0,
             evaluation_errors=evaluator.error_count if evaluator else 0,
+            ex_hold_validation_rejections=rejection_diagnostics(),
             progress=getattr(self.bridge, 'progress', {}),
             queue_depth=self.bridge.queue.qsize()+self.bridge.batch_remaining,
             game_starts=list(getattr(self.bridge, 'game_starts', [])),

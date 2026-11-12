@@ -14,11 +14,13 @@ from tests.phase_j.test_overlay_browser import browser
 from tests.phase_j.test_overlay_options_browser import server
 
 ROOT = Path(__file__).resolve().parents[2] / 'src' / 'phase_j'
+GRAPH_WIDTH, GRAPH_HEIGHT, GRAPH_PAD = 412, 54, 4
 
 
 @pytest.fixture
 def battle(browser: Browser) -> Iterator[Page]:
-    page = new_page(browser, 'l&theme=battle-a')
+    # L字の縦向き座標と選択値の一致を検査する。
+    page = new_page(browser, 'l&theme=battle-a&graph_autoscale=0')
     page.add_script_tag(path=str(ROOT / 'overlay_winrate_switch.js'))
     yield page
     page.close()
@@ -41,7 +43,8 @@ def test_selected_line_drives_numbers_gauge_and_graphs(battle: Page, p: float) -
     assert battle.locator('#fill').evaluate('(e)=>e.style.transform') == f'scaleX({p:g})'
     assert battle.locator('#fill').evaluate('(e)=>e.style.width') == ''
     assert battle.evaluate('fullHistory.at(-1).p') == p
-    assert battle.locator('#trace').get_attribute('d').endswith(f'{4+(1-p)*46:.1f}')
+    expected_x = GRAPH_PAD + p * (GRAPH_WIDTH - 2 * GRAPH_PAD)
+    assert battle.locator('#trace').get_attribute('d') == f'M{expected_x:.1f} 0.0'
     assert data == before
 
 
@@ -49,10 +52,12 @@ def test_delta_uses_thirty_seconds_not_last_180_events(battle: Page) -> None:
     rows = [selected(.2+i/1000, i*100) for i in range(401)]
     battle.evaluate('(rows)=>rows.forEach(renderSnapshot)', rows)
     assert battle.locator('#battle-change').count() == 0
-    assert battle.locator('#trace').get_attribute('d').startswith('M4.0 36.2')
+    oldest_x = GRAPH_PAD + .3 * (GRAPH_WIDTH - 2 * GRAPH_PAD)
+    assert battle.locator('#trace').get_attribute('d').startswith(f'M{oldest_x:.1f} {GRAPH_HEIGHT:.1f}')
     # 同じ時刻の更新は二重登録せず、最新の値を使う。
     battle.evaluate('renderSnapshot', selected(.1, 40000))
-    assert battle.locator('#trace').get_attribute('d').endswith('408.0 45.4')
+    newest_x = GRAPH_PAD + .1 * (GRAPH_WIDTH - 2 * GRAPH_PAD)
+    assert battle.locator('#trace').get_attribute('d').endswith(f'{newest_x:.1f} 0.0')
     assert battle.locator('#trace').get_attribute('d').count('L') == 300
 
 
@@ -69,7 +74,8 @@ def test_delta_resets_at_discontinuities(battle: Page, reset_kind: str) -> None:
         battle.evaluate("unavailable('更新待ち')")
         assert battle.locator('#trace').get_attribute('d') == ''
     battle.evaluate('renderSnapshot', data)
-    assert battle.locator('#trace').get_attribute('d') == 'M408.0 22.4'
+    expected_x = GRAPH_PAD + .6 * (GRAPH_WIDTH - 2 * GRAPH_PAD)
+    assert battle.locator('#trace').get_attribute('d') == f'M{expected_x:.1f} 0.0'
 
 
 def test_exchange_pending_and_confirmed_result_use_existing_fields(battle: Page) -> None:

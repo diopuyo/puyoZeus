@@ -97,10 +97,51 @@ async function appNotice() {
     if(!window.obsLoaded) {get('obs-enabled').checked=state.settings.obs_enabled;get('obs-port').value=state.settings.obs_port;window.obsLoaded=true;}
 
     window.lastDistributionState=state;renderAppNotice();
+    renderUpdate(state);
     window.renderDistributionUX?.(state);
   } catch {}
 }
 const APP_POLL_MS=1000;
+/** @param {object} state @returns {void} */
+function renderUpdate(state) {
+  const section=get('app-update');if(!section) return;
+  section.hidden=state.update_button!==true;if(section.hidden) return;
+  const en=document.documentElement.lang==='en',p=state.update_progress||{},r=state.update||{};
+  const busy=['checking','downloading','extracting','preparing','restarting'].includes(p.status);
+  get('check-update').textContent=en?'Check for updates':'更新を確認する';
+  get('check-update').disabled=busy;
+  get('install-update').textContent=en?'Update and restart':'更新する（再起動）';
+  get('install-update').hidden=!r.available||busy;
+  get('cancel-update').textContent=en?'Cancel':'中断する';
+  get('cancel-update').hidden=!['downloading','extracting','preparing'].includes(p.status);
+  get('update-release').textContent=r.available?`${r.version}  ${r.date||''}`:'';
+  get('update-summary').textContent=r.available?r.summary||'':'';
+  const messages={checking:['更新を確認しています','Checking for updates'],
+    downloading:['ダウンロードしています','Downloading'],extracting:['展開しています','Extracting'],
+    preparing:['元の版を退避しています','Backing up the current version'],
+    restarting:['終了して更新します。再起動までお待ちください','Updating. Please wait for the app to restart'],
+    cancelled:['更新を中断しました。アプリは変更していません','Update cancelled. The app is unchanged'],
+    unavailable:['更新を確認できませんでした。もう一度お試しください','Could not check for updates. Try again'],
+    rolled_back:['更新できなかったため元の版に戻しました','The update failed. The previous version was restored'],
+    recovery_failed:['復旧できませんでした。作業フォルダーの退避を残しています','Recovery failed. The backup has been retained'],
+    complete:['更新が完了しました','Update complete'],failed:['更新できませんでした','Update failed']};
+  let message=messages[p.status]?.[en?1:0]||'';
+  if(p.status==='checked') message=r.available?(en?'A new version is available':'新しい版があります'):(en?'You are up to date':'最新の版です');
+  if(p.message) message+=': '+localMessage(p.message);
+  if(p.status==='downloading') message+=` (${p.received||0} / ${p.total||'?'} bytes)`;
+  get('update-progress').textContent=message;
+  const bar=get('update-download-progress');bar.hidden=p.status!=='downloading';
+  if(p.total>0) {bar.max=p.total;bar.value=p.received||0;} else bar.removeAttribute('value');
+}
+for(const [id,action] of [['check-update','check'],['install-update','start'],['cancel-update','cancel']]) {
+  get(id)?.addEventListener('click',async()=>{
+    get(id).disabled=true;
+    try {await distributionPost('/api/update/'+action,{});await appNotice();}
+    catch(error) {setLocalMessage('update-progress',errorMessage(error));}
+    finally {get(id).disabled=false;}
+  });
+}
+document.addEventListener('puyo-language-change',()=>{if(window.lastDistributionState) renderUpdate(window.lastDistributionState);});
 appNotice();setInterval(appNotice,APP_POLL_MS);
 /** @returns {void} */
 function renderAppNotice() {

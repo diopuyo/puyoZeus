@@ -9,6 +9,7 @@ from tests.phase_j.test_distribution_app import distribution
 
 THEMES = ['pop', 'pop-cream']
 LAYOUTS = ['center', 'minimal', 'card', 'vertical', 'l-left']
+GRAPH_HEIGHT = 54
 
 
 @pytest.mark.parametrize('theme', THEMES)
@@ -65,7 +66,7 @@ def test_eyes_can_stop_without_disabling_dopamine(browser: Browser, distribution
 @pytest.mark.parametrize('theme', ['pop', 'pop-cream'])
 @pytest.mark.parametrize('layout', ['center', 'vertical'])
 def test_vertical_history_is_fixed(browser: Browser, theme: str, layout: str) -> None:
-    page = new_page(browser, layout+'&theme='+theme+'&vgraph=0')
+    page = new_page(browser, layout+'&theme='+theme+'&vgraph=0&graph_autoscale=0')
     for seconds, probability in [(1, .2), (2, .8), (3, .4)]:
         page.evaluate('renderSnapshot', snapshot(probability, seconds*1000))
     before = page.locator('#trace').get_attribute('d')
@@ -75,7 +76,9 @@ def test_vertical_history_is_fixed(browser: Browser, theme: str, layout: str) ->
     points = lambda value: [float(x) for x in re.findall(r'-?\d+\.?\d*', value)]
     a, b = points(before), points(after)
     assert a[::2] == b[:-2:2]
-    assert all(abs(new-old-46/30) < .11 for old, new in zip(a[1::2], b[:-2][1::2]))
+    # 値の横座標を保ち、追加後も時刻順に縦枠全体へ配置する。
+    assert a[1::2] == [GRAPH_HEIGHT, GRAPH_HEIGHT / 2, 0]
+    assert b[1::2] == [GRAPH_HEIGHT, GRAPH_HEIGHT * 2 / 3, GRAPH_HEIGHT / 3, 0]
     assert page.locator('#stage').get_attribute('data-vgraph') == '1'
     assert page.locator('#trend .history-one').get_attribute('d')
     expect(page.locator('#trend .mid-top')).to_be_hidden()
@@ -126,5 +129,5 @@ def test_two_designs_four_layouts(browser: Browser, distribution: tuple, path: s
             stage = page.frame_locator(preview).locator('#stage')
             expect(stage).to_have_attribute('data-pop', 'cream' if theme == 'pop-cream' else 'black')
             expect(stage).to_have_attribute('data-layout', 'l' if layout.startswith('l-') else {'center':'side','vertical':'side','minimal':'mini','card':'ribbon'}[layout])
-            expect(stage).to_have_attribute('data-vgraph', '1' if layout in ['center','vertical'] else '0')
+            expect(stage).to_have_attribute('data-vgraph', '1' if layout.startswith('l-') or layout in ['center','vertical'] else '0')
     page.close()

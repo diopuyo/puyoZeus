@@ -1,4 +1,4 @@
-# puyoZeus Live 0.6.4 — ZIP 版 / ZIP edition
+# puyoZeus Live 0.6.5 — ZIP 版 / ZIP edition
 
 【起動前に必ずすべて展開 / Extract All before launching】
 ZIP をダブルクリックで開いただけでは動きません。ZIP を右クリック →「すべて展開」してから、展開したフォルダの puyoZeus Live.exe を起動してください。「python312.dll が見つからないため、コードの実行を続行できません」と出た場合も、ZIP をすべて展開してから起動し直してください。
@@ -90,6 +90,35 @@ Python と計算ライブラリ、Rust 製の処理モジュールは同梱済�
 
 Open `puyoZeus Live.exe`. The entry is an unchanged copy of Python signed by the Python Software Foundation, designed to launch with Smart App Control enabled. Its EXE icon is the Python icon. The DLL and ._pth files at the top level are required app components; do not delete them. Python, computation libraries and Rust modules are bundled. Missing Visual C++ or WebView2 runtimes are offered with your consent and Microsoft signature verification. Declining continues startup; without WebView2, the app opens in a browser.
 
+## 0.6.5 の変更 / Changes in 0.6.5
+
+連鎖中の光の影響を受けにくくし、連鎖の読み取りを改善しました。
+Improved chain recognition by reducing the effects of flashes during chains.
+
+中盤はフィールドの状況も使って推定勝率を補正するようにしました。
+Midgame win probability now also accounts for the field state.
+
+操作中のツモを置き終えたぷよと誤って扱い、評価がちらつく問題を抑えました。
+Reduced evaluation flicker caused by treating the pair being moved as already placed.
+
+時刻の丸めや検査の失敗で配信が止まる問題を修正しました。
+Fixed streaming interruptions caused by timestamp rounding or failed validation.
+
+グラフの縦の幅を試合に合わせる設定を既定で有効にしました。L字・真ん中の柱・縦の配置では、縦向きのグラフを枠いっぱいに表示します。
+Graphs fit their vertical range to each match by default. Vertical graphs fill their frame in the L-shaped, center-column, and vertical layouts.
+
+連鎖の打ち合い直後の推定勝率を追加でずらす補正は、既定では無効です。
+The additional win-probability shift immediately after chain exchanges is disabled by default.
+
+「その他」の「更新を確認する」で、新しい版の日付と変更点を確認できます。「更新する（再起動）」を押すと ZIP を取得し、SHA256 を確認してから入れ替え、アプリを再起動します。取得中は進み具合を表示し、中断できます。設定・ログ・保存した OBS の連携・自動起動は引き継ぎます。更新に失敗した場合は元の版に戻し、途中で PC が落ちた場合も次回起動時に復旧します。
+Under Other, Check for updates shows the release date and changes. Update and restart downloads the ZIP, verifies SHA256, replaces the application, and restarts it. Download progress is shown and you can cancel. Settings, logs, saved OBS integration, and start at sign-in are retained. A failed update is rolled back; an interrupted replacement is recovered on the next launch.
+
+更新確認はボタンを押した時だけ通信します。「起動時に更新を確認する」は既定 OFF です。ON にした場合は起動時にも確認します。SHA256 が合わない場合は入れ替えません。Python 本体の更新が必要と案内された場合は、アプリを終了して ZIP を手動で上書き展開してください。OneDrive の中は避けてください。
+Update checks only contact the server when requested. Check at startup is off by default; enabling it also checks when the app starts. A SHA256 mismatch prevents replacement. If prompted to update Python manually, close the app and extract the ZIP over the existing folder. Avoid OneDrive folders.
+
+0.6.5 では画面からの更新を既定 ON にしています。ボタンがない場合は ZIP の上書き展開で更新してください。0.6.4 には更新ボタンがないため、0.6.5 への最初の更新も上書き展開します。
+In version 0.6.5, in-app updating is enabled by default. If the button is absent, update by extracting the ZIP over the current folder. Version 0.6.4 has no update button, so the initial update to 0.6.5 also uses manual extraction.
+
 ## 0.6.4 の変更 / Changes in 0.6.4
 
 Windows 11 の「スマート アプリ コントロール」が有効な PC では、計算部品が止められて解析が始まらないことがあります。その場合は画面にその旨を表示します。コード署名の準備を進めています。
@@ -130,3 +159,6 @@ Fixed an issue in 0.6.0 where extracting the ZIP with File Explorer opened the a
 
 別の場所の puyoZeus Live が動いているときは、配信タブに案内が出ます。「そちらを終了してこちらに切り替える」で OBS の URL を変えずに切り替えられます。起動する展開先の「puyoZeus Live.exe」を開いてください。
 If puyoZeus Live is running from another location, the Streaming tab offers to stop it and switch to this copy without changing the OBS URL. Open puyoZeus Live.exe in the extracted folder you want to use.
+
+グラフの縦の幅は既定で試合の最大の振れ＋余白に合わせます（最低40〜60%、試合ごとにリセット）。「見た目」の「グラフの縦の幅を試合に合わせる」は既定オンで、チェックを外すと従来の0〜100%固定になります。
+The graph range fits each match’s largest swing plus padding by default (minimum 40–60%, reset each match). In Appearance, “Fit graph range to the match” is on by default; uncheck it for the previous fixed 0–100% range.

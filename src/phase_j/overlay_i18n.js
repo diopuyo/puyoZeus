@@ -1,6 +1,7 @@
 'use strict';
 // 公開DTOと数値はそのままに、表示用テキストとアクセシビリティ属性だけ翻訳する。
 const PUYO_TRANSLATIONS={
+'グラフの縦の幅を試合に合わせる':'Fit graph range to the match',
 '勝率のみ':'Win probability only','評価値のみ':'Evaluation only',
   '数値の表示':'Number display','評価値':'Evaluation score',
 "くわしく":"Details",

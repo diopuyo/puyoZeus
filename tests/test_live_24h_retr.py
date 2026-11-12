@@ -59,7 +59,8 @@ def test_only_declared_retr_columns_reach_model(tmp_path: Path, retr: bool) -> N
     candidate.static = candidate.exchange = SimpleNamespace(columns=columns)
     values = dict.fromkeys(LEARNING_COLUMNS + RETR_COLUMNS, .7)
     worker = Worker(dict(epoch=1, serial=2, extra=values))
-    owner = Live24h(tmp_path, candidate, {}, lambda _: worker, use_ama=True, temperature_enabled=False)
+    owner = Live24h(tmp_path, candidate, {}, lambda _: worker, use_ama=True,
+                   temperature_enabled=False, counter_fire_shift_enabled=False, midgame_board_layer_enabled=False)
     try:
         owner.predict(result())
         assert set(calls[0]) & set(RETR_COLUMNS) == (set(RETR_COLUMNS) if retr else set())

@@ -1,0 +1,69 @@
+{
+  "name": "midgame_board_shift_MB",
+  "version": "v2 2026-11-11 PC2 research: applied after the 0.6.4 probability temperature (prob_temperature_v1, SHA 5bb39a21...)",
+  "status": "candidate for 0.6.5. 152-video all-row test in product order passed; 60-video folds 2 and 3 slightly worse (recorded as variation inside the discovery set); final check by live replay pending; newsealed not used",
+  "order": "p_B3 (averaged raw) -> temperature (src/prob_temperature.py, unchanged) -> this layer: logit(p_final) = logit(p_temperature) + shift",
+  "layer": {
+    "evaluated_on": "each B3 row (orientation 0)",
+    "all_of": [
+      "chain_active_p1 == 0 and chain_active_p2 == 0",
+      "sl_pending_p1 == 0 and sl_pending_p2 == 0",
+      "r_ledger_forecast_p1 == 0 and r_ledger_forecast_p2 == 0",
+      "cells_ojama_p1 == 0 and cells_ojama_p2 == 0",
+      "max(phase(cells_total_p1), phase(cells_total_p2)) == midgame, where phase(n) = early if n <= 18, late if n >= 48, else midgame",
+      "abs(cells_color_p1 - cells_color_p2) <= 4",
+      "the counter-fire window of shift_1b is NOT active (PC1 decision 11/11: counter-fire shift has priority)",
+      "both sides have a kept settled_board in the current game (otherwise shift = 0)"
+    ],
+    "counter_fire_window_note": "in the research evaluation the window was approximated as 1.5 s after any chain start (chain_active rising edge of either side), a superset of the product window; 290 of 289,785 layer rows (0.10%) overlapped and were set to 0"
+  },
+  "features": {
+    "source": "the causal confirmed_board stream per side (observation side.confirmed_board, the same stream SideState.board reads)",
+    "settled_board": "a confirmed_board that is settled (no floating cell, no connected group of 4 or more of one color among colors 1-5) and has no UNKNOWN (10) cell",
+    "carry_forward": "per side, keep the most recent settled_board seen at or before the row's frame, and use it until the next settled_board arrives. Only boards from the current game (frame >= first frame of the game) count.",
+    "color": "number of cells with value 1-5 on the kept settled_board, all 13 rows including the hidden row",
+    "bump": "sum over adjacent columns i=1..5 of |h_i - h_(i+1)|, where h_c = number of non-empty cells (value > 0) in column c over all 13 rows",
+    "delta": "d_color = color(1P) - color(2P); d_bump = bump(1P) - bump(2P)"
+  },
+  "shift": {
+    "raw": "s = b_bump * (d_bump / sd_bump) + b_color * (d_color / sd_color)",
+    "sd_bump": 4.263,
+    "sd_color": 1.729,
+    "b_bump": -0.06757,
+    "b_color": 0.02408,
+    "fit": "offset logistic on the 60 discovery videos' settled pairs (color difference 0-4), offset = temperature * logit(5-fold out-of-fold B3 s1003 student), temperature from prob_temperature_v1 with the product's stratum assignment; game-equal weights; no player strength",
+    "cap": "s_capped = clip(s, -0.25, +0.25) logit (binds on 0.16% of layer rows)",
+    "symmetry": "antisymmetric: swapping 1P and 2P flips the sign; no intercept"
+  },
+  "mixing": {
+    "enter": "when a row enters the layer, apply s_capped * min(1, (t - t_enter) / 0.5 s)",
+    "exit": "after leaving the layer, apply last_applied_shift * exp(-(t - t_exit) / 1.0 s), where last_applied_shift is the shift of the last in-layer row",
+    "counter_fire": "if the counter-fire window becomes active while decaying, the remaining shift becomes 0 and stays 0 until the layer is entered again",
+    "game_boundary": "state resets at the start of each game",
+    "color_difference_edge": "no extra weakening (the variant halving the shift at |d| = 4 was worse)"
+  },
+  "evaluation_152_videos_product_order": {
+    "rows_scored": "349,602 rows (layer rows 289,495 and decay rows) / 7,437 games",
+    "temperature_only_now": "LL 0.68960, ECE 0.0044",
+    "this_v2_cap_and_mixing": "LL 0.68902, ECE 0.0021, diff vs temperature only -0.00058 [-0.00109, -0.00015] (video bootstrap), 5 video groups: -0.00046, -0.00050, -0.00037, -0.00030, -0.00126 (all better)",
+    "variants": {
+      "v1 coefficients (fit before temperature)": "-0.00054 [-0.00111, -0.00007], ECE 0.0031",
+      "v2 coefficients, no cap no mixing": "-0.00055 [-0.00105, -0.00010], ECE 0.0022",
+      "cap 0.15": "-0.00054, ECE 0.0020",
+      "cap 0.25": "-0.00056, ECE 0.0022",
+      "cap 0.35": "-0.00056, ECE 0.0022",
+      "mixing only": "-0.00058 [-0.00108, -0.00014], ECE 0.0022",
+      "halve at |d| = 4": "-0.00049, ECE 0.0022"
+    },
+    "double_correction_check": "temperature reduces the layer's gain from -0.00073 (without temperature) to -0.00058, so part overlaps, but the layer still improves LL and halves ECE after the temperature"
+  },
+  "robustness_one_cell": "a wrong color does not change color or bump; a missing or extra cell changes bump by <= 2 and color by 1 (<= about 0.05 logit)",
+  "cost": "counting cells and column heights on one settled board per side: negligible",
+  "source_documents": "results_pc2/RESULT_MIDGAME_FACTORS.md sections 8-11; v1 = midgame_board_layer.json",
+  "source_sha256": "176cd3bf766cd2b079bf71bea5e2f89229578dafda176fe73f8ced4e08b3fb95",
+  "cap_logit": 0.25,
+  "enter_sec": 0.5,
+  "exit_sec": 1.0,
+  "enter_method": "linear",
+  "exit_method": "exponential"
+}

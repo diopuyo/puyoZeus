@@ -15,6 +15,9 @@ def test_model_label_cli_reaches_bundle(monkeypatch: Any, tmp_path: Path) -> Non
     spec.loader.exec_module(module)
     (tmp_path / 'packaging').mkdir()
     (tmp_path / 'packaging/README_ja.txt').write_text('# puyoZeus Live 0.6.0 — ZIP edition', 'utf-8')
+    (tmp_path / 'docs').mkdir()
+    (tmp_path / 'docs/DISTRIBUTION_APP_GUIDE.md').write_bytes(
+        (tmp_path / 'packaging/README_ja.txt').read_bytes())
     monkeypatch.setattr(module, 'ROOT', tmp_path)
     finish = Mock(return_value=Path('bundle'))
     monkeypatch.setattr(module, 'safe_output', lambda value: value)

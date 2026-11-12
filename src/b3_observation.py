@@ -116,6 +116,9 @@ class ObservationCapture:
         from src.chain_continuity import end_enabled
         if end_enabled():
             result.update(next_pair=side.next_pair, dnext_pair=side.dnext_pair)
+        from src.light_consumption import enabled
+        if enabled() and getattr(side, 'light_cell_probs', None) is not None:
+            result['light_cell_probs'] = side.light_cell_probs
         return result
 
     def update(self, result: Any, image: Any, fi: int, t: float,
@@ -132,6 +135,8 @@ class ObservationCapture:
             warnings = (None, None) if self.warning is None else measure('b3_warning', self.warning.detect, image)
         sides = [self.side(s, image, t, snap, scores, count)
                  for s, count in zip((result.p1, result.p2), counts)]
+        from src.light_consumption import annotate_sides
+        sides = annotate_sides(self, sides, (result.p1.next_pair, result.p2.next_pair), t, self.game)
         for side, warning in zip(sides, warnings):
             side['icon'] = (None if warning is None else
                            dict(asdict(warning), quality='detector_estimate_no_confidence_api'))

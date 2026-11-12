@@ -23,12 +23,20 @@ def observe_xc(engine: Any) -> dict:
     """射影の連鎖更新と xc_diag を写しに閉じ込める。失敗は xc だけ欠測。"""
     started, times, result = perf_counter(), {}, {}
     try:
-        clone, _ = timed(times, 'snapshot', snapshot, engine, {})
+        from src.light_consumption import enabled
+        from .live_light_ex import forecast_memo
+        options = (forecast_memo(engine),) if enabled() else ()
+        clone, _ = timed(times, 'snapshot', snapshot, engine, {}, *options)
         timed(times, 'projection', clone.projection)
         timed(times, 'xc', add_xc, clone, result)
     except Exception as exc:
         result.update(xc=blank(), xc_why=[f'error:{exc!r}'] * 2, xc_diag=None)
     result.update(xc_ms=(perf_counter() - started) * MS, xc_ms_by_stage=times)
+    from .live_light_ex import calculate_xc
+    candidates = timed(times, 'light_candidates', calculate_xc, engine) if enabled() else calculate_xc(engine)
+    if candidates:
+        result['light_xc'] = candidates
+        result.update(xc_ms=(perf_counter() - started) * MS, xc_ms_by_stage=times)
     return result
 
 

@@ -68,6 +68,7 @@ window.PuyoBattle=(()=>{
   /** @param {number} p @param {number} time */
   function record(p,time) {
     if(!Number.isFinite(time)) return;
+    PuyoGraphScale.observe(p);
     if(samples.at(-1)?.time===time) samples.pop();
     samples.push({p,time});
     while(samples.length>1&&samples[1].time<=time-WINDOW_MS) samples.shift();
@@ -80,14 +81,16 @@ window.PuyoBattle=(()=>{
   }
   /** @param {object[]} points @param {number} time @param {boolean} vertical @param {Function} x @param {Function} y */
   function drawHistory(points,time,vertical,x,y) {
+    // 縦向きでは表示中の履歴を枠の上端から下端まで配置する。
+    const timeSpan=vertical&&points.length>1?time-points[0].time:WINDOW_MS;
     const xy=points.map(item=>vertical?
-      [GRAPH_PAD+PuyoEvaluation.graph(item.p)*(GRAPH_WIDTH-2*GRAPH_PAD),GRAPH_PAD+(time-item.time)/WINDOW_MS*(GRAPH_HEIGHT-2*GRAPH_PAD)]:[x(item.time),y(item.p)]);
+      [GRAPH_PAD+PuyoEvaluation.graph(item.p)*(GRAPH_WIDTH-2*GRAPH_PAD),(time-item.time)/timeSpan*GRAPH_HEIGHT]:[x(item.time),y(item.p)]);
     const line=xy.map(([a,b],i)=>`${i?'L':'M'}${a.toFixed(1)} ${b.toFixed(1)}`).join(' ');
     el('trace').setAttribute('d',line);
     el('trend').querySelector('.guide').setAttribute('d',vertical?`M${GRAPH_WIDTH/2} 0V${GRAPH_HEIGHT}`:`M0 ${GRAPH_HEIGHT/2}H${GRAPH_WIDTH}`);
     el('trend').setAttribute('aria-label',vertical?'1P勝率の推移。右ほど1P有利、下ほど過去、中央線は50%':'1P勝率の推移。上ほど1P有利、中央線は50%');
     if(PuyoEvaluation.isEvaluation()) el('trend').setAttribute('aria-label',
-      vertical?'1P評価値の推移。右ほど1P有利、中央は0、両端は±3000':'1P評価値の推移。上ほど1P有利、中央は0、両端は±3000');
+      vertical?'1P評価値の推移。右ほど1P有利、下ほど過去、中央は0、両端は±3000':'1P評価値の推移。上ほど1P有利、中央は0、両端は±3000');
     for(const [side,edge] of [['one',0],['two',GRAPH_WIDTH]]) {
       let area=el('trend').querySelector('.history-'+side);
       if(!area) {area=document.createElementNS('http://www.w3.org/2000/svg','path');area.setAttribute('class','history-'+side);el('trend').prepend(area);}

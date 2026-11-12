@@ -163,6 +163,8 @@ class RealtimeRows:
         row = self.row_builder(gs, self.table, self.video_id, self.trigger, None)
         if row['av_max'] > gs.t + b3_rows.AV_EPS:
             raise b3_rows.LeakError('特徴に未来の情報が混入')
+        from src.phase_j.live_light_probability import attach_context
+        attach_context(self, row)
         return row
 
     def _row(self, emit: bool) -> dict | None:

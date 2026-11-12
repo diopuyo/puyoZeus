@@ -218,6 +218,8 @@ def run_python(root: Path, args: list[str], uninstall: bool) -> int:
 def main(root: Path, args: list[str], uninstall: bool = False) -> int:
     try:
         if not uninstall:
+            from update_recovery import recover_before_launch
+            recover_before_launch(root)
             from legacy_cleanup import cleanup
             cleanup(root)
             ensure_runtime('Microsoft Visual C++', VC_URL, '/install /passive /norestart', has_vc)

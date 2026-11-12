@@ -15,7 +15,7 @@ function applyOverlayOptions(options) {
   el('whole').querySelector('svg').setAttribute('aria-label',PuyoEvaluation.isEvaluation(options.value_display)?
     '試合全体の1P評価値。中央は0、両端は±3000':'試合全体の1P勝率。中央線は50%');
   stage.dataset.place=options.layout==='center'?'center':'edge';
-  stage.dataset.vgraph=['center','vertical'].includes(options.layout)?'1':'0';stage.dataset.state='wait';
+  stage.dataset.vgraph=(stage.dataset.layout==='l'||['center','vertical'].includes(options.layout))?'1':'0';stage.dataset.state='wait';
   stage.dataset.midline=options.midline;stage.dataset.font=options.font;
   if(options.theme==='stylish') stage.dataset.flat='light';
   panel.dataset.layout=options.layout;stage.dataset.mascot=String(options.mascot);
@@ -37,12 +37,14 @@ function applyOverlayOptions(options) {
 
 /** @returns {void} */
 function clearFullHistory() {
+  PuyoGraphScale.reset();
   fullHistory=[];fullStart=null;el('whole-trace').setAttribute('d','');
   el('whole-time').textContent='受信開始から';
 }
 /** @param {number} p @param {number} time */
 function updateFullHistory(p,time) {
   if(!Number.isFinite(time)) return;
+  PuyoGraphScale.observe(p);
   if(fullStart===null) fullStart=time;
   if(fullHistory.length&&fullHistory.at(-1).time===time) fullHistory.pop();
   fullHistory.push({p,time});

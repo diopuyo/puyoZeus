@@ -57,6 +57,32 @@ LIVE_CHAIN_END_FORMULA_DEFAULT = False
 # (newsealedだけの癖の層)は不合格だったことを留保して、0.6.4で既定ON。
 DISTRIBUTION_PROB_TEMPERATURE = True
 
+# 2026-11-10 user 採用: PC2 calib3/3b と8場面のレビュー。温度較正後に適用。
+# 2026-11-12 user「入れないかな おすすめで」で OFF: PC2 eval5 の副比較 (光 ON どうし 104 試合) で
+# ずらし ON の LL +0.0010 [+0.00037, +0.0016]、撃ち返し直後 0〜1.5 秒など 4/42 層で Holm 有意に悪化。
+# 光の直しが撃ち返し直後の遅れを直したため二重の補正になったと判断。
+DISTRIBUTION_COUNTER_FIRE_SHIFT = False
+# 2026-11-11 user 採用 (0.6.5 で ON、「不具合だったら後で戻す」)。W69 光の直し (4ebd3813):
+# step8 で (c) 合格・速さ 4/4 開始で合格、PC2 eval3 の光ON短再生 9,000 コマでコマ落ち 0。
+# eval3 の全編の比較 (段B) は PC2 の停止で未完了のまま採用した。結果が出たら照合し、悪ければ False に戻す。
+# 2026-11-11 21:2x Claude: False に戻す (user「不具合だったら戻そう」)。宣伝の再生 (promo_reel50_light RESULT2) で
+# 長い連鎖中に光の状態処理が 7.8 秒・9.8 秒かかり、評価の 2 秒の期限切れで第 43 試合の 153/300 コマが非表示。
+# 光の読み自体は第 42 試合で 2P の 14 連鎖を 1.7 秒早く捉えて正しい。処理時間の上限を直して確かめたら ON に戻す。
+# 2026-11-12 00:2x Claude: ON に戻す。8475d4a4 (light_stall_fix RESULT2) で段間の進行を高速化し、
+# 色の組み合わせにプレイヤーごと 8,192 通りの上限 (超えた側だけ基礎予測)。第 43 の非表示 0/300・state 最大 443ms、
+# 第 42 の早読みと 3 候補を保持、step8 の 20 走行で最大 323ms・p95 14ms、(c1) 9.89→8.62pt、関連 712・公開 1,830 で新しい失敗 0。
+DISTRIBUTION_LIGHT_ROBUST_CELLS = True
+# 2026-11-12 user 採用「OK」: W68 (操作中のツモが確定盤に入り窒息の印・探索が点滅) の直し。
+# 推論に渡す盤だけ上 3 段の新しい対を仮で外し、NEXT の繰り上がりか 1 秒で入れる (17091169)。
+# 7 本で操作対 11/13 を抑制・正当 10/10 保持・上段の着地の推論の遅れ 中央 7・最大 30 コマ、旗 OFF は 42,094 入力で不一致 0。
+DISTRIBUTION_W68_INFERENCE_PENDING = True
+# 2026-11-11 Claude: 中盤の研究候補v2。配信再生と採否判断までは未採用、既定OFF。
+# 2026-11-12 user 採用「0.6.5 は中盤既定 ON」: PC2 研究 11 節 (152 本・層の中と減衰中 349,602 行) で
+# LL 0.68960→0.68902 (差 −0.00058 [−0.0011,−0.00015])・ECE 0.0044→0.0021・5 組すべて良い。2f468649・79db9c0d。
+DISTRIBUTION_MIDGAME_BOARD_LAYER = True
+# 2026-11-10 Claude 採用: release_065_prep の試験と release_065_final の実機確認を根拠とする。
+DISTRIBUTION_UPDATE_BUTTON = True
+
 DISTRIBUTION_SITE_FEEDBACK = True
 
 # 2026-11-02: 専用の設定窓。PC1の採否決定前につき既定OFF（app_window_20261102）。
@@ -2011,6 +2037,11 @@ RELEASE_LIVE_OBS_FLAGS: tuple[str, ...] = (
 )
 # 同じ11/2判断によりOBS台本の環境を配布入口にも適用する。利用者の環境を優先。
 RELEASE_LIVE_ENV_DEFAULTS: dict[str, str] = {
+    'PUYO_LIGHT_ROBUST_CELLS': str(int(DISTRIBUTION_LIGHT_ROBUST_CELLS)),
+    'PUYO_W68_INFERENCE_PENDING': str(int(DISTRIBUTION_W68_INFERENCE_PENDING)),
+    'PUYO_MIDGAME_BOARD_LAYER': str(int(DISTRIBUTION_MIDGAME_BOARD_LAYER)),
+    'PUYO_COUNTER_FIRE_SHIFT': str(int(DISTRIBUTION_COUNTER_FIRE_SHIFT)),
+    'PUYO_UPDATE_BUTTON': str(int(DISTRIBUTION_UPDATE_BUTTON)),
     'PUYO_LEDGER_PARTIAL': '1', 'PUYO_X_BOARD_ONLY': '1', 'PUYO_X_B3_BOUNDARY': '1',
     # 2026-11-02 PC1: 配布の参照exe起動を防止。threadsは24w2コードの既定2。
     'PUYO_OBS_AMA_RUST': '1', 'PUYO_OBS_AMA_RUST_THREADS': '2',

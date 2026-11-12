@@ -13,9 +13,11 @@ RETURN_FIELDS = ('retr_ama', 'retr_pre', 'retr_seed', 'retr_diag', 'xc_diag')
 WORKERS = 1
 
 
-def snapshot(engine: Any, value: dict) -> tuple[Any, dict]:
+def snapshot(engine: Any, value: dict, extra_memo: dict | None = None) -> tuple[Any, dict]:
     """可変の状態を分離する。種の表と検索索引だけは読み取り専用で共有する。"""
     memo = {id(engine.native): engine.native}
+    if extra_memo is not None:
+        memo.update(extra_memo)
     lookup = engine.knowledge.lookup
     if lookup is not None:
         for name in ('table', 'keys', 'order'):

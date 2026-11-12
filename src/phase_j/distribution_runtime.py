@@ -68,6 +68,8 @@ class DistributionRuntime:
         self.latest: dict[str, Any] = {}
         self.input_probe: dict[str, Any] = {}
         self.update: dict[str, Any] = {}
+        from .distribution_update import UpdateController
+        self.updater = UpdateController(self)
         self.stopping = False
         self.started_at = time.time()
         self.numeric_summary = NumericSummary()
@@ -482,22 +484,18 @@ class DistributionRuntime:
             diagnostics, tail(self.logs / 'runtime.log'), tail(self.root / 'install.log'),
             numeric_summary=self.report_summary())
 
-    def check_update(self) -> None:
+    def check_update(self, force: bool = False) -> None:
         """更新一覧の取得のみ。インストールIDや利用情報は付けない。"""
         with self.lock:
-            if self.update_checked:
+            if self.update_checked and not force:
                 return
             self.update_checked = True
         try:
-            from packaging.version import Version
+            from .update_download import release_info
             request = Request(self.settings['releases_url'], headers={'User-Agent': SITE_USER_AGENT})
             with build_opener(NoRedirect()).open(request, timeout=5) as response:
                 data = json.loads(response.read(64 * 1024))
-            version = data.get('version') if isinstance(data, dict) else None
-            if not isinstance(version, str) or not version:
-                self.update = dict(available=False, status='unavailable')
-                return
-            self.update = dict(available=Version(version) > Version(self.version['app']), version=version)
+            self.update = release_info(data, self.version['app'])
         except Exception:
             self.update = dict(available=False, status='unavailable')
 

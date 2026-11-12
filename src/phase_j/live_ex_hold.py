@@ -7,6 +7,7 @@ from typing import Any
 
 from .live_ex_fresh import EX_FRESH_SEC_DEFAULT, validate_ex_fresh_sec
 from .live_ex_hold_policy import HoldPolicy, SIDES
+from .live_ex_hold_diagnostics import record_rejection
 from ._live_ex_frozen.src.dl1k_columns import COLUMNS, LEARNING_COLUMNS, blank
 
 from ._live_ex_frozen.src.dl1k_retr import COLUMNS as RETR_COLUMNS, SECOND_COLUMNS
@@ -31,6 +32,9 @@ class LiveExHold:
         self.applied_resets: list[dict] = []
 
     def observe(self, key: dict) -> None:
+        for child in getattr(self, '_light_holds', {}).values():
+            if child is not None:
+                child.observe(key)
         if os.environ.get('PUYO_LIVE_EX_AUDIT') == '1':
             self.pending_resets.extend(key.get('resets', []))
         for event in key.get('resets', []):
@@ -43,7 +47,8 @@ class LiveExHold:
                 self.policy.clear(side)
                 self.expires[side] = -math.inf
 
-    def adopt(self, event: dict, source: dict | None, status: str) -> dict:
+    def adopt(self, event: dict, source: dict | None, status: str,
+              skip_invalid: bool = False) -> dict:
         """再結合と同じ行構造。キャッシュ再使用は学習同様に無効。"""
         if source is not None:
             extra_columns = tuple(c for c in (*RETR_COLUMNS, *SECOND_COLUMNS, *XC_COLUMNS)
@@ -54,10 +59,25 @@ class LiveExHold:
         row = dict(group=event['group'], t=event['t'], row_key=event['row_key'],
                    fight=event['fight'], reset=event['reset'], status=status,
                    input_t=None if source is None else source['input_t'], extra=extra)
+        if skip_invalid:
+            try:
+                self.policy.validate_original(row)
+            except ValueError as error:
+                record_rejection(str(error))
+                row = dict(row, status='not_yet', input_t=None)
         return self.policy.apply(row)
 
     def available(self, now: float, input_t: float, cutoff: float, key: dict,
                   source: dict | None, reason: str, epoch: Any) -> tuple[dict | None, str]:
+        result = self._available(now, input_t, cutoff, key, source, reason, epoch)
+        from src.light_consumption import enabled
+        if enabled() and not getattr(self, '_light_child', False):
+            from .live_light_hold import available
+            return available(self, result, now, input_t, cutoff, key, source, reason, epoch)
+        return result
+
+    def _available(self, now: float, input_t: float, cutoff: float, key: dict,
+                   source: dict | None, reason: str, epoch: Any) -> tuple[dict | None, str]:
         identity = (epoch, input_t, cutoff)
         if identity != self.cached:
             self._attach(input_t, cutoff, key, source, reason, epoch)
@@ -101,8 +121,9 @@ class LiveExHold:
         if source is not None:
             source = dict(source, extra=dict(source['extra']))
             for side in SIDES:
-                source['extra']['av_ex_' + side] = t - cutoff + source['eligible_at']
-        values = self.adopt(event, source, status)
+                # 選択済み行の非負の経過時間を引き、丸めで公開時刻が未来になるのを防ぐ。
+                source['extra']['av_ex_' + side] = t - (cutoff - source['eligible_at'])
+        values = self.adopt(event, source, status, skip_invalid=True)
         held = False
         for side in SIDES:
             mode = values['ex_hold_mode_' + side]

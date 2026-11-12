@@ -90,7 +90,7 @@ def test_live_refresh_preserves_probability(page: Page) -> None:
 
 
 def test_graph_limits_and_result(page: Page) -> None:
-    page.evaluate("overlayOptions.value_display='evaluation';applyOverlayOptions(overlayOptions)")
+    page.evaluate("Object.assign(overlayOptions,{value_display:'evaluation',graph_autoscale:false});applyOverlayOptions(overlayOptions)")
     assert page.evaluate('[0,.5,1].map(PuyoEvaluation.graph)') == [0, .5, 1]
     assert page.evaluate('PuyoEvaluation.graph(.75)') == .5 + 659 / 6000
     data = snapshot(1.)

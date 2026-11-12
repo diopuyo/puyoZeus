@@ -14,6 +14,9 @@ from .live_ex_delay import DelayedAsyncEx
 from .live_ex_hold import HOLD_SEC
 from .live_xc_fill_frac import XC_FILL_FRAC_COLUMNS, fill_fractions
 from src.prob_temperature import TRANSFORM_PATH, apply_temperature, load_temperature
+from src.counter_fire_shift import CounterFireShift, load_shift
+from src.midgame_board_layer import load_layer
+from src.midgame_board_wrapper import MidgameBoardLayer, apply_midgame
 
 MS = 1000.0
 
@@ -22,9 +25,17 @@ class Live24h:
     def __init__(self, output: Path, model: Any = None, settings: dict | None = None,
                  worker_factory: Callable = DelayedAsyncEx, clock: Callable = perf_counter,
                  use_ama: bool | None = None, temperature_path: Path = TRANSFORM_PATH,
-                 temperature_enabled: bool | None = None) -> None:
+                 temperature_enabled: bool | None = None,
+                 counter_fire_shift_enabled: bool | None = None,
+                 midgame_board_layer_enabled: bool | None = None) -> None:
         self.ama = ama_enabled() if use_ama is None else use_ama
         self.temperature = load_temperature(temperature_path, temperature_enabled)
+        self.counter_fire_shift = CounterFireShift(load_shift(enabled=counter_fire_shift_enabled))
+        if self.counter_fire_shift.model is not None and self.temperature is None:
+            raise ValueError('撃ち返し補正には24層温度較正を有効にしてください')
+        self.midgame_board_layer = MidgameBoardLayer(load_layer(enabled=midgame_board_layer_enabled))
+        if self.midgame_board_layer.model is not None and self.temperature is None:
+            raise ValueError('中盤補正には24層温度較正を有効にしてください')
         self.clock, self.worker = clock, None
         self.model = model
         self.ex_columns = LEARNING_COLUMNS
@@ -58,7 +69,13 @@ class Live24h:
     def update(self, frame: dict, epoch: int, captured_at: float) -> None:
         if epoch != self.epoch or frame['game_idx'] != self.game:
             self.base_result, self.signature = None, None
+            if getattr(self, 'counter_fire_shift', None) is not None:
+                self.counter_fire_shift.reset()
+            if getattr(self, 'midgame_board_layer', None) is not None:
+                self.midgame_board_layer.reset()
         self.epoch, self.game = epoch, frame['game_idx']
+        if getattr(self, 'midgame_board_layer', None) is not None:
+            self.midgame_board_layer.observe(frame)
         if self.worker is not None:
             if self.settings.get('row_time', False) or self.settings.get('xc_same_time', False):
                 from src.b3_eval_adapter import MAX_HOLD_SEC
@@ -77,6 +94,9 @@ class Live24h:
         selected_at = self.clock()
         extra, reason = select(selected_at, result['t_sec'],
                                admitted_at=result.get('captured_at'))
+        if (result.get('row', {}).get('_light_candidates') == [] and extra is not None
+                and extra.get('light_scenarios')):
+            extra, reason = None, 'candidate_condition_changed'
         values = {name: math.nan for name in self.ex_columns}
         if extra is not None:
             values = {name: extra['extra'].get(name, math.nan) for name in self.ex_columns}
@@ -92,7 +112,11 @@ class Live24h:
         if os.environ.get('PUYO_LIVE_EX_AUDIT') == '1':
             self.write(dict(kind='ex_selection', frame=result['frame'], t=result['t_sec'],
                             selected_at=selected_at, reason=reason, **xc_audit,
-                            **self.worker.selection_record(result['t_sec'], extra)))
+                                    **self.worker.selection_record(result['t_sec'], extra)))
+        from .live_light_probability import SCENARIOS, selected_values
+        scenarios = selected_values(self, extra, result['t_sec'], result.get('row'))
+        if scenarios:
+            values[SCENARIOS] = scenarios
         return values, signature, reason
 
     def select_xc(self, values: dict, t: float, extra: dict | None) -> dict:
@@ -102,12 +126,31 @@ class Live24h:
         return select_xc(values, key, extra)
 
     def infer(self, row: dict, values: dict) -> float:
+        from .live_light_probability import SCENARIOS, weighted_infer
+        if values.get(SCENARIOS):
+            return weighted_infer(self, row, values)
+        return self.infer_single(row, values)
+
+    def infer_single(self, row: dict, values: dict) -> float:
         # 推論中に xc が失効した場合も、欠測にした元の列から作り直す。
         values.update(fill_fractions(values, self.fill_frac_columns))
         probability = self.model.predict_row(dict(row, **values))
         if not math.isfinite(probability) or not 0 <= probability <= 1:
             raise ValueError('24hモデルの予測が有限な確率ではありません')
         return apply_temperature(float(probability), dict(row, **values), self.temperature)
+
+    def infer_candidates(self, rows: list[dict], values: list[dict]) -> list[float]:
+        from .live_light_batch import predict_rows
+        merged = []
+        for row, extra in zip(rows, values):
+            extra.update(fill_fractions(extra, self.fill_frac_columns))
+            merged.append(dict(row, **extra))
+        probabilities = predict_rows(self.model, merged)
+        if len(probabilities) != len(merged) or any(
+                not math.isfinite(value) or not 0 <= value <= 1 for value in probabilities):
+            raise ValueError('24hモデルの予測が有限な確率ではありません')
+        return [apply_temperature(float(value), row, self.temperature)
+                for value, row in zip(probabilities, merged)]
 
     def predict(self, result: dict) -> float:
         if not self.ama:
@@ -116,22 +159,36 @@ class Live24h:
         started = self.clock()
         values, signature, reason = self.selection(result)
         probability = self.infer(result['row'], values)
-        _, current, after_reason = self.selection(result)
+        current_values, current, after_reason = self.selection(result)
+        if current != signature and values.get('_light_scenarios') and current_values.get('_light_scenarios'):
+            # 行時刻で選び直した因果的な写しを使う。新着だけを理由に欠測化しない。
+            values = current_values
+            probability = self.infer(result['row'], values)
+            signature, reason = current, 'reselected_during_inference:' + after_reason
         if current != signature:
             # xcだけの変更ならEX・retRは保持し、それ以外は従来どおり全欠測。
             from .live_ex_xc_same_time import ex_signature
             xc_only = ex_signature(current) == ex_signature(signature)
             missing = XC_COLUMNS if xc_only else self.ex_columns
             values.update({name: math.nan for name in missing if name in values})
+            for candidate in values.get('_light_scenarios', []):
+                candidate['values'].update({name: math.nan for name in missing
+                                            if name in candidate['values']})
             probability = self.infer(result['row'], values)
             signature = ex_signature(signature) if xc_only else None
             reason = 'changed_during_inference:' + after_reason
             if self.settings.get('xc_same_time', False):
                 self.selection_audit.update(self.select_xc_missing(values))
+        if getattr(self, 'counter_fire_shift', None) is not None:
+            probability = self.counter_fire_shift.apply(
+                probability, result['t_sec'], dict(result['row'], **values))
+        probability = apply_midgame(self, probability, result, values)
         self.signature = signature
         self.revision += 1
         self.last = dict(model_source='C2+EX', missing_reason=reason,
                          ex_request=signature, ex_inference_ms=(self.clock()-started)*MS)
+        if values.get('_light_scenarios'):
+            self.last['light_posterior'] = self.light_audit
         self.write(dict(kind='prediction', frame=result['frame'], t_sec=result['t_sec'],
                         raw_probability=probability, learning=values,
                         **self.selection_audit, **self.last))

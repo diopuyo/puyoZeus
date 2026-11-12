@@ -90,7 +90,8 @@ def test_only_model_columns_reach_b3_input(tmp_path: Path, active: bool) -> None
     candidate.static = candidate.exchange = SimpleNamespace(columns=columns)
     values = dict.fromkeys(LEARNING_COLUMNS + retr.COLUMNS + retr.SECOND_COLUMNS, .7)
     worker = Worker(dict(epoch=1, serial=2, extra=values))
-    owner = Live24h(tmp_path, candidate, {}, lambda _: worker, use_ama=True, temperature_enabled=False)
+    owner = Live24h(tmp_path, candidate, {}, lambda _: worker, use_ama=True,
+                   temperature_enabled=False, counter_fire_shift_enabled=False, midgame_board_layer_enabled=False)
     try:
         owner.predict(result())
         assert set(calls[0]) & set(retr.SECOND_COLUMNS) == (set(retr.SECOND_COLUMNS) if active else set())

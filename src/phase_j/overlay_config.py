@@ -14,7 +14,7 @@ MIDLINES = ('split', 'line', 'glow', 'adaptive')
 MIN_SCALE, MAX_SCALE = 70, 85
 MASCOT_EDGE_COUNT, PERCENT = 4, 100
 BOOL_KEYS = frozenset({
-    'band', 'numbers', 'recent', 'full', 'status', 'details',
+    'graph_autoscale', 'band', 'numbers', 'recent', 'full', 'status', 'details',
     'content_pending', 'content_sent', 'content_offset', 'content_rate',
     'content_hands', 'content_return', 'content_margin', 'content_bound', 'content_unknown',
     'content_active', 'content_step', 'content_length', 'content_remaining', 'content_seconds',

@@ -58,6 +58,7 @@ button{cursor:pointer;background:#184762}fieldset{border:0;padding:12px 0;margin
 </fieldset>
 <label>デザイン<select name="theme"></select></label>
 <label>数値の表示<select name="value_display"><option value="probability">勝率のみ</option><option value="evaluation">評価値のみ</option></select></label>
+<label><input name="graph_autoscale" type="checkbox">グラフの縦の幅を試合に合わせる</label>
 <div id="theme-samples" aria-label="テーマの見本"></div><label hidden>50%の示し方<select name="midline"><option value="split">A 上下の淡い塗り分け</option><option value="line">B 細い実線＋50目盛り</option><option value="glow">C 柔らかな光帯</option><option value="adaptive" selected>D 勝率線の上下色分け（既定）</option></select></label>
 <label>配置<select name="layout"></select></label>
 <fieldset id="l-controls"><legend>L字型の配置</legend>
@@ -102,6 +103,14 @@ button{cursor:pointer;background:#184762}fieldset{border:0;padding:12px 0;margin
 <section class="output" data-distribution-only hidden><h2>アプリの設定</h2>
 <label><input id="autostart" type="checkbox">Windows 起動時に自動起動する</label>
 <label><input id="check-updates" type="checkbox">起動時に更新を確認する</label>
+<section id="app-update" hidden>
+<button id="check-update" type="button">更新を確認する</button>
+<p id="update-release"></p><p id="update-summary" style="white-space:pre-wrap"></p>
+<p id="update-progress" role="status" aria-live="polite"></p>
+<progress id="update-download-progress" hidden></progress>
+<button id="install-update" type="button" hidden>更新する</button>
+<button id="cancel-update" type="button" hidden>中断する</button>
+</section>
 <details><summary>詳細設定</summary><label>アプリのポート番号<input id="app-port" type="number" min="1024" max="65535"></label><small>ポート番号の変更はアプリの次回起動時に反映されます。</small></details>
 <button id="save-app-settings" type="button">設定を保存</button><p id="app-save-status" data-i18n-transient role="status"></p></section>
 <section class="output" data-distribution-only hidden><h2>OBS への追加</h2>

@@ -47,6 +47,9 @@ def test_temperature_asset_is_packaged(tmp_path: Path, monkeypatch: pytest.Monke
 def test_readme_version_matches(version: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / 'packaging').mkdir()
     (tmp_path / 'packaging/README_ja.txt').write_text(f'# puyoZeus Live {version} — ZIP 版', 'utf-8-sig')
+    (tmp_path / 'docs').mkdir()
+    (tmp_path / 'docs/DISTRIBUTION_APP_GUIDE.md').write_bytes(
+        (tmp_path / 'packaging/README_ja.txt').read_bytes())
     monkeypatch.setattr(build_release, 'ROOT', tmp_path)
     build_release.validate_readme_version(version)
 
@@ -62,5 +65,26 @@ def test_mismatch_stops_before_build(heading: str, tmp_path: Path, monkeypatch: 
     monkeypatch.setattr(sys, 'argv', ['build', '--version', '0.6.2'])
     with pytest.raises(ValueError, match='--version 0.6.2'):
         build_release.main()
+    compiler.assert_not_called()
+    prepare.assert_not_called()
+
+
+def test_bundled_readme_mismatch_stops_before_build(tmp_path: Path,
+                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    """同梱元だけの旧版と、版は同じだが本文が異なる場合を拒む。"""
+    heading = '# puyoZeus Live 0.6.5 — ZIP 版\n'
+    (tmp_path/'packaging').mkdir()
+    (tmp_path/'docs').mkdir()
+    (tmp_path/'packaging/README_ja.txt').write_text(heading+'本文\n', encoding='utf8')
+    monkeypatch.setattr(build_release, 'ROOT', tmp_path)
+    compiler, prepare = Mock(), Mock()
+    monkeypatch.setattr(build_release, 'compiler', compiler)
+    monkeypatch.setattr(build_release, 'prepare_inputs', prepare)
+    monkeypatch.setattr(sys, 'argv', ['build', '--version', '0.6.5'])
+    for content, message in ((heading.replace('0.6.5', '0.6.4'), '--version 0.6.5'),
+                             (heading+'別の本文\n', 'バイト列')):
+        (tmp_path/'docs/DISTRIBUTION_APP_GUIDE.md').write_text(content, encoding='utf8')
+        with pytest.raises(ValueError, match=message):
+            build_release.main()
     compiler.assert_not_called()
     prepare.assert_not_called()

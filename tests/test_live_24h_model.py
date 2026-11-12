@@ -44,7 +44,8 @@ def model(calls: list) -> SimpleNamespace:
 def test_one_model_including_missing_and_partial_missing(tmp_path: Path, value: dict | None) -> None:
     calls = []
     worker = Worker(value)
-    owner = Live24h(tmp_path, model(calls), {}, lambda _: worker, use_ama=True, temperature_enabled=False)
+    owner = Live24h(tmp_path, model(calls), {}, lambda _: worker, use_ama=True, temperature_enabled=False,
+                    counter_fire_shift_enabled=False, midgame_board_layer_enabled=False)
     prediction = owner.predict(result())
     assert prediction in (.4, .8) and prediction != result()['raw_probability']
     assert len(calls) == 1 and len(calls[0]) == len(LEARNING_COLUMNS) + 1
@@ -54,7 +55,8 @@ def test_one_model_including_missing_and_partial_missing(tmp_path: Path, value: 
 
 
 def test_ama_off_does_not_start_ex_or_load_model(tmp_path: Path) -> None:
-    owner = Live24h(tmp_path, worker_factory=lambda _: pytest.fail('EX起動'), use_ama=False, temperature_enabled=False)
+    owner = Live24h(tmp_path, worker_factory=lambda _: pytest.fail('EX起動'), use_ama=False, temperature_enabled=False,
+                    counter_fire_shift_enabled=False, midgame_board_layer_enabled=False)
     assert owner.predict(result()) == .05
     assert owner.model is None and owner.worker is None
     owner.close()
@@ -62,7 +64,8 @@ def test_ama_off_does_not_start_ex_or_load_model(tmp_path: Path) -> None:
 
 def test_expiry_uses_same_model_without_renewing_b3_timestamp(tmp_path: Path) -> None:
     calls, worker = [], Worker(extra())
-    owner = Live24h(tmp_path, model(calls), {}, lambda _: worker, use_ama=True, temperature_enabled=False)
+    owner = Live24h(tmp_path, model(calls), {}, lambda _: worker, use_ama=True, temperature_enabled=False,
+                    counter_fire_shift_enabled=False, midgame_board_layer_enabled=False)
     owner.epoch = 1
     display = SimpleNamespace(probability=owner.predict(result()), last_success=3., failed=False)
     worker.extra = None
@@ -74,7 +77,8 @@ def test_expiry_uses_same_model_without_renewing_b3_timestamp(tmp_path: Path) ->
 
 def test_boundary_never_reuses_previous_b3_row(tmp_path: Path) -> None:
     calls, worker = [], Worker(extra())
-    owner = Live24h(tmp_path, model(calls), {}, lambda _: worker, use_ama=True, temperature_enabled=False)
+    owner = Live24h(tmp_path, model(calls), {}, lambda _: worker, use_ama=True, temperature_enabled=False,
+                    counter_fire_shift_enabled=False, midgame_board_layer_enabled=False)
     owner.predict(result())
     owner.epoch = 2
     display = SimpleNamespace(probability=None, failed=False)
@@ -89,14 +93,16 @@ def test_expiry_during_inference_is_missing_not_c2(tmp_path: Path) -> None:
         calls.append(row)
         worker.extra = None
         return .4 if math.isnan(row[LEARNING_COLUMNS[0]]) else .8
-    owner = Live24h(tmp_path, SimpleNamespace(predict_row=predict), {}, lambda _: worker, use_ama=True, temperature_enabled=False)
+    owner = Live24h(tmp_path, SimpleNamespace(predict_row=predict), {}, lambda _: worker, use_ama=True, temperature_enabled=False,
+                    counter_fire_shift_enabled=False, midgame_board_layer_enabled=False)
     assert owner.predict(result()) == .4 and len(calls) == 2
     owner.close()
 
 
 def test_model_failure_is_not_replaced_by_c2(tmp_path: Path) -> None:
     owner = Live24h(tmp_path, SimpleNamespace(predict_row=lambda _: math.nan), {},
-                   lambda _: Worker(), use_ama=True, temperature_enabled=False)
+                   lambda _: Worker(), use_ama=True, temperature_enabled=False,
+                    counter_fire_shift_enabled=False, midgame_board_layer_enabled=False)
     with pytest.raises(ValueError):
         owner.predict(result())
     owner.close()
@@ -106,7 +112,8 @@ def test_game_change_clears_old_row_even_if_input_epoch_is_unchanged(tmp_path: P
     calls, worker = [], Worker(extra())
     worker.poll = lambda: []
     worker.submit = lambda *args: None
-    owner = Live24h(tmp_path, model(calls), {}, lambda _: worker, use_ama=True, temperature_enabled=False)
+    owner = Live24h(tmp_path, model(calls), {}, lambda _: worker, use_ama=True, temperature_enabled=False,
+                    counter_fire_shift_enabled=False, midgame_board_layer_enabled=False)
     owner.epoch, owner.game = 1, 1
     owner.predict(result())
     owner.update(dict(game_idx=2, _ex={}), 1, 0.)

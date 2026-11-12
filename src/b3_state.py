@@ -19,7 +19,7 @@ from src.board import Board
 from src.b3_column_spec import ICON_TYPES
 from src.b3_source import LeanTable
 from src.b3_chain_prediction import EpisodePrediction, fire_board_option, fire_board_steps, origin_candidates
-from src.fire_board import ChainForecast, RawHistory
+from src.fire_board import ChainForecast, Forecast, RawHistory
 from src.phase_j.live_fire_board_config import enabled as fire_board_enabled
 from src.b3_score_ledger_port import new_ledger, validate_snapshot
 from src.production_config import GHOST_CHAIN_RULE_ENABLED
@@ -482,18 +482,42 @@ class SideState:
         ep = self.episode
         if ep is None or ep.closed_t is not None or ep.censored:
             return
-        origin = getattr(ep, "pred_origin", None) or ep.prediction
+        origin = getattr(ep, "pred_origin", None) or getattr(ep, '_light_prediction_backup', None) or ep.prediction
         fc = self.forecast.current()
+        from src.light_consumption import enabled as light_enabled
+        if (light_enabled() and getattr(self.forecast, '_light_hidden_fire', False)
+                and fc is not None and len(fc.observed) == 1
+                and not fc.has_prediction
+                and fc.chain_id >= ep.first_trigger - FORECAST_MATCH_SEC):
+            ep._light_prediction_backup = origin
+            ep.prediction = EpisodePrediction(reason='hidden_inflow_unknown')
+            ep.prediction.publish(available_at)
+            ep.forecast = None
+            return
+        if (fc is not None and fc.has_prediction and getattr(fc, 'lower_bound', False)
+                and fc.final_board is None and fc.chain_id >= ep.first_trigger - FORECAST_MATCH_SEC):
+            self._publish_light_lower(fc, available_at)
+            return
         if fc is None or not fc.has_prediction or fc.final_board is None or fc.chain_id < ep.first_trigger - FORECAST_MATCH_SEC:
             ep.prediction, ep.forecast = origin, None
             return
         prefix = tuple(int(x) for x in np.cumsum(fc.steps))
         option = dict(prefix=prefix, colors=(), score=int(prefix[-1]), board=np.asarray(fc.final_board).astype(int).tolist(), weight=1)
+        if getattr(fc, 'lower_bound', False):
+            option['lower_bound'] = True
         prediction = EpisodePrediction(options=[option], reason="")
         prediction.observed_count = len(ep.steps)
         prediction.observed_score = float(sum(s[2] for s in ep.steps))
         prediction.publish(available_at)
         ep.prediction, ep.forecast = prediction, fc
+
+    def _publish_light_lower(self, forecast: Forecast, available_at: float) -> None:
+        """候補の終端盤が一致しない時は得点・段数だけを公開する。"""
+        ep = self.episode
+        ep.prediction = EpisodePrediction(reason='', available_at=available_at,
+            observed_count=len(ep.steps), observed_score=float(sum(s[2] for s in ep.steps)),
+            length=float(len(forecast.steps)), score=float(forecast.total), final=None)
+        ep.forecast = forecast
 
     def _fire_board(self, available_at: float) -> None:
         """scene_68 の直し: 連鎖の 1 段目の式が出たら、そのコマの 1〜6 コマ前の画面の読みの盤から、計算の 1 段目の得点が式の product と

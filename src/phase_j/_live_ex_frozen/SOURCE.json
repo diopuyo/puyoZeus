@@ -596,7 +596,7 @@
     {
       "source": "src/fire_board.py",
       "source_sha256": "f2856ae53b9bb489ce3627d798d4e0abdb4ad4e6042e1d23d7464197d64dd662",
-      "adapter_sha256": "4e5e07bee3c5976a2f82c1a34ca48bfe01bfa027ddf24790892565cbc88a1758",
+      "adapter_sha256": "a77ea7fb92fc97a0445b01cd2fa181aa31a3c7e83a392206d8caa7078ec35210",
       "source_commit": "14d7e29d"
     },
     {
@@ -641,5 +641,21 @@
       "prefire_chain_identity.py"
     ],
     "note": "生通知の20コマ以内の再開始で台帳基準を保つ。元の学習側へはpatchだけを作成。"
+  },
+  "light_overlay_trial": {
+    "date": "2026-11-10",
+    "default": false,
+    "flag": "PUYO_LIGHT_ROBUST_CELLS",
+    "files": [
+      "fire_board.py"
+    ],
+    "shared_helper": "src/light_consumption.py",
+    "note": "既存手数と予測履歴を保持。段間を物理で対応させ、生確率の平均対数尤度比9倍以内かつ観測式に合う候補すべての最小得点を公開。一つの盤は選ばず、終端盤が不一致なら渡さない。既存refindより小さい下限は採用しない。",
+    "shared_helpers": [
+      "src/light_consumption.py",
+      "src/light_refind.py",
+      "src/light_likelihood.py",
+      "src/light_base_history.py"
+    ]
   }
 }

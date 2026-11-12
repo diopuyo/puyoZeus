@@ -77,3 +77,5 @@ src/roi_calibration.py
 src/phase_j/distribution_ux.js
 src/phase_j/distribution_ux.css
 src/phase_j/distribution_remove.py
+src/counter_fire_shift_1b.json
+models/calibration/midgame_board_layer.json

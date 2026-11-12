@@ -183,6 +183,7 @@ class Forecast:
     last_valid_t: float
     refinds: int = 0
     rescues: int = 0
+    lower_bound: bool = False
 
     @property
     def total(self) -> int:
@@ -238,6 +239,8 @@ class ChainForecast:
         self.boundary = ChainBoundary() if self.end_formula else None
         self.hist.clear()
         self.last_valid: Optional[float] = None
+        if hasattr(self, '_light_physics'):
+            del self._light_physics
         self.block_last: Optional[float] = None
         self.fc: Optional[Forecast] = None
         self._pred: Optional[list[int]] = None
@@ -266,12 +269,16 @@ class ChainForecast:
                 self.tsumo = int(tc)
         form = formula or {}
         valid = bool(form.get('valid')) and form.get('product') is not None
+        if not valid and (side or {}).get('light_next_consumed'):
+            self._light_hidden_fire = False
         if valid:
             p = int(form['product'])
             expired = not self.end_formula and self.last_valid is not None and t-self.last_valid >= self.REARM_SEC
             separated = self.boundary is not None and self.fc is not None and self.boundary.t > self.fc.chain_id
             if self.last_valid is None or expired or separated or self._placed_since_last():
-                self._new_chain(t, p)
+                from src.light_consumption import enabled as light_enabled
+                unknown = light_enabled() and bool((side or {}).get('light_hidden_inflow_unknown'))
+                self._new_chain(t, p, uncertain_hidden=unknown)
                 _dump(self.name, t, self.fc)
             elif t-self.block_last > BLOCK_GAP_SEC and p != self.fc.observed[-1]:
                 self._new_step(t, p)
@@ -281,6 +288,8 @@ class ChainForecast:
         if self.recheck:
             self._recheck(t, raw_board, side)
         self.hist.push(t, raw_board)
+        from src.light_refind import update_physical_refind
+        update_physical_refind(self, t, raw_board, side)
 
     def _recheck(self, t: float, raw: Any, side: Optional[dict]) -> None:
         from src.chain_continuity import recheck_board
@@ -293,8 +302,9 @@ class ChainForecast:
         self.fc.steps, self.fc.final_board = tuple(scores), final
         self.fc.source = 'fire_recheck'
 
-    def _new_chain(self, t: float, p: int) -> None:
+    def _new_chain(self, t: float, p: int, uncertain_hidden: bool = False) -> None:
         b = self._find(t, p, 0)
+        self._light_hidden_fire = uncertain_hidden
         if b is None:
             self._pred, src, final = None, 'none', None
         else:
@@ -333,7 +343,9 @@ class ChainForecast:
             return None
         if self._placed_since_last():
             return None
-        return self.fc
+        from src.light_consumption import guarded_forecast
+        from src.light_refind import physical_forecast
+        return guarded_forecast(physical_forecast(self, self.fc), getattr(self, '_light_hidden_fire', False))
 
 
 class PairForecast:

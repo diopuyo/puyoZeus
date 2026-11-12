@@ -31,9 +31,11 @@ def install_site_send_guard() -> None:
     from urllib.parse import urlsplit
     from src.phase_j.distribution_config import DISTRIBUTION_SITE_URL
     site_host = urlsplit(DISTRIBUTION_SITE_URL).hostname
+    protected_hosts = {site_host, 'github.com', 'release-assets.githubusercontent.com',
+                       'objects.githubusercontent.com'}
 
     def audit(event: str, args: tuple) -> None:
-        if event == 'urllib.Request' and urlsplit(str(args[0])).hostname == site_host:
+        if event == 'urllib.Request' and urlsplit(str(args[0])).hostname in protected_hosts:
             raise AssertionError(f'試験から本番の配布サイトへの通信は禁止: {args[0]}')
     sys.addaudithook(audit)
 

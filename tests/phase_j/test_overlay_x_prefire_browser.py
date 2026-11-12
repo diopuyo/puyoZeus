@@ -183,6 +183,8 @@ def test_off_or_empty_field_leaves_dom_unchanged(browser: Browser, absent: Any) 
     page.evaluate('renderSnapshot', with_x())
     snapshot_dom = ("[document.getElementById('stage').outerHTML, document.querySelectorAll('style').length,"
                     "document.body.children.length]")
+    # グラフの幅の補間を完了させ、機能の有無による差だけを比較する。
+    page.clock.run_for(1000)
     before = page.evaluate(snapshot_dom)
     page.add_script_tag(path=str(SCRIPT))
     assert page.evaluate(snapshot_dom) == before, 'script を読んだだけで DOM が変わった'

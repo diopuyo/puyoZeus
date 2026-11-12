@@ -38,6 +38,12 @@ class LiveExEngine:
         self.observations = 0
 
     def observe(self, packet: dict) -> Any:
+        from src.light_consumption import LightConsumptionTracker, enabled
+        recorded = all('light_tape_advances' in row for row in packet['raw'])
+        if enabled() and not recorded:
+            if not hasattr(self, '_light_consumption'):
+                self._light_consumption = LightConsumptionTracker()
+            packet = self._light_consumption.observe(packet)
         self.engine.step(packet['t'], packet['game'], packet['raw'])
         if getattr(self, 'xc_track', False):
             from ._live_ex_frozen.src.dl1k_engine import retr_enabled
@@ -58,6 +64,12 @@ class LiveExEngine:
         probe = self.engine.probe()
         if not probe.fight:
             return dict(key=probe.key, fight=False, extra=blank(MASK_NOT_APPLICABLE), result=None)
+        from .live_light_ex import calculate_candidates
+        candidates = calculate_candidates(self.engine)
+        if candidates:
+            first = candidates[0]
+            return dict(key=probe.key, fight=True, extra=first['extra'],
+                        result=first['result'], light_scenarios=candidates)
         result = compute(self.engine)
         extra = extra_from(result)
         extra.update(result.get('xc', {}))

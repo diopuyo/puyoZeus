@@ -67,7 +67,8 @@ def missing_reason(fatal: list[str], forced: list[str]) -> str:
 
 def snapshot(rows: RealtimeRows) -> bytes:
     """特徴が参照する状態を固定。可変台帳本体と先読み口は配送しない。"""
-    state = copy(rows.state)
+    from src.phase_j.live_light_probability import feature_state
+    state = copy(feature_state(rows.state))
     state.lean, state.lean_rows = None, []
     state.sl = _ledger_snapshot(state)
     return pickle.dumps((state, rows.trigger), protocol=pickle.HIGHEST_PROTOCOL)

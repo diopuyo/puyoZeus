@@ -93,6 +93,7 @@ class DistributionHandler(LocalHTTPHandler):
         self.respond(body, mime + '; charset=utf-8')
 
     def state(self) -> None:
+        from .distribution_update import enabled
         if self.runtime.inner_port:
             self.snapshot()
         self.json(dict(settings={k: v for k, v in self.runtime.settings.items() if k != 'obs_password'},
@@ -103,7 +104,23 @@ class DistributionHandler(LocalHTTPHandler):
             root=str(self.runtime.root), url=f'http://127.0.0.1:{self.runtime.port}/',
             port_conflict=getattr(self.runtime, 'port_conflict', None),
             error=self.runtime.error.get('type'), update=self.runtime.update,
+            update_button=enabled(), update_progress=self.runtime.updater.snapshot(),
             running=bool(self.runtime.child and self.runtime.child.poll() is None)))
+
+    def update_action(self, path: str) -> dict[str, Any]:
+        from .distribution_update import enabled
+        if not enabled():
+            raise ValueError('更新機能は無効です / Updates are disabled')
+        updater = self.runtime.updater
+        if path == '/api/update/check':
+            updater.check()
+        elif path == '/api/update/start':
+            updater.start(self.server.shutdown)
+        elif path == '/api/update/cancel':
+            updater.abort()
+        else:
+            raise ValueError('Unknown update action')
+        return updater.snapshot()
 
     def input_preview(self) -> None:
         runtime = self.runtime
@@ -188,6 +205,8 @@ class DistributionHandler(LocalHTTPHandler):
 
     def action(self, path: str, data: dict[str, Any]) -> dict[str, Any]:
         runtime = self.runtime
+        if path.startswith('/api/update/'):
+            return self.update_action(path)
         if path == '/api/port/switch':
             from .distribution_ports import switch_port
             return switch_port(self.server, runtime)

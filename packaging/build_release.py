@@ -349,11 +349,18 @@ def artifacts(output: Path, bundle: Path, version: str, zip_only: bool = False) 
 
 def validate_readme_version(version: str) -> None:
     """説明書が別の版のままなら、組み立てを始める前に止める。"""
-    readme = ROOT / 'packaging/README_ja.txt'
-    heading = readme.read_text('utf-8-sig').splitlines()[0]
     expected = f'# puyoZeus Live {version} —'
-    if not heading.startswith(expected):
-        raise ValueError(f'README の見出しの版が --version {version} と一致しません: {heading}')
+    paths = (ROOT / 'packaging/README_ja.txt', ROOT / 'docs/DISTRIBUTION_APP_GUIDE.md')
+    contents = []
+    for path in paths:
+        raw = path.read_bytes()
+        lines = raw.decode('utf-8-sig').splitlines()
+        heading = lines[0] if lines else ''
+        if not heading.startswith(expected):
+            raise ValueError(f'{path.name} の見出しの版が --version {version} と一致しません: {heading}')
+        contents.append(raw)
+    if contents[0] != contents[1]:
+        raise ValueError('配布説明書2ファイルのバイト列が一致しません')
 
 
 def main() -> None:

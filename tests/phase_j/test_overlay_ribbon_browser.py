@@ -24,7 +24,7 @@ def test_ribbon_bounds_numbers_and_recent(browser: Browser, p: float) -> None:
     assert page.locator('#mascot').bounding_box()==dict(x=900,y=748,width=120,height=120)
     expect(page.locator('#battle-speech')).to_be_hidden()
     assert page.locator('.num').evaluate_all('(nodes)=>nodes.every(e=>e.scrollWidth<=e.clientWidth+1&&e.scrollHeight<=e.clientHeight+1)')
-    assert page.locator('#trace').get_attribute('d').endswith('4.0')
+    assert page.locator('#trace').get_attribute('d').endswith(' 0.0')
     page.close()
 
 

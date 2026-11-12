@@ -16,7 +16,7 @@ window.OverlayOptions=(()=>{
     'content_hands','content_return','content_margin','content_bound','content_unknown',
     'content_active','content_step','content_length','content_remaining','content_seconds',
     'content_k1','content_colors','content_ojama','content_model'];
-  const flags=[...contentFlags,'band','numbers','recent','full','status','details','mascot','mascot_dopamine_mode','mascot_motion','mascot_eyes','mascot_expressions','mascot_flip_right','mascot_bloodshot','debug_panel','vgraph'];
+  const flags=[...contentFlags,'graph_autoscale','band','numbers','recent','full','status','details','mascot','mascot_dopamine_mode','mascot_motion','mascot_eyes','mascot_expressions','mascot_flip_right','mascot_bloodshot','debug_panel','vgraph'];
   // 配信で読む主要項目だけを既定表示し、補足は個別設定で追加する。
   const defaultContents=['pending','return','margin','step','length','k1'].map(key=>`content_${key}`);
   /** @param {object} input @returns {object} */
@@ -67,7 +67,7 @@ window.OverlayOptions=(()=>{
     const mode=selected.mascot_dopamine_mode!==false;
     return {...Object.fromEntries(contentFlags.map(key=>[key,defaultContents.includes(key)])),layout,midline:'adaptive',theme:'pop',corner:isL?layout.slice(2):'top-left',scale:DEFAULT_SCALE,font:'medium',
       mascot_dopamine:'normal',mascot_speed:'1',mascot_bloodshot:false,debug_panel:false,vgraph:false,mascot_band_edges:[...BAND_EDGES],language:'auto',mascot:true,mascot_dopamine_mode:mode,mascot_motion:mode,mascot_eyes:true,mascot_expressions:mode,mascot_flip_right:false,mascot_position:'card',mascot_size:'medium',
-      value_display:DEFAULT_VALUE_DISPLAY,band:true,numbers:true,recent:!['minimal','card'].includes(layout),full:isL||layout==='card',status:true,
+      graph_autoscale:true,value_display:DEFAULT_VALUE_DISPLAY,band:true,numbers:true,recent:!['minimal','card'].includes(layout),full:isL||layout==='card',status:true,
       details:isL||layout==='data',...selected};
   }
   /** @param {object} options @returns {object} */

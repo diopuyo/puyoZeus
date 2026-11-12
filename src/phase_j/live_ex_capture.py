@@ -43,9 +43,12 @@ class CaptureEx:
         from .live_v49f_capture import raw_side
         packet = row.get('_v49f')
         sides = packet['raw'] if packet is not None else [raw_side(s) for s in (result.p1, result.p2)]
+        from src.light_consumption import enabled as light_enabled
         raw, tape = [], tape_next_enabled()
         for index, side in enumerate(deepcopy(sides)):
             add_fire_inputs(side, row, index)
+            if light_enabled() and index < len(row.get('sides', ())):
+                side.update({k: v for k, v in row['sides'][index].items() if k.startswith('light_')})
             board = ((side.get('confirmed_board') or {}).get('board') or {}).get('array')
             if side['state']['state'] == 'STABLE' and board is not None and board != self.boards[index]:
                 self.boards[index] = board
