@@ -76,6 +76,12 @@ DISTRIBUTION_LIGHT_ROBUST_CELLS = True
 # 推論に渡す盤だけ上 3 段の新しい対を仮で外し、NEXT の繰り上がりか 1 秒で入れる (17091169)。
 # 7 本で操作対 11/13 を抑制・正当 10/10 保持・上段の着地の推論の遅れ 中央 7・最大 30 コマ、旗 OFF は 42,094 入力で不一致 0。
 DISTRIBUTION_W68_INFERENCE_PENDING = True
+# 2026-11-14 user「速さが問題なければリリース」・画像なし方式の合格 (user の線 B「勝った側の一致・確定の時刻のずれ 0.5 秒以内」、
+# image_free_finish_20261113/RESULT4_claude.md: 式 新 33 ≤ 旧 38・表示勝率の差の平均 0.030pt) で 0.6.6 から配布。
+# 切り抜き画像 (ゲーム画面の一部) を配布物から外し、UI の判定を学んだ決定木で行う。速さは d04 1,800 コマで 1 コマ 32.9ms
+# (0.6.5 28.6ms、3fc55340)。試合終了の組判定 (live_match_end_pair) の森を追加 (image_free_pair_20261114)。
+# 配布物に画像が無いので、明示の '0' は配布では動かない (開発環境の比較用)。
+DISTRIBUTION_IMAGE_FREE_ALL = True
 # 2026-11-11 Claude: 中盤の研究候補v2。配信再生と採否判断までは未採用、既定OFF。
 # 2026-11-12 user 採用「0.6.5 は中盤既定 ON」: PC2 研究 11 節 (152 本・層の中と減衰中 349,602 行) で
 # LL 0.68960→0.68902 (差 −0.00058 [−0.0011,−0.00015])・ECE 0.0044→0.0021・5 組すべて良い。2f468649・79db9c0d。
@@ -2039,6 +2045,7 @@ RELEASE_LIVE_OBS_FLAGS: tuple[str, ...] = (
 RELEASE_LIVE_ENV_DEFAULTS: dict[str, str] = {
     'PUYO_LIGHT_ROBUST_CELLS': str(int(DISTRIBUTION_LIGHT_ROBUST_CELLS)),
     'PUYO_W68_INFERENCE_PENDING': str(int(DISTRIBUTION_W68_INFERENCE_PENDING)),
+    'PUYO_IMAGE_FREE_ALL': str(int(DISTRIBUTION_IMAGE_FREE_ALL)),
     'PUYO_MIDGAME_BOARD_LAYER': str(int(DISTRIBUTION_MIDGAME_BOARD_LAYER)),
     'PUYO_COUNTER_FIRE_SHIFT': str(int(DISTRIBUTION_COUNTER_FIRE_SHIFT)),
     'PUYO_UPDATE_BUTTON': str(int(DISTRIBUTION_UPDATE_BUTTON)),

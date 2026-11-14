@@ -162,11 +162,15 @@ def probe(index: int) -> dict[str, Any]:
 
 
 def isolated_probe(index: int) -> dict[str, Any]:
+    from .release_config import release_environment
     executable = str(Path(sys.executable).with_name('python.exe')) if os.name == 'nt' else sys.executable
     try:
+        # 解析の子 process と同じく配布の旗を付ける (11/14: 0.6.6 は切り抜き画像を同梱しないので、
+        # 画像なし方式 PUYO_IMAGE_FREE_ALL が無いと得点が読めず、ゲーム画面も「ゲーム画面ではない」になった)
         run = subprocess.run([executable, '-s', '-m', __name__, str(index)], capture_output=True,
             timeout=PROBE_TIMEOUT, encoding='utf-8', errors='replace', cwd=Path(__file__).resolve().parents[2],
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
+            env=release_environment(dict(os.environ)))
         return json.loads(run.stdout.strip().splitlines()[-1])
     except (subprocess.TimeoutExpired, ValueError, IndexError, OSError):
         return dict(reason='timeout')

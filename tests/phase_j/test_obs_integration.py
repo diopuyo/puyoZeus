@@ -183,3 +183,20 @@ def test_probe_resolves_packaged_models_independent_of_launch_directory(tmp_path
     monkeypatch.setattr('src.phase_j.distribution_input.subprocess.run',run)
     assert isolated_probe(4)['reason'] == 'not_game'
     assert calls[0] != tmp_path
+
+
+def test_probe_child_gets_distribution_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """入力の自動判定の子 process にも配布の旗が付く (0.6.6 は画像なし方式でないと得点を読めない、11/14)。"""
+    from types import SimpleNamespace
+    from src.phase_j.distribution_input import isolated_probe
+    from src.production_config import RELEASE_LIVE_ENV_DEFAULTS
+    seen = []
+    monkeypatch.delenv('PUYO_IMAGE_FREE_ALL', raising=False)
+    monkeypatch.setenv('PUYO_KEEP_USER_VALUE', 'x')
+    def run(command: list, **kwargs: object) -> object:
+        seen.append(kwargs['env'])
+        return SimpleNamespace(stdout='{"reason":"ready"}')
+    monkeypatch.setattr('src.phase_j.distribution_input.subprocess.run', run)
+    assert isolated_probe(3)['reason'] == 'ready'
+    assert seen[0]['PUYO_IMAGE_FREE_ALL'] == RELEASE_LIVE_ENV_DEFAULTS['PUYO_IMAGE_FREE_ALL'] == '1'
+    assert seen[0]['PUYO_KEEP_USER_VALUE'] == 'x' and 'PATH' in seen[0]   # 利用者の環境はそのまま

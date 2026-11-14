@@ -354,8 +354,9 @@ def copy_b3_assets(bundle: Path, model: Path, table: Path,
     for source, name in ((model, 'model.joblib'), (table, 'timing_table.json')):
         shutil.copy2(source, target / name)
         result.append(target / name)
-    # B3の観測入力が読む予告CNNとNCC補助画像。B3同梱時だけ追加する。
-    for asset in ('models/ojama_cnn.pt', 'models/ui_templates/ojama'):
+    # B3の観測入力が読む予告CNN。B3同梱時だけ追加する。予告の補助画像 (ui_templates/ojama) は 0.6.6 から配布しない
+    # (配布は予告アイコンを読まない構成 b3_skip_icon_reading、画像なし方式の予告は ui.joblib の ojama)。
+    for asset in ('models/ojama_cnn.pt',):
         for rel in expand_asset(asset, asset_root):
             destination = bundle / 'app' / rel
             destination.parent.mkdir(parents=True, exist_ok=True)

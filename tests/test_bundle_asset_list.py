@@ -1,7 +1,7 @@
 """配布資産リスト (packaging/bundle_assets.txt) と score_zero の OCR 代替経路の試験 (2026-09-30)。
 
-user 決定: 必須のテロップ画像は一時同梱する。ui_templates はディレクトリ丸ごとでなく明示列挙とし、
-実行時に読まれない画像 (chain_count_digits / ojama / win_panel / *.bak) を含めない。
+0.6.6 (2026-11-14) からゲーム画面の切り抜き画像 (models/ui_templates) を配布しない。UI の判定は画像なし方式の
+決定木 (models/image_free) で行う (DISTRIBUTION_IMAGE_FREE_ALL)。0.6.5 までの明示列挙の試験は git の履歴を参照。
 """
 from __future__ import annotations
 
@@ -20,51 +20,47 @@ from src.score_zero import (  # noqa: E402
 )
 
 UI_DIR = 'models/ui_templates'
-# 配布しない (実行時に読まれないことを imread-trace で確認済み)
-FORBIDDEN_PARTS = ('chain_count_digits', 'ojama', 'win_panel', '.bak')
-SCORE_DIGIT_COUNT = 10
-X_MARK_MIN = 6
+IMAGE_FREE_MODELS = ('models/image_free/ui.joblib', 'models/image_free/digit_student.joblib',
+                     'models/image_free/ui_mask.joblib')
+IMAGE_SUFFIXES = ('.png', '.jpg', '.jpeg', '.bmp')
 
 
 def ui_entries() -> list[str]:
     return [line for line in read_asset_list() if line.startswith(UI_DIR)]
 
 
-def test_ui_templates_are_explicit_files_not_a_directory() -> None:
-    entries = ui_entries()
-    assert entries, 'ui_templates の記載が無い (score_digits は認識に必須)'
-    assert UI_DIR not in entries, 'ディレクトリ丸ごとの記載が残っている'
-    assert all(entry.endswith('.png') for entry in entries)
+def test_game_screen_images_are_not_listed() -> None:
+    """切り抜き画像は 1 枚も同梱しない (ディレクトリ丸ごとの記載も無い)。"""
+    assert ui_entries() == []
+    assert not [line for line in read_asset_list()
+                if line.startswith('models/') and line.lower().endswith(IMAGE_SUFFIXES)]
 
 
-def test_unused_game_images_are_not_listed() -> None:
-    for entry in ui_entries():
-        assert not any(part in entry for part in FORBIDDEN_PARTS), entry
+def test_image_free_models_are_listed_and_distribution_enables_them() -> None:
+    from src.production_config import DISTRIBUTION_IMAGE_FREE_ALL, RELEASE_LIVE_ENV_DEFAULTS
+    assert set(IMAGE_FREE_MODELS) <= set(read_asset_list())
+    assert DISTRIBUTION_IMAGE_FREE_ALL and RELEASE_LIVE_ENV_DEFAULTS['PUYO_IMAGE_FREE_ALL'] == '1'
 
 
-def test_score_ocr_templates_are_listed() -> None:
-    from src.score_ocr import FORMULA_MULT_TEMPLATE_FILENAME
-    entries = set(ui_entries())
-    for digit in range(SCORE_DIGIT_COUNT):
-        assert f'{UI_DIR}/score_digits/digit_{digit}.png' in entries
-    assert f'{UI_DIR}/score_digits/{FORMULA_MULT_TEMPLATE_FILENAME}' in entries
+def test_image_free_default_model_paths_are_listed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """配布では環境変数で置き場所を渡さないので、コードの既定の置き場所がそのまま同梱一覧に載っていること
+    (11/14: × の判定器の既定 ui_mask.joblib と同梱名 mask_model.joblib が食い違い、配布で起動できなかった)。"""
+    from src import image_free_digit, image_free_ui, image_free_ui_mask
+    for env in (image_free_digit.MODEL_ENV, image_free_ui.MODEL_ENV, image_free_ui_mask.MODEL_ENV):
+        monkeypatch.delenv(env, raising=False)
+    listed = set(read_asset_list())
+    assert image_free_digit.DEFAULT_MODEL.as_posix() in listed
+    assert image_free_ui_mask.DEFAULT_MODEL.as_posix() in listed
+    seen = []
+    monkeypatch.setattr(image_free_ui, 'load', lambda path: seen.append(Path(path).as_posix()) or {'tasks': {}})
+    _ = image_free_ui.LearnedTelop.template_count.fget(object.__new__(image_free_ui.LearnedTelop))
+    assert seen and seen[0] in listed
 
 
-def test_x_mark_templates_listed_cover_the_asset_dir_glob() -> None:
-    """UiMaskMatcher は x_mark*.png を glob で読む。資産側に増えたのにリストへ足し忘れたら失敗させる。"""
-    from src.ui_mask import DEFAULT_TEMPLATE_DIR, X_MARK_GLOB_PATTERN
-    listed = {Path(entry).name for entry in ui_entries() if Path(entry).name.startswith('x_mark')}
-    assert len(listed) >= X_MARK_MIN
-    if not DEFAULT_TEMPLATE_DIR.is_dir():
-        pytest.skip('資産ディレクトリが作業ツリーに無い')
-    assert {path.name for path in DEFAULT_TEMPLATE_DIR.glob(X_MARK_GLOB_PATTERN)} <= listed
-
-
-def test_listed_files_exist_when_asset_dir_is_present() -> None:
-    if not Path(UI_DIR).is_dir():
-        pytest.skip('資産ディレクトリが作業ツリーに無い')
-    missing = [entry for entry in ui_entries() if not Path(entry).is_file()]
-    assert not missing, missing
+def test_b3_assets_do_not_add_ojama_images() -> None:
+    import inspect
+    from build_bundle import copy_b3_assets
+    assert "'models/ui_templates" not in inspect.getsource(copy_b3_assets)
 
 
 def test_asset_list_file_is_the_one_build_uses() -> None:
@@ -141,14 +137,13 @@ def test_launcher_warns_when_telop_templates_missing(
     assert '中央テロップ検出が無効' in capsys.readouterr().err
 
 
-def test_launcher_loads_telop_and_asset_list_preserves_it(
-        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    import cv2
+def test_launcher_reports_learned_telop_without_images(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    """配布の環境 (画像なし方式) では、画像が無くてもテロップ検出は有効と報告する (誤った復元の警告を出さない)。"""
     from src.phase_j.launcher import check_telop_templates
-    directory = tmp_path / UI_DIR
-    directory.mkdir(parents=True)
-    for name in ('telop_challenger.png', 'telop_challenger_decisive.png'):
-        assert f'{UI_DIR}/{name}' in ui_entries()
-        assert cv2.imwrite(str(directory / name), FRAME)
+    monkeypatch.setenv('PUYO_IMAGE_FREE_ALL', '1')
+    import src.image_free_ui as image_free_ui
+    monkeypatch.setattr(image_free_ui, 'load', lambda path: {'tasks': {'telop': None, 'match_end': None}})
     assert check_telop_templates(tmp_path) == 2
-    assert '有効: テンプレート 2 枚' in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert '有効' in captured.out and '配布物を復元' not in captured.err

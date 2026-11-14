@@ -104,6 +104,9 @@ def isolated_frozen_imports() -> Iterator[None]:
         sys.modules.update(saved)
 
 
+PUYO_ENV_PREFIX = 'PUYO_'
+
+
 @contextmanager
 def restored_process_state() -> Iterator[None]:
     """一般moduleが変えたcwdと検索順を、次のmoduleへ持ち越さない。
@@ -112,11 +115,21 @@ def restored_process_state() -> Iterator[None]:
     cwd相対のテストも別の場所を見る。src実体は触らない（class同一性を保つ）。
     """
     paths, directory = list(sys.path), os.getcwd()
+    puyo_env = {key: value for key, value in os.environ.items() if key.startswith(PUYO_ENV_PREFIX)}
     try:
         yield
     finally:
         os.chdir(directory)
         sys.path[:] = paths
+        restore_puyo_env(puyo_env)
+
+
+def restore_puyo_env(saved: dict[str, str]) -> None:
+    """起動口の試験が付けた配布の環境変数 (launcher.prepare の os.environ.update(release_environment(...)))
+    を次の module へ持ち越さない (11/14: PUYO_IMAGE_FREE_ALL=1 が漏れ、後の試験が画像なし方式に切り替わった)。"""
+    for key in [key for key in os.environ if key.startswith(PUYO_ENV_PREFIX) and key not in saved]:
+        del os.environ[key]
+    os.environ.update(saved)
 
 
 @pytest.fixture(scope='module', autouse=True)

@@ -34,7 +34,8 @@ def load(path: str) -> dict:
     model = joblib.load(path)
     if model['schema'] != MODEL_SCHEMA:
         raise ValueError('UI 蒸留器の schema が不一致です')
-    return model
+    from src.fast_forest import accelerate
+    return accelerate(model)     # 答えは sklearn と同じまま、1 回の呼び出しを速くする (11/14)
 
 
 def predict(key: str, image: np.ndarray, full: bool = True) -> Any:

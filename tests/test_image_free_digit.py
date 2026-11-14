@@ -99,3 +99,71 @@ def test_batched_read_preserves_legacy_aggregation(
             formula = reader.read_formula_side(image, side, detail[2], detail[3])
             assert result[i][j] == (detail, formula)
     assert reader.read_batch([]) == []
+
+
+def test_recovery_rejects_conflicting_digits() -> None:
+    """色補正と背景補正のどちらも通るが、数字が食い違う場合は欠測を保つ。"""
+    labels = np.array([0, 0, 7, 7, 10, 10, 10])
+    confidence = np.full(len(labels), 0.9)
+    assert ImageFreeScoreOcr._agree_recovery(labels, confidence) is None
+
+
+def test_single_alignment_vote_does_not_invent_digit() -> None:
+    """位置をずらした一例だけ読めても、明暗補正で再確認できなければ採らない。"""
+    labels = np.array([10, 10, 10, 10, 10, 2, 10])
+    confidence = np.full(len(labels), 0.9)
+    assert ImageFreeScoreOcr._agree_recovery(labels, confidence) is None
+
+
+def test_digit_cell_memo_returns_same_answer_and_isolated_copies(monkeypatch) -> None:
+    """同じ画素の桁セルはセルごとに判定を使い回し、答えは同じ・呼び出し元の書き換えは使い回しに漏れない (11/14)。"""
+    import numpy as np
+    from src.image_free_digit import ImageFreeScoreOcr
+    ocr = ImageFreeScoreOcr.__new__(ImageFreeScoreOcr)
+    calls = []
+
+    def fake(cells):
+        calls.append(len(cells))
+        return (np.array([int(c[0, 0, 0]) for c in cells]),
+                np.array([int(c[0, 0, 0]) / 100 for c in cells]))
+    monkeypatch.setattr(ocr, '_predict_digit_cells_uncached', fake)
+    cells = [np.full((50, 40, 3), 7, np.uint8), np.zeros((50, 40, 3), np.uint8)]
+    first = ocr._predict_digit_cells(cells)
+    first[0][0] = 99
+    second = ocr._predict_digit_cells([c.copy() for c in cells])
+    assert calls == [2] and second[0].tolist() == [7, 0] and second[1].tolist() == [0.07, 0.0]
+    other = [np.full((50, 40, 3), 8, np.uint8), cells[1], np.full((50, 40, 3), 8, np.uint8)]
+    labels, confidences = ocr._predict_digit_cells(other)
+    assert calls == [2, 1]                      # 新しいセル 1 つだけ (同じ画素の重複も 1 回) を判定する
+    assert labels.tolist() == [8, 0, 8] and confidences.tolist() == [0.08, 0.0, 0.08]
+    assert labels.dtype == fake(cells)[0].dtype
+
+
+def test_instances_share_model_and_cell_memo(tmp_path, monkeypatch) -> None:
+    """同じ判定器のファイルを読む部品どうしは、判定器と桁の使い回しの表を共有する (11/14: 0 点の判定と
+    B3 の得点の読みが同じマスを 2 回計算していた)。2 つ目の部品は 1 つ目が判定したマスを計算し直さない。"""
+    import joblib
+    import numpy as np
+    from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
+    from src import image_free_digit as module
+    rng = np.random.default_rng(20261114)
+    x = rng.normal(size=(60, module.FEATURE_SIZE[0] * module.FEATURE_SIZE[1] * 3))
+    labels = rng.integers(0, 11, size=60)
+    model = dict(schema=module.MODEL_SCHEMA, feature_size=module.FEATURE_SIZE,
+                 labels=ExtraTreesClassifier(n_estimators=4, random_state=1, n_jobs=1).fit(x, labels),
+                 confidence=ExtraTreesRegressor(n_estimators=4, random_state=1, n_jobs=1).fit(x, rng.random(60)))
+    path = tmp_path / 'digit_student.joblib'
+    joblib.dump(model, path)
+    monkeypatch.setattr(module, '_SHARED_STUDENTS', {})
+    first, second = module.ImageFreeScoreOcr(path), module.ImageFreeScoreOcr(path)
+    assert first._student is second._student and first._digit_memo is second._digit_memo
+    calls = []
+    original = module.ImageFreeScoreOcr._predict_digit_cells_uncached
+    monkeypatch.setattr(module.ImageFreeScoreOcr, '_predict_digit_cells_uncached',
+                        lambda self, cells: calls.append(len(cells)) or original(self, cells))
+    cells = [rng.integers(0, 255, size=(50, 40, 3), dtype=np.uint8) for _ in range(3)]
+    a = first._predict_digit_cells(cells)
+    b = second._predict_digit_cells([c.copy() for c in cells])
+    assert calls == [3] and np.array_equal(a[0], b[0]) and np.array_equal(a[1], b[1])
+    joblib.dump(model, tmp_path / 'other.joblib')
+    assert module.ImageFreeScoreOcr(tmp_path / 'other.joblib')._digit_memo is not first._digit_memo   # 別のファイルは別

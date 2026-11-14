@@ -559,7 +559,6 @@ def prepare(options: argparse.Namespace) -> tuple[UserConfig, list[str]]:
     if missing:
         print(f'[実行環境エラー] {runtime_guidance(missing)}', file=sys.stderr)
         raise SystemExit(EXIT_RUNTIME)
-    check_telop_templates(APP_ROOT)
     problem = None if options.skip_manifest else check_bundle(APP_ROOT, options.require_manifest)
     if problem:
         print(f'[配布物エラー] {problem}', file=sys.stderr)
@@ -568,6 +567,7 @@ def prepare(options: argparse.Namespace) -> tuple[UserConfig, list[str]]:
     apply_calibration_dir(user)
     apply_cnn_backend()
     os.environ.update(release_environment(dict(os.environ)))
+    check_telop_templates(APP_ROOT)   # 配布の環境 (画像なし方式) を付けた後で確かめる (11/14)
     pipeline_config = user.output_dir / PIPELINE_CONFIG_NAME
     pipeline_config.write_text(json.dumps(build_pipeline_config(user), ensure_ascii=False, indent=2),
                                encoding='utf-8')
@@ -586,12 +586,15 @@ def apply_instance_guard(user: UserConfig) -> None:
 def check_telop_templates(app_root: Path = APP_ROOT) -> int:
     """起動時に実際に画像を読み、検出の黙った無効化を警告する。"""
     from src.telop_detector import DEFAULT_TEMPLATE_DIR, TelopDetector
-    detector = TelopDetector.load_default(app_root / DEFAULT_TEMPLATE_DIR)
-    count = detector.template_count
+    try:
+        count = TelopDetector.load_default(app_root / DEFAULT_TEMPLATE_DIR).template_count
+    except Exception as error:   # 画像なし方式の判定器 (models/image_free) が無い・壊れている時も警告で止めない
+        print(f'[警告] テロップ検出の判定器を読めません: {error!r}', file=sys.stderr, flush=True)
+        count = 0
     if count:
         print(f'[テロップ検出] 有効: テンプレート {count} 枚', flush=True)
     else:
-        print('[警告] telop_*.png が無い、または読み込めません。'
+        print('[警告] テロップ検出の画像・判定器が無い、または読み込めません。'
               '中央テロップ検出が無効です。配布物を復元してください。', file=sys.stderr, flush=True)
     return count
 

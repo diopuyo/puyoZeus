@@ -1687,6 +1687,7 @@ class ImageReader:
                 color = self._apply_profile_filter(color, hsv_p, patch)
                 board.set(row, col, color)
 
+        self._apply_image_free_ui_context(frame, region, board)
         # V3.1: テロップ被覆セルを COLOR_UNKNOWN に倒す (浮遊削除前)
         # キャッシュした bbox を使う (read_both_boards で 1 度だけ検出)
         if (
@@ -1718,6 +1719,25 @@ class ImageReader:
         if _sat_saved is not None:
             _sat_target.set_s_min_scale(_sat_saved)
         return board
+
+    def _apply_image_free_ui_context(
+        self, frame: np.ndarray, region: BoardRegion, board: Board,
+    ) -> None:
+        """画像なしの×印だけ、中央パッチの周囲を含めて演出時を補う。"""
+        from src.image_free_ui_mask import ImageFreeUiMaskMatcher
+        from src.ui_mask import UI_MASK_TARGET_CELLS
+        if not isinstance(self._ui_matcher, ImageFreeUiMaskMatcher):
+            return
+        height, width = frame.shape[:2]
+        for row, col in UI_MASK_TARGET_CELLS:
+            x1, y1, x2, y2 = region.cell_sample_rect(row, col)
+            pad_x, pad_y = (x2 - x1) // 2, (y2 - y1) // 2
+            if x1 < pad_x or y1 < pad_y or x2 + pad_x > width or y2 + pad_y > height:
+                continue
+            patch = frame[y1:y2, x1:x2]
+            context = frame[y1-pad_y:y2+pad_y, x1-pad_x:x2+pad_x]
+            if self._ui_matcher.match(patch, context=context).is_ui:
+                board.set(row, col, COLOR_EMPTY)
 
     def _remember_live_hsv_pixels(self, hsv: np.ndarray | None, region: BoardRegion) -> None:
         """既に変換した同一ROIのHSV画素を、ライブの品質判定へviewで渡す。"""

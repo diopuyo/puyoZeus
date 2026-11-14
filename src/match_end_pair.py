@@ -41,6 +41,8 @@ class MatchEndPairDetector(MatchEndDetector):
             templates = {name: value[YATTA_TEXT_ROWS, YATTA_TEXT_COLS].copy()
                          if 'yatta' in name else value for name, value in templates.items()}
         super().__init__(templates, threshold=PAIR_NCC_THRESHOLD)
+        from src.image_free_ui import enabled
+        self._image_free = enabled()   # 画像なし方式: 切り抜き画像の代わりに学んだ森で領域ごとの採否を出す (11/14)
         self._observations: dict[str, tuple[float, float]] = {}
         self._next_roi = 0
         self.lock_started_t: float | None = None
@@ -63,6 +65,9 @@ class MatchEndPairDetector(MatchEndDetector):
         score = -1.0
         if crop.size == 0:
             return score
+        if getattr(self, '_image_free', False):
+            from src.image_free_ui import learned_score
+            return learned_score('pair_' + key.split('_')[0], crop)   # 左右で同じ森 (pair_yatta / pair_batan)
         roi = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         for name, template in self._templates.items():
             if key.split("_")[0] not in name:

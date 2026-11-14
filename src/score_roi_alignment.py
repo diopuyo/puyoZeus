@@ -39,7 +39,11 @@ def select_final_offset(mean_scores: np.ndarray) -> tuple[int, int]:
 
 
 def candidate_scores(frame: np.ndarray, side: Side, ocr: ScoreOcr) -> np.ndarray:
-    """各候補と同じ照合窓を、広げた×セルのNCCマップ一枚から得る。"""
+    """各候補と同じ照合窓を、広げた×セルのNCCマップ一枚から得る。
+    画像なし方式の OCR は切り抜きの × を持たないので、× らしさの判定器で各位置の点数を出す (11/14)。"""
+    by_model = getattr(ocr, 'multiply_scores_at_offsets', None)
+    if by_model is not None:
+        return np.asarray(by_model(frame, side, CANDIDATES), dtype=float)
     template = ocr._mult_template_gray
     if template is None:
         return np.zeros(len(CANDIDATES))

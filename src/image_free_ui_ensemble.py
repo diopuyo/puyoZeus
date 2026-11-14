@@ -22,7 +22,7 @@ def task_features(key: str, image: np.ndarray, color: bool = False) -> np.ndarra
     regions = (SEARCH_P1, SEARCH_P2)
     if key.startswith('death_'):
         regions = (regions[int(key[-1])],)
-    if key in ('chain', 'ojama'):
+    if key in ('chain', 'ojama') or key.startswith('pair_'):   # 終了の組は照合する領域そのものを受ける
         patches = [image]
     else:
         patches = [image[y:y+h, x:x+w] for x, y, w, h in regions]
@@ -57,6 +57,9 @@ class UIEnsemble:
             return label
         if self.key.startswith('death_'):
             return DEFAULT_NCC_THRESHOLD + (DECISION_MARGIN if label else -DECISION_MARGIN)
+        if self.key.startswith('pair_'):
+            from src.match_end_pair import PAIR_NCC_THRESHOLD
+            return PAIR_NCC_THRESHOLD + (DECISION_MARGIN if label else -DECISION_MARGIN)
         if self.key == 'match_end':
             return dict(detected=label is not None, template_name=label,
                         score=DEFAULT_NCC_THRESHOLD + (DECISION_MARGIN if label else -DECISION_MARGIN))
