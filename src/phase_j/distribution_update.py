@@ -7,12 +7,19 @@ from pathlib import Path
 import shutil
 import subprocess
 import threading
+import time
 from typing import Any, Callable
 import tempfile
 import uuid
 
 from . import update_download as fetch
 from . import update_transaction as transaction
+
+STAGE_CLEANUP_SECONDS = 180  # 新版の起動の後、更新役が終わって作業フォルダーを放すまで待つ上限
+STAGE_CLEANUP_POLL_SECONDS = 2
+JOURNAL = 'transaction.json'
+FINISHED = 'complete'
+VERIFYING = 'verifying'
 
 
 def enabled() -> bool:
@@ -139,3 +146,67 @@ def acknowledge_start(runtime: Any) -> None:
         transaction.write_json(runtime.root / transaction.HEALTH,
                                dict(token=token, version=runtime.version['app'],
                                     port=runtime.port, pid=os.getpid()))
+
+
+def update_stages(root: Path) -> list[tuple[Path, str]]:
+    """同じ展開先を指す更新の作業フォルダーと、その状態 (記録の無いもの・別の展開先のものは除く。消すのは complete だけ)。"""
+    found = []
+    for stage in sorted(root.parent.glob(f'.{root.name}-update-*')):
+        try:
+            journal = json.loads((stage / JOURNAL).read_text(encoding='utf8'))
+            same = (Path(journal['root']).resolve() == root.resolve()
+                    and Path(journal['stage']).resolve() == stage.resolve())
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if same and not stage.is_symlink():
+            found.append((stage, str(journal.get('state'))))
+    return found
+
+
+def remove_stage(stage: Path) -> bool:
+    """更新役が lock を放した後だけ消す。記録は最後に消すので、途中で止まっても次の起動でやり直せる。"""
+    try:
+        transaction.lock_stage(stage).close()
+    except OSError:
+        return False
+    path = transaction.filesystem_path(stage)
+    for child in path.iterdir():
+        if child.name == JOURNAL:
+            continue
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            try:
+                child.unlink()
+            except OSError:
+                pass
+    if any(child.name != JOURNAL for child in path.iterdir()):
+        return False
+    (path / JOURNAL).unlink()
+    path.rmdir()
+    return True
+
+
+def clean_finished_stages(root: Path, wait_seconds: float = STAGE_CLEANUP_SECONDS) -> int:
+    """0.6.5 の更新は成功後の作業フォルダー (取得した ZIP・展開・控えで約 1.3GB) を残すので、新版の起動で片付ける。"""
+    removed, deadline = 0, time.monotonic() + wait_seconds
+    while True:
+        pending = 0
+        try:
+            for stage, state in update_stages(root):
+                if state == FINISHED and remove_stage(stage):
+                    removed += 1
+                elif state in (FINISHED, VERIFYING):
+                    # 新版は更新役が起動を確かめている間 (verifying) に立ち上がるので、complete になるのを待つ
+                    pending += 1
+        except OSError:
+            pending += 1
+        if not pending or time.monotonic() >= deadline:
+            return removed
+        time.sleep(STAGE_CLEANUP_POLL_SECONDS)
+
+
+def start_stage_cleanup(root: Path) -> threading.Thread:
+    thread = threading.Thread(target=clean_finished_stages, args=(root,), daemon=True)
+    thread.start()
+    return thread

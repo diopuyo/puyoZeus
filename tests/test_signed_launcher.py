@@ -208,3 +208,17 @@ def test_cleanup_keeps_current_helpers(tmp_path: Path) -> None:
     legacy.cleanup(tmp_path)
     assert all((tools / name).read_bytes() == b'current helper'
                for name in ('SendLogs.ps1', 'UninstallCleanup.ps1'))
+
+
+def test_removed_release_files_registered_for_cleanup() -> None:
+    """0.6.6 で配布をやめたゲーム画面の画像などを、更新・上書きした展開先から片付ける (内容が一致した時だけ)。"""
+    manifest = json.loads(Path(legacy.__file__).with_name('legacy_hashes.json').read_text('utf-8'))
+    assert len([name for name in manifest if name.startswith('app/models/ui_templates/')]) == 27
+    assert all(len(value) == 64 and set(value) <= set('0123456789abcdef') for values in manifest.values() for value in values)
+    from build_bundle import SKIP_DIRS, read_asset_list
+    assets = ['app/' + entry.rstrip('/') for entry in read_asset_list()]
+    repository = Path(__file__).parents[1]
+    shipped = [name for name in manifest if not SKIP_DIRS & set(Path(name).parts)
+               and any(name == asset or name.startswith(asset + '/') for asset in assets)
+               and (repository / name.removeprefix('app/')).exists()]
+    assert not shipped  # 配って起動で消す形にしない

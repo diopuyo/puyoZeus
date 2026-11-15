@@ -293,3 +293,75 @@ def test_backup_alone_is_not_enough_space(tmp_path: Path, monkeypatch: pytest.Mo
         tx.prepare(root, payload, stage, '0.6.5', 'space')
     assert (root/'app/code.py').read_bytes() == b'old'
     assert not (root/tx.MARKER).exists()
+
+
+def update_stage(tmp_path: Path, state: str = 'complete') -> tuple[Path, Path]:
+    """更新の作業フォルダー (展開先の隣の .PuyoLive-update-*) と、その記録を作る。"""
+    root, stage = tmp_path/'PuyoLive', tmp_path/'.PuyoLive-update-abc'
+    root.mkdir()
+    (stage/'payload/PuyoLive/app').mkdir(parents=True)
+    (stage/'payload/PuyoLive/app/code.py').write_bytes(b'new')
+    (stage/'backup/app').mkdir(parents=True)
+    (stage/'backup/app/code.py').write_bytes(b'old')
+    (stage/'download.zip').write_bytes(b'zip')
+    tx.write_json(stage/'transaction.json', dict(root=str(root), stage=str(stage), state=state))
+    return root, stage
+
+
+def test_finished_stage_removed_after_worker_releases_lock(tmp_path: Path) -> None:
+    root, stage = update_stage(tmp_path)
+    held = tx.lock_stage(stage)
+    assert update.clean_finished_stages(root, wait_seconds=0) == 0
+    assert (stage/'download.zip').exists()
+    held.close()
+    assert update.clean_finished_stages(root, wait_seconds=0) == 1
+    assert not stage.exists() and root.is_dir()
+
+
+@pytest.mark.parametrize('state', ['prepared', 'applying', 'verifying', 'rolling_back', 'rolled_back'])
+def test_unfinished_or_failed_stage_kept_for_recovery(tmp_path: Path, state: str) -> None:
+    root, stage = update_stage(tmp_path, state)
+    assert update.clean_finished_stages(root, wait_seconds=0) == 0
+    assert (stage/'backup/app/code.py').read_bytes() == b'old'
+
+
+def test_stage_of_other_installation_or_without_journal_kept(tmp_path: Path) -> None:
+    root, stage = update_stage(tmp_path)
+    tx.write_json(stage/'transaction.json', dict(root=str(tmp_path/'other/PuyoLive'), stage=str(stage), state='complete'))
+    bare = tmp_path/'.PuyoLive-update-bare'
+    bare.mkdir()
+    (bare/'download.zip').write_bytes(b'zip')
+    assert update.clean_finished_stages(root, wait_seconds=0) == 0
+    assert (stage/'download.zip').exists() and (bare/'download.zip').exists()
+
+
+def test_interrupted_stage_cleanup_resumes_on_next_start(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root, stage = update_stage(tmp_path)
+    monkeypatch.setattr(update.shutil, 'rmtree', lambda path, ignore_errors=False: None)
+    assert update.clean_finished_stages(root, wait_seconds=0) == 0
+    assert (stage/'transaction.json').exists() and not (stage/'download.zip').exists()
+    monkeypatch.undo()
+    assert update.clean_finished_stages(root, wait_seconds=0) == 1
+    assert not stage.exists()
+
+
+def test_stage_still_verifying_at_app_start_is_removed_once_complete(tmp_path: Path) -> None:
+    """新版は更新役が起動を確かめている間 (verifying) に立ち上がる。complete になって lock が放されるまで待って消す
+    (0.6.6 → 0.6.7 の実機の更新で、待たずに終わって 1.3GB が残った)。"""
+    root, stage = update_stage(tmp_path, 'verifying')
+    held = tx.lock_stage(stage)
+    def worker_finishes() -> None:
+        tx.write_json(stage/'transaction.json', dict(root=str(root), stage=str(stage), state='complete'))
+        held.close()
+    timer = threading.Timer(0.5, worker_finishes)
+    timer.start()
+    try:
+        assert update.clean_finished_stages(root, wait_seconds=30) == 1
+    finally:
+        timer.join()
+    assert not stage.exists()
+
+def test_app_start_cleans_finished_stages() -> None:
+    source = Path(__file__).parents[2]/'src/phase_j/distribution_app.py'
+    text = source.read_text(encoding='utf8')
+    assert text.index('acknowledge_start(runtime)') < text.index('start_stage_cleanup(runtime.root)')

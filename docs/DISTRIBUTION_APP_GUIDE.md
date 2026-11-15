@@ -1,4 +1,4 @@
-# puyoZeus Live 0.6.6 — ZIP 版 / ZIP edition
+# puyoZeus Live 0.6.7 — ZIP 版 / ZIP edition
 
 【起動前に必ずすべて展開 / Extract All before launching】
 ZIP をダブルクリックで開いただけでは動きません。ZIP を右クリック →「すべて展開」してから、展開したフォルダの puyoZeus Live.exe を起動してください。「python312.dll が見つからないため、コードの実行を続行できません」と出た場合も、ZIP をすべて展開してから起動し直してください。
@@ -89,6 +89,17 @@ The ZIP root has one launcher, `puyoZeus Live.exe`, and one uninstall entry, `�
 Python と計算ライブラリ、Rust 製の処理モジュールは同梱済みで、Python/Rust の開発環境は不要です。Visual C++ または WebView2 ランタイムが無い場合、起動用 exe が Microsoft 公式の部品を入れるか尋ねます。「はい」の場合だけ取得し、Microsoft の署名を検証して実行します。Windows が権限の確認を表示する場合があります。「いいえ」でも起動は続き、WebView2 が無ければブラウザで開きます。
 
 Open `puyoZeus Live.exe`. The entry is an unchanged copy of Python signed by the Python Software Foundation, designed to launch with Smart App Control enabled. Its EXE icon is the Python icon. The DLL and ._pth files at the top level are required app components; do not delete them. Python, computation libraries and Rust modules are bundled. Missing Visual C++ or WebView2 runtimes are offered with your consent and Microsoft signature verification. Declining continues startup; without WebView2, the app opens in a browser.
+
+## 0.6.7 の変更 / Changes in 0.6.7
+
+「更新を確認する」で更新した後、展開したフォルダーの隣に作業用のフォルダー (名前が「.PuyoLive-update-」で始まり、約 1.3 GB) が残っていました。起動時に自動で消すようにしました。0.6.5 から 0.6.6 へ更新した時に残ったものも消えます。
+After an update with Check for updates, a working folder (named “.PuyoLive-update-…”, about 1.3 GB) was left next to the app folder. It is now removed automatically at startup, including any folder left by the update from 0.6.5 to 0.6.6.
+
+前の版から更新・上書きした時に残っていた、今は使っていないファイル (0.6.5 までのゲーム画面の画像など) を起動時に片付けるようにしました。中身が変更されたファイルは残します。
+Files that are no longer used but remained after updating or overwriting an earlier version (such as the game-screen images from 0.6.5 and earlier) are now removed at startup. Files whose contents were changed are kept.
+
+0.6.5・0.6.6 からは「その他」の「更新を確認する」で更新できます。設定・ログ・保存した OBS の連携・自動起動は引き継ぎます。
+From 0.6.5 or 0.6.6, update with Check for updates under Other. Settings, logs, saved OBS integration, and start at sign-in are retained.
 
 ## 0.6.6 の変更 / Changes in 0.6.6
 

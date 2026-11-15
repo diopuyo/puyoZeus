@@ -192,10 +192,11 @@ def test_default_bytes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
                      ('puyoZeus Live', 'アンインストール')})
     expected.update({'python/' + name: name.encode() for name in launchers.COPIES.values()})
     expected.update({'tools/launcher/' + p.relative_to(ROOT / 'packaging/launcher').as_posix():
-                     p.read_bytes() for p in (ROOT / 'packaging/launcher').rglob('*') if p.is_file()})
+                     p.read_bytes() for p in (ROOT / 'packaging/launcher').rglob('*')
+                     if p.is_file() and '__pycache__' not in p.parts})
     actual = {p.relative_to(bundle).as_posix(): p.read_bytes()
               for p in bundle.rglob('*') if p.is_file()}
-    assert actual == expected
+    assert actual == expected  # 作業ツリーの試験が作った pyc は写さない
 
 
 def test_signed_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -66,5 +66,218 @@
   "アンインストール.exe": [
     "7445a32b2f12ec6af49205468fa5f4f3759375fad8db43e4990df27a61765b82",
     "46053fd73ac5c5fb7d2c769ca5016cbcbbd744aaa8a1e24e4edf99c93ec59636"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v12.json": [
+    "f99ebeb1e5864fd4709a71424ca52bc63d33739e5a3fda3bfa4dce958c59b7bb"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v20.json": [
+    "553dc76b0575b958bb86401929e5327e186f8e687cb8635acb332e5ebe38288e"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v21.json": [
+    "0a48859c6cb1cdd1f5cf67bc996f99cdf2f610a6d38d6aa4afac13c3250bf25f"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v29.json": [
+    "24543234e0f61a8103fceebdf39bf512d9fcbe2fc5306e2c9e68ba7914ecb8d3"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v30.json": [
+    "30b7f7b2c046d4570bab722695b7a544d14b3a34f1f71d89725fe9a5a6539df4"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v31.json": [
+    "aaa4c0513229e844d66e53accd6bc355eed5415fa5fa3f0f0e280331d026a9d8"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v33.json": [
+    "95f33adfa8266a8b30aeffb1763540a6a501b0b976b923a0a68c5674f473066b"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v34.json": [
+    "982d3936faac6d199b6d011291acea54ac0b0e2956a0b09a66a4af4fc7e74904"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v35.json": [
+    "3538bd91e992cc690f803ddeb0b8d6b3dedbe49b800ba14d436c7b39d84fa3d8"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v36.json": [
+    "dc889462d38b5bdd06c3cb01bb78a1753bcf075b2948f4e6379c58fd61f794c8"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v37.json": [
+    "f58d66115c70fba850d68ff05129a1add98341127521a8fe4dc9e3939044261b"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v38.json": [
+    "9b89dca6db6304caf079eeb432b731e8f8267d8831160e97f32499f7944f2aa2"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v40.json": [
+    "22e06f53c0666f11d7c12f9e9f23d8c3132a0ca91c5f9b06da6ef1b381614008"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v43.json": [
+    "43c93944c1c36744e7048941255f8bf267c7087ea836a3a533d8df5456f267ab"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v48.json": [
+    "17bcd56dfcf50e19cc964d1c9a0396ab0b0ce39ffe986c822af4751e308805eb"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v50.json": [
+    "4a296e8993bab9d13875799c3fb89d4009b5b836b591bd7c78e9212d97aff89d"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v51.json": [
+    "8cad3a0fe33ea35648507b855da19b53165f26d2fdb1ec935a84567c953ec7d6"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v52.json": [
+    "e42c85f97652ed7a87719415b3056932aa6e326ef65265d292c0d57aa0864a27"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v54.json": [
+    "a9c4244638622f0b361fcc4a0ba85629cffce2a6c956bddd1050cc71f54454d4"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v57.json": [
+    "bdd0acb3402592c98d10c7b93513acd735e4cf9e49b89c94f3e9302f9452c86c"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v61.json": [
+    "4a838c6d984df587a0cde78e2d6f54554f3f8981985f2b777f2911f240747792"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v64.json": [
+    "969454f6d75e8877c6399f11b77b16734757138d8db405e7c7b06f490d2acbe0"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v65.json": [
+    "009c1dbf4d7f70df9affd762168077af948cf107b45349212b61cb13a88510fd"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v66.json": [
+    "681b6071425a1af974a2232ad61506669314fa53a19d01ceec7698c4b68a40b5"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v70.json": [
+    "009167514328359dcb61ee78b4872c071910074cfc2d271eec35746d7f04a8f7"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v73.json": [
+    "18c52148dcfaa0158ed8899b06c38b7ceed6b483213052f9c8867b4422844c8d"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v74.json": [
+    "df2d6a15bc347bde22cfe8b3ebcfde0b6e2aa33729f3b33a1206ba6e046475f0"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v75.json": [
+    "f6ae31017011e6b1a621634c07211ab588a9fa0b31e23a5a67ff04a3e047e271"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v77.json": [
+    "792b50c72d536aa5152e55002cd91bb6c01503b869c284c50e859cc4a7222014"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v78.json": [
+    "29b75a6113c6f3db02e20cde60d5ac7099fd069907c207a0b5394aa7768863ef"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v79.json": [
+    "fad0bca28273632105b041e9eef1e0ac537e3a623b732ffba61fb553f6b4a8db"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v81.json": [
+    "b6fcb2deb276e7dcf96018bbac3acace71468901d351b940d74bcbfb5b18e2cd"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v84.json": [
+    "3bf0ff165da4134351911f8673f7dfdc94fca4f6bf9498c47310388962e2646b"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v86.json": [
+    "4ad0ffff13b1ec4b5c3bb2ac174f2a61411cfbf7afda5db07efa8e64918b7cdc"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v89.json": [
+    "3d05dd29a0f547fdc7da2cf628f2bfaae28509e31b04b2c3223734d78d8d4a84"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v91.json": [
+    "5ddf9b5d7b05be10835bd1d5868c37c4246b02c354a620f82a905bab2d6f2db3"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v92.json": [
+    "0046f545264ae8c464bc6ab260304a3530a68a8c44a9c8e921b633e2834065bf"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v93.json": [
+    "fab0304d8b497ccce7cb087d14105c2026a0e1a42389fd3d123f08f4fad8a5db"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v95.json": [
+    "ecd8b9ff6bbfdd735d1f8b988ac64a721623fb3303eb28b8c8b6d78ccdfd3333"
+  ],
+  "app/data/per_video_hsv_ranges/_backup_pre_expand_yellow/20260527T083957/v97.json": [
+    "4a7cff38290cb76b975bf45f2e849e0830a54094d7e9b14bf87c86f2bfe76eca"
+  ],
+  "app/models/ui_templates/match_end_batan.png": [
+    "37d78798fb7b002d7f8a9508b805f9a44bf30143fa6fa602f868e85afac221d1"
+  ],
+  "app/models/ui_templates/match_end_yatta.png": [
+    "1e67ccb808edc58baaafae2059cda464e1773683b86342f0ac325de59719ff7d"
+  ],
+  "app/models/ui_templates/ojama/big_crown.png": [
+    "3f02738e3a17ae1d626e37e6f52b4725b5ecad51d5dbf0ef26cbd07f62987ecf"
+  ],
+  "app/models/ui_templates/ojama/crown.png": [
+    "a11fa6b58faca333b2ee0394071c3a331142b90b6a40bf6b955a7db89cf145d6"
+  ],
+  "app/models/ui_templates/ojama/line.png": [
+    "331a4de7145f2b7040b7cd2485fcb9f985321acdbde4ed2b4fb4340906a272e7"
+  ],
+  "app/models/ui_templates/ojama/moon.png": [
+    "da11a8248c744545f59f9d301c9348d4135d8abc6b051136d3db2cb5c011d38a"
+  ],
+  "app/models/ui_templates/ojama/rock.png": [
+    "ebfaf40794ed380dfa23340308a80fd0cd0ba94a66474442974d40428bae2ac5"
+  ],
+  "app/models/ui_templates/ojama/small.png": [
+    "3cd55369760a2ab298e7e2a2759db900a13e8ca04ad104d15ef397acc469084d"
+  ],
+  "app/models/ui_templates/score_digits/digit_0.png": [
+    "857a5d870043afcf4150fcbae3113c8ac85eef6020c5d537edbed85a02d40c74"
+  ],
+  "app/models/ui_templates/score_digits/digit_1.png": [
+    "5aa26c8f99602fd47d691e9665a960fc3999bcfae37e65227d4a710d3bb271d7"
+  ],
+  "app/models/ui_templates/score_digits/digit_2.png": [
+    "923c563645cd718c2e854914f8c09cf1424859fb86b450253fd12f1cd62aa467"
+  ],
+  "app/models/ui_templates/score_digits/digit_3.png": [
+    "fa530b4504e9c99ec0b3819fbbe180d38a224bf68ea15291f4b6a31b9d579188"
+  ],
+  "app/models/ui_templates/score_digits/digit_4.png": [
+    "963eefc581b82a9eb54de21e7873b8f72a2b37f84e4d44ee4e8920d5d0641734"
+  ],
+  "app/models/ui_templates/score_digits/digit_5.png": [
+    "7b8419e3d7387f1226350b6bcfb618412e6b25224843eb777d6b08c6d1ebe41f"
+  ],
+  "app/models/ui_templates/score_digits/digit_6.png": [
+    "cf8bd02b55c53012c0d0ab2d8123213b3a52e1332f9c8cd4240a92b2a1a3a19a"
+  ],
+  "app/models/ui_templates/score_digits/digit_7.png": [
+    "9a234658ec3394d939e436c6b909abaa8caa34042325899c545a4f4682d15069"
+  ],
+  "app/models/ui_templates/score_digits/digit_8.png": [
+    "2d39f9a397e70730e461b05c5c44885c305e81683d7c0de2dabaf8288eca06a9"
+  ],
+  "app/models/ui_templates/score_digits/digit_9.png": [
+    "3da532baf3862fea8204f1e97d23fdaddc13c4ce83e28c610d5b3204a9a69149"
+  ],
+  "app/models/ui_templates/score_digits/formula_mult.png": [
+    "cfe32d929ea3649630c610c7103beb866de99b25c1be7132ea42a2c0874dd445"
+  ],
+  "app/models/ui_templates/telop_challenger.png": [
+    "d074e44e2ddb3dcb0c795e54649bf9a4c025c00aecdcb67b0b8188a7f988eb52"
+  ],
+  "app/models/ui_templates/telop_challenger_decisive.png": [
+    "835714800f3861faf437cb309193b8ac4881ee8d46fc79357f1788a60ad4de2e"
+  ],
+  "app/models/ui_templates/x_mark.png": [
+    "91a13c089c93d814ea186367c6815b734b83c6567aa9cc9e06de0b63cbd96194"
+  ],
+  "app/models/ui_templates/x_mark_halo.png": [
+    "3f2e6f849446cac81f6c89c9c0a620416a53321543308d726083ccc117a5b1db"
+  ],
+  "app/models/ui_templates/x_mark_video01.png": [
+    "0709eb38958b3a73116e690d6024d1b72f1c50f6c241472051c8fd1d01b094e3"
+  ],
+  "app/models/ui_templates/x_mark_video01_b.png": [
+    "d5d03cbcf63e3c3a07288998e5bb87a526e155148d27458f3a0fd08070569a3f"
+  ],
+  "app/models/ui_templates/x_mark_video01_c.png": [
+    "d62bba8114f998b7bbd562b9ce8fdf11cb97292850048d3222ad1f86536632a3"
+  ],
+  "app/models/ui_templates/x_mark_video02.png": [
+    "84f0d5e4479e34f84a4d0d839986b94e8691557e6ded07251078ee49d57d8b94"
+  ],
+  "app/scripts/__pycache__/visualize_recognition.cpython-312.pyc": [
+    "dc5bec3e6d574f974fc6a33639c51d3d47a2a94ef54e065233548a8a10063f44"
+  ],
+  "app/scripts/visualize_recognition.py": [
+    "068a45ff27b71a921995edf62ee4b0ca342043ce07e797bbceee38b26d261e64"
+  ],
+  "app/src/phase_j/distribution_setup.html": [
+    "e95a0500584c27df0e6d650b6c0ecac20a3665234860479b37e323a3e3e8b988"
+  ],
+  "app/src/phase_j/distribution_setup.js": [
+    "72ae4712b93b9aa5c7d3258fcc4851a492cacdc9e4bea8584b82cc53cf5f9cc0"
   ]
 }

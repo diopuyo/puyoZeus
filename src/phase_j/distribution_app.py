@@ -99,8 +99,9 @@ def run_application(runtime: DistributionRuntime, options: argparse.Namespace) -
     tray = start_tray(runtime, stop, window.open)
     worker = threading.Thread(target=serve_application, args=(server, window, runtime, deadline), daemon=True)
     worker.start()
-    from .distribution_update import acknowledge_start
+    from .distribution_update import acknowledge_start, start_stage_cleanup
     acknowledge_start(runtime)
+    start_stage_cleanup(runtime.root)
     from .distribution_obs import refresh_on_startup
     refresh_on_startup(runtime.settings)
     try:

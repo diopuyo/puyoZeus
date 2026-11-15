@@ -12,6 +12,8 @@ COPIES = {'puyoZeus Live.exe': 'pythonw.exe', 'アンインストール.exe': 'p
           'python312.dll': 'python312.dll', 'vcruntime140.dll': 'vcruntime140.dll',
           'vcruntime140_1.dll': 'vcruntime140_1.dll'}
 PTH = 'python\\python312.zip\npython\ntools\\launcher\nimport site\n'
+# 作業ツリーで試験が作った pyc を配布物へ写さない (0.6.6 の ZIP に紛れた)
+LAUNCHER_IGNORE = shutil.ignore_patterns('__pycache__')
 
 
 def verify_copy(source: Path, target: Path) -> None:
@@ -73,7 +75,7 @@ def install_signpath(bundle: Path, source: Path, version: str | None = None) -> 
         verify_signpath(target)
         if version is not None:
             verify_launcher_version(target, version)
-    shutil.copytree(ROOT / 'packaging/launcher', bundle / 'tools/launcher', dirs_exist_ok=True)
+    shutil.copytree(ROOT / 'packaging/launcher', bundle / 'tools/launcher', dirs_exist_ok=True, ignore=LAUNCHER_IGNORE)
 
 
 def build_launchers(bundle: Path, version: str, signed_launcher_dir: Path | None = None) -> None:
@@ -87,4 +89,4 @@ def build_launchers(bundle: Path, version: str, signed_launcher_dir: Path | None
         verify_copy(source, target)
     for name in ('puyoZeus Live', 'アンインストール'):
         (bundle / f'{name}._pth').write_text(PTH, encoding='utf-8')
-    shutil.copytree(ROOT / 'packaging/launcher', bundle / 'tools/launcher', dirs_exist_ok=True)
+    shutil.copytree(ROOT / 'packaging/launcher', bundle / 'tools/launcher', dirs_exist_ok=True, ignore=LAUNCHER_IGNORE)
