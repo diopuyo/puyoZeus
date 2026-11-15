@@ -86,3 +86,25 @@ def test_future_completion_is_not_compared_before_end() -> None:
     overlay._history[0][-1].board._grid[-1, 0] = 1
     layers.apply(overlay, result, None, 2.)
     assert "prediction_board_mismatch" not in overlay.tracker.layer_eval["prediction_reasons"]
+
+
+def boundary_frame(dead: tuple, state: BoardState = BoardState.MENU) -> NS:
+    return NS(p1=NS(state=state, chain_event=None), p2=NS(state=state, chain_event=None), confirmed_dead_sides=dead)
+
+
+@pytest.mark.parametrize("guard", [False, True])
+def test_stale_death_flag_at_match_boundary(monkeypatch: pytest.MonkeyPatch, guard: bool) -> None:
+    """前の試合の死亡確定の印は試合の切り替わりの後もメニューの間に付いたり消えたりする (0.6.7 の実機 q068e_m)。
+    旗 ON では、プレイが始まった印の無いコマを見るまで取り込まない。旗 OFF は従来どおり取り込む。"""
+    monkeypatch.setenv("PUYO_E16_DEATH_BOUNDARY_GUARD", str(int(guard)))
+    layers, overlay, _, _ = context()
+    layers = ExchangeEvaluationLayers()
+    layers.reset()
+    stale = layers.before(overlay, boundary_frame(("1P",)), 312.93)
+    assert stale is (not guard) and layers.dead_sides == (set() if guard else {"1P"})
+    layers.before(overlay, boundary_frame(()), 313.0)
+    layers.before(overlay, boundary_frame(("1P",)), 313.1)  # メニューの間はまだ待つ
+    assert layers.dead_sides == (set() if guard else {"1P"})
+    layers.before(overlay, boundary_frame((), BoardState.STABLE), 316.4)
+    assert layers.before(overlay, boundary_frame(("2P",), BoardState.STABLE), 400.0)
+    assert "2P" in layers.dead_sides

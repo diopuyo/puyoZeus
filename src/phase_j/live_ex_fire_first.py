@@ -131,6 +131,8 @@ def close_workers(state: FireFirstState, workers: list[Any]) -> None:
 def serve(inputs: Any, outputs: Any, settings: dict, stop: Any) -> None:
     from src.phase_j.live_power import apply_power_policy
     apply_power_policy()
+    from src.phase_j.live_priority import lower_background
+    lower_background()
     import os
     os.environ['PUYO_EX_RETR'] = '0'
     connections, workers = start_workers(settings)

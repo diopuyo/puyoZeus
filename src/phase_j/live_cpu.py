@@ -45,7 +45,9 @@ def apply_runtime(role: str, lower_priority: bool = True) -> dict[str, Any]:
         threadpool_limits(limits=EVALUATION_THREADS)
     if lower_priority and os.environ.get('PUYO_CPU_ISOLATION') == '1':
         isolate_cpu(role)
-    if lower_priority and nice:
+    # 遅れを抑える組み方 (live_priority、既定 OFF) では、表示に効く評価のまとめを下げず重い探索の子を下げる
+    from .live_priority import enabled as latency_priority
+    if lower_priority and nice and not (role == 'evaluation' and latency_priority()):
         if not hasattr(os, 'nice'):
             windows_below_normal()
         else:

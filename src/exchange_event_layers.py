@@ -1,6 +1,7 @@
 """E16の現在層・予測層を分離し、観測と矛盾した予測は採用しない。"""
 from __future__ import annotations
 
+import os
 from typing import Any
 import numpy as np
 from src.board import COLOR_UNKNOWN
@@ -10,6 +11,8 @@ from src.exchange_event_landing import logit_mean
 from src.exchange_event_sync import CountTurnSynchronizer
 
 SIDES = ("1P", "2P")
+# 試合の切り替わりの直後に前の試合の死亡確定の印を取り込まない (2026-11-15、既定 OFF、production_config の同名の既定)。
+BOUNDARY_GUARD_ENV = "PUYO_E16_DEATH_BOUNDARY_GUARD"
 LAYER_COLUMNS = ("p1_current", "p1_prediction", "p1_layer_combined", "prediction_reasons")
 
 
@@ -18,6 +21,9 @@ class ExchangeEvaluationLayers:
     def __init__(self, sync_enabled: bool = True, death_enabled: bool = True,
                  layer_enabled: bool = True, completion_fix: bool = False) -> None:
         self.sync_enabled, self.death_enabled = sync_enabled, death_enabled
+        from src.production_config import E16_DEATH_BOUNDARY_GUARD_DEFAULT
+        self.boundary_guard = os.environ.get(
+            BOUNDARY_GUARD_ENV, str(int(E16_DEATH_BOUNDARY_GUARD_DEFAULT))) == "1"
         self.layer_enabled, self.completion_fix = layer_enabled, completion_fix
         self.reset()
 
@@ -29,6 +35,7 @@ class ExchangeEvaluationLayers:
         self.current: float | None = None
         self.current_key: tuple | None = None
         self.dead_sides: set[str] = set()
+        self.awaiting_clear = True
         self.checked: set[int] = set()
         self.mismatches: set[int] = set()
         self.unknown: set[int] = set()
@@ -40,7 +47,7 @@ class ExchangeEvaluationLayers:
         tracker = overlay.tracker
         if self.layer_enabled and self.prediction is not None:
             tracker.probability, tracker.source = self.prediction, self.prediction_source
-        self.dead_sides.update(getattr(result, "confirmed_dead_sides", ()))
+        self.dead_sides.update(self._new_dead_sides(result))
         if not self.death_enabled:
             return False
         if not self.dead_sides:
@@ -50,6 +57,19 @@ class ExchangeEvaluationLayers:
                 tracker.missing_input("E16_fire_after_observed_death", stamp, "S1",
                                       (SIDES[idx], side.chain_event.trigger_sec))
         return True
+
+    def _new_dead_sides(self, result: Any) -> set[str]:
+        """試合の切り替わりの直後は、前の試合の死亡確定の印が残ったコマが来る (メニューの間に付いたり消えたりする)。
+        プレイが始まった (どちらかの盤面がメニュー以外) 印の無いコマを見るまで取り込まない。
+        新しい試合の本当の死亡はプレイの後にしか起きない。0.6.7 の実機: 切り替わりのコマが印つきで、
+        新しい試合の 85 秒間「死亡確定」のまま表示が出なかった (e2e_user/runs/q068e_m)。"""
+        dead = set(getattr(result, "confirmed_dead_sides", ()))
+        if self.boundary_guard and self.awaiting_clear:
+            playing = any(side.state != BoardState.MENU for side in (result.p1, result.p2))
+            if dead or not playing:
+                return set()
+            self.awaiting_clear = False
+        return dead
 
     def observe(self, sides: tuple, stamp: float) -> None:
         """確定盤面とNEXTを同期器へ渡し、推論・学習で同じ規則を使う。"""

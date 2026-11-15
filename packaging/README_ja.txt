@@ -1,4 +1,4 @@
-# puyoZeus Live 0.6.7 — ZIP 版 / ZIP edition
+# puyoZeus Live 0.6.8 — ZIP 版 / ZIP edition
 
 【起動前に必ずすべて展開 / Extract All before launching】
 ZIP をダブルクリックで開いただけでは動きません。ZIP を右クリック →「すべて展開」してから、展開したフォルダの puyoZeus Live.exe を起動してください。「python312.dll が見つからないため、コードの実行を続行できません」と出た場合も、ZIP をすべて展開してから起動し直してください。
@@ -89,6 +89,17 @@ The ZIP root has one launcher, `puyoZeus Live.exe`, and one uninstall entry, `�
 Python と計算ライブラリ、Rust 製の処理モジュールは同梱済みで、Python/Rust の開発環境は不要です。Visual C++ または WebView2 ランタイムが無い場合、起動用 exe が Microsoft 公式の部品を入れるか尋ねます。「はい」の場合だけ取得し、Microsoft の署名を検証して実行します。Windows が権限の確認を表示する場合があります。「いいえ」でも起動は続き、WebView2 が無ければブラウザで開きます。
 
 Open `puyoZeus Live.exe`. The entry is an unchanged copy of Python signed by the Python Software Foundation, designed to launch with Smart App Control enabled. Its EXE icon is the Python icon. The DLL and ._pth files at the top level are required app components; do not delete them. Python, computation libraries and Rust modules are bundled. Missing Visual C++ or WebView2 runtimes are offered with your consent and Microsoft signature verification. Declining continues startup; without WebView2, the app opens in a browser.
+
+## 0.6.8 の変更 / Changes in 0.6.8
+
+試合と試合の切り替わりで前の試合の決着の表示が残り、次の試合の間ずっと推定勝率が出ないことがある問題を直しました (手元の試験ではおよそ 20 試合に 1 回起きていました)。
+Fixed an issue where the result of the previous match could remain on screen at the start of the next match, so no estimated win probability was shown for that entire match (about once every 20 matches in our tests).
+
+CPU のコアが少ない PC で OBS と一緒に使った時に、推定勝率の表示が遅れにくくなるよう、処理の優先度の組み方を見直しました。4 コアのノート相当の試験で、表示の遅れが約 1 秒から約 0.3 秒に縮み、OBS の描画への影響は増えませんでした。
+Revised how processing is prioritized so the estimated win probability lags less on PCs with few CPU cores running OBS at the same time. In a test equivalent to a 4-core laptop, display delay dropped from about 1 second to about 0.3 seconds with no added impact on OBS rendering.
+
+0.6.5 以降は「その他」の「更新を確認する」で更新できます。設定・ログ・保存した OBS の連携・自動起動は引き継ぎます。
+From 0.6.5 or later, update with Check for updates under Other. Settings, logs, saved OBS integration, and start at sign-in are retained.
 
 ## 0.6.7 の変更 / Changes in 0.6.7
 

@@ -19,6 +19,8 @@ MAX_AGE_SEC = EX_FRESH_SEC_DEFAULT
 def _compute(connection: Any, settings: dict) -> None:
     from src.phase_j.live_power import apply_power_policy
     apply_power_policy()
+    from src.phase_j.live_priority import lower_background
+    lower_background()
     from .live_24h_config import validate_retr_second
     second = validate_retr_second(settings.get('retr_second', False), settings.get('retr', False))
     os.environ['PUYO_RETR_SECOND'] = str(int(second))
@@ -115,6 +117,8 @@ class _State:
 def _serve(inputs: Any, outputs: Any, settings: dict, stop: Any) -> None:
     from src.phase_j.live_power import apply_power_policy
     apply_power_policy()
+    from src.phase_j.live_priority import lower_background
+    lower_background()
     os.environ['PUYO_EX_RETR'] = '0'
     ctx = mp.get_context('spawn')
     local, remote = ctx.Pipe()

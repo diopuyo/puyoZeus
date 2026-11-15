@@ -130,6 +130,8 @@ def _compute(connection: Any, model_path: Path, table: TimingTable,
     """spawn先でモデルとキャッシュを専有する。"""
     from src.phase_j.live_power import apply_power_policy
     apply_power_policy()
+    from src.phase_j.live_priority import lower_background
+    lower_background()
     _protect_from_interrupt()
     try:
         from threadpoolctl import threadpool_limits
@@ -234,6 +236,8 @@ def _state_worker(inputs: Any, outputs: Any, connection: Any, table: TimingTable
                   include_rows: bool) -> None:
     from src.phase_j.live_power import apply_power_policy
     apply_power_policy()
+    from src.phase_j.live_priority import lower_background
+    lower_background()
     audit = None
     _protect_from_interrupt()
     try:

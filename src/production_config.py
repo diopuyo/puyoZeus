@@ -88,6 +88,13 @@ DISTRIBUTION_IMAGE_FREE_ALL = True
 DISTRIBUTION_MIDGAME_BOARD_LAYER = True
 # 2026-11-10 Claude 採用: release_065_prep の試験と release_065_final の実機確認を根拠とする。
 DISTRIBUTION_UPDATE_BUTTON = True
+# 2026-11-15 Claude 案 (0.6.8 で既定 ON、公開は user の OK の後): 遅い PC で表示の遅れを抑える優先度の組み方 (live_priority)。
+# 最低の目安 (i5-8250U 級、user 11/15) のまね = 省電力コア 4 個・OBS 同居で表示の遅れ 95% 1,023→294ms・OBS の描画の取りこぼし 3→0、
+# PC1 全体 166→153ms (e2e_user/runs/p067a_m・s068e_m・c066_m・s068f_m)。
+DISTRIBUTION_LIVE_LATENCY_PRIORITY = True
+# 同: 試合の切り替わりのコマに残った前の試合の死亡確定の印を取り込まない (exchange_event_layers)。
+# 録った 14 回で約 20 試合に 1 回、1 試合まるごと「次試合待ち」で表示なし (PC1 全体でも起きる) → 記録の再生で 7 件→0。
+DISTRIBUTION_E16_DEATH_BOUNDARY_GUARD = True
 
 DISTRIBUTION_SITE_FEEDBACK = True
 
@@ -1767,6 +1774,13 @@ if __name__ == "__main__":
 
 # 2026-10-07: 全UI画像非同梱候補。連続比較の合格前につき未採用。
 IMAGE_FREE_ALL_DEFAULT: bool = False
+# 2026-11-15 Claude: 遅い PC で表示の遅れを抑える優先度の組み方 (src/phase_j/live_priority.py)。既定 OFF。
+# 評価のまとめを下げず、重い探索の子を低くする。最低の目安のまね (省電力コア 4 個・OBS 同居) で
+# 表示の遅れ 95% 1,023 → 350ms・OBS の描画の取りこぼし 3 → 0 (1 回、e2e_user/runs/p067a_m・p067c_m)。
+LIVE_LATENCY_PRIORITY_DEFAULT: bool = False
+# 2026-11-15 Claude: 試合の切り替わりのコマに残った前の試合の死亡確定の印を取り込まない (exchange_event_layers)。既定 OFF。
+# 最低の目安のまねの実機で 2/2 回、切り替わりのコマが印つきで新しい試合の間「死亡確定」のまま表示が止まった (runs/p067n_m・q068e_m)。
+E16_DEATH_BOUNDARY_GUARD_DEFAULT: bool = False
 # 2026-10-12: 10/10決定の実装候補。評価器の予告判定を得点台帳にする。本番未採用。
 B3_LEDGER_MODE_DEFAULT: bool = False
 # 2026-10-12: 着地量をアイコン差から台帳の観測着弾へ切替。本番未採用。
@@ -2049,6 +2063,8 @@ RELEASE_LIVE_ENV_DEFAULTS: dict[str, str] = {
     'PUYO_MIDGAME_BOARD_LAYER': str(int(DISTRIBUTION_MIDGAME_BOARD_LAYER)),
     'PUYO_COUNTER_FIRE_SHIFT': str(int(DISTRIBUTION_COUNTER_FIRE_SHIFT)),
     'PUYO_UPDATE_BUTTON': str(int(DISTRIBUTION_UPDATE_BUTTON)),
+    'PUYO_LIVE_LATENCY_PRIORITY': str(int(DISTRIBUTION_LIVE_LATENCY_PRIORITY)),
+    'PUYO_E16_DEATH_BOUNDARY_GUARD': str(int(DISTRIBUTION_E16_DEATH_BOUNDARY_GUARD)),
     'PUYO_LEDGER_PARTIAL': '1', 'PUYO_X_BOARD_ONLY': '1', 'PUYO_X_B3_BOUNDARY': '1',
     # 2026-11-02 PC1: 配布の参照exe起動を防止。threadsは24w2コードの既定2。
     'PUYO_OBS_AMA_RUST': '1', 'PUYO_OBS_AMA_RUST_THREADS': '2',
