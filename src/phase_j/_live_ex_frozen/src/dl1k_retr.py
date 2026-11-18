@@ -22,6 +22,9 @@ PC1 2026-10-28 15:40/15:45 の定め。学習 (dl1k_extract と同じ再生) と
 列: retR_{c,r,h,lethal}_{p1,p2} (p1/p2 = 受け側の物理 side)。向き 1 の行は p1/p2 を入れ替える。
 撃った側のセカンド (PC1 10/30 REQUEST_second_col、旗 PUYO_RETR_SECOND=1、既定 OFF で今とビット一致): 受け側 s ごとに
 retR_second_s = 撃った側 o のセカンド (おじゃま個数)、retR_net2_s = (retR_c − I) − retR_second。定めは second_of・return_end・hands_in。
+PUYO_RETR_OWN_CHAIN=1 は未反映の既発火送りをC/Cvisへ含め、その分をIで二重相殺しない。
+PUYO_RETR_LONG_ATTACK_H=1 は現在のEX・共通予測・観測時刻から締切を取り直す。両旗とも既定OFF。
+PUYO_RETR_RECEIVER_FORECAST=1 は共通予測がEXより長い受け側の送りも射影へ反映する（既定OFF）。
 """
 from __future__ import annotations
 
@@ -47,6 +50,52 @@ DEPTH, WIDTH, MAX_H = 16, 250, 40
 DEATH_COL, DEATH_H, ROWS, COLS = 2, 12, 13, 6
 DEFAULT_RATE = 70
 CACHE_MAX = 4096
+VISIBLE_ENV = 'PUYO_RETR_VISIBLE'
+LANDING_ENV = 'PUYO_RETR_LANDING'
+DROP_CAP = 30
+VISIBLE_STEMS = ('retR_cvis', 'retR_rvis', 'retR_unseen', 'retR_vis_frac',
+                 'retR_rvis_room', 'retR_r_room')
+VISIBLE_COLUMNS = tuple(f'{s}_{p}' for s in VISIBLE_STEMS for p in NAMES)
+VISIBLE_HANDS, BUSY_VISIBLE_HANDS, ROOM_RATIO_MAX = 3, 2, 10.
+
+
+def visible_enabled() -> bool:
+    """見えている手の列を追加するか。既定 OFF。"""
+    from src.production_config import RETR_VISIBLE_DEFAULT
+    return os.environ.get(VISIBLE_ENV, str(int(RETR_VISIBLE_DEFAULT))) == '1'
+
+
+def landing_enabled() -> bool:
+    """確定済み予告の落下を探索に入れるか。既定 OFF。"""
+    from src.production_config import RETR_LANDING_DEFAULT
+    return os.environ.get(LANDING_ENV, str(int(RETR_LANDING_DEFAULT))) == '1'
+
+
+def confirmed_pending(engine: Any, side: int) -> int:
+    """連鎖終了で確定し、相殺・落下後に台帳に残る数。射影の予測は含めない。"""
+    return int(engine.state.sl.core._pending(side, confirmed_only=True))
+
+
+def visible_values(C: float, I: int, h: int, busy: bool, board: np.ndarray,
+                   cummax: list | None, rate: int) -> tuple[float, ...]:
+    """cvis は見える3手（連鎖中2手）の最大、rvis は I から引いた残り。
+
+    unseen は全手の最大 C との差、vis_frac は cvis/C（C=0なら1）。
+    rvis_room と r_room は正の残りを3列目の空き個数で割り、上限10。
+    空き0で残り正なら10、残り0以下なら0。既に盤上にある連鎖は C 全量が見える。
+    """
+    v = BUSY_VISIBLE_HANDS if busy else VISIBLE_HANDS
+    cvis = C if cummax is None else float(int(cummax[min(h, v)-1]) // rate)
+    if h == 0:
+        cvis = 0.
+    room = COLS * max(DEATH_H - int(heights(board)[DEATH_COL]), 0)
+
+    def ratio(remaining: float) -> float:
+        if remaining <= 0:
+            return 0.
+        return min(remaining / room, ROOM_RATIO_MAX) if room else ROOM_RATIO_MAX
+
+    return cvis, I-cvis, C-cvis, cvis/C if C else 1., ratio(I-cvis), ratio(I-C)
 EXE_ENV = 'PUYO_AMA_REFERENCE_EXE'   # 学習 (Linux) は ama_reference_linux。配信の pyd は ama_reference_json_py を持つ
 
 # 撃った側のセカンド (PC1 10/30 REQUEST_second_col、user の決定)。旗 PUYO_RETR_SECOND=1 の時だけ列を足す (既定 OFF = 今のままの 8 列)。
@@ -86,7 +135,7 @@ def extend_side_end(engine: Any, value: dict, side: int, now: float,
     chain = engine.chains[side]
     if chain is None or not engine._resolving(side):
         return end
-    obs = chain['observed']
+    obs = chain.get('observed', [])
     n_obs = max((int(x['count']) for x in obs), default=0)
     n_pred = len(chain['best']['scores'])
     last = max((float(x['t']) for x in obs), default=None)
@@ -113,12 +162,14 @@ def blank() -> dict:
     out = {c: math.nan for c in COLUMNS}
     if second_enabled():
         out.update({c: math.nan for c in SECOND_COLUMNS})
+    if visible_enabled():
+        out.update({c: math.nan for c in VISIBLE_COLUMNS})
     return out
 
 
 def swap(extra: dict) -> dict:
     out = dict(extra)
-    for s in STEMS+SECOND_STEMS:
+    for s in STEMS+SECOND_STEMS+VISIBLE_STEMS:
         if f'{s}_p1' in extra:
             out[f'{s}_p1'], out[f'{s}_p2'] = extra[f'{s}_p2'], extra[f'{s}_p1']
     return out
@@ -128,12 +179,27 @@ class Ama:
     """return_profile の呼び出し。pyd に ama_reference_json_py があればそれ、無ければ外部の実行ファイル (同じ JSON・同じ値)。"""
 
     def __init__(self, native: Any) -> None:
+        self.force_external = os.environ.get('PUYO_AMA_FORCE_EXTERNAL', '0') == '1'
         self.fn = getattr(native, 'ama_reference_json_py', None)
+        if self.force_external:
+            self.fn = None
         self.proc = None
         self.cache: OrderedDict = OrderedDict()
         self.calls = self.hits = 0
+        if self.force_external:
+            from multiprocessing.util import Finalize
+            from threading import Lock
+            self._request_lock, self._cache_lock = Lock(), Lock()
+            # 複製はこのAmaを参照するだけ。作成元の終了時に一度だけ閉じる。
+            self._finalizer = Finalize(self, self.close, exitpriority=10)
 
     def _ask(self, request: dict) -> dict:
+        if self.force_external:
+            with self._request_lock:
+                return self._ask_unlocked(request)
+        return self._ask_unlocked(request)
+
+    def _ask_unlocked(self, request: dict) -> dict:
         line = json.dumps(request)
         if self.fn is not None:   # return_profile は 1 枝なので threads は効かない。配信と同じく 1 を渡す
             return json.loads(self.fn(line, 1))
@@ -141,26 +207,51 @@ class Ama:
             exe = os.environ.get(EXE_ENV)
             if not exe:
                 raise RuntimeError(f'ama_reference_json_py も {EXE_ENV} も無い')
-            self.proc = subprocess.Popen([exe], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1,
-                                         env={'AMA_THREADS': '1'})
+            command, env = [exe], {'AMA_THREADS': '1'}
+            if self.force_external:
+                env = dict(os.environ, AMA_THREADS='1')
+                if os.name == 'nt' and exe.lower().endswith('.cmd'):
+                    command = [os.environ.get('COMSPEC', 'cmd.exe'), '/d', '/c', exe]
+            self.proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1,
+                                         env=env)
         self.proc.stdin.write(line+'\n')
         self.proc.stdin.flush()
         return json.loads(self.proc.stdout.readline())
 
-    def profile(self, board: list[int], pairs: list[list[int]]) -> list[int]:
+    def profile(self, board: list[int], pairs: list[list[int]], pending: int = 0,
+                rate: int = DEFAULT_RATE, drop_cap: int = DROP_CAP) -> list[int]:
+        if self.force_external:
+            with self._cache_lock:
+                return self._profile(board, pairs, pending, rate, drop_cap)
+        return self._profile(board, pairs, pending, rate, drop_cap)
+
+    def _profile(self, board: list[int], pairs: list[list[int]], pending: int,
+                 rate: int, drop_cap: int) -> list[int]:
         key = (tuple(board), tuple(map(tuple, pairs)))
+        if pending:
+            key += (pending, rate, drop_cap)
         if key in self.cache:
             self.hits += 1
             self.cache.move_to_end(key)
             return self.cache[key]
         self.calls += 1
-        out = list(self._ask(dict(board=board, visible=pairs, op='return_profile', width=WIDTH, depth=DEPTH))['cummax'])
+        request = dict(board=board, visible=pairs, op='return_profile', width=WIDTH, depth=DEPTH)
+        if pending:
+            request.update(pending=pending, rate=rate, drop_cap=drop_cap)
+        out = list(self._ask(request)['cummax'])
         self.cache[key] = out
         if len(self.cache) > CACHE_MAX:
             self.cache.popitem(last=False)
         return out
 
     def close(self) -> None:
+        if self.force_external:
+            with self._request_lock:
+                self._close()
+        else:
+            self._close()
+
+    def _close(self) -> None:
         if self.proc is not None:
             self.proc.stdin.close()
             self.proc.wait(timeout=10)
@@ -262,6 +353,9 @@ def return_end(ret: dict, start: float, ends_s: float | None) -> tuple[float | N
       段数は steps_from_score(その得点)。h と同じ物差し (SEC_PER_HAND)。
     終わり = 発火 + duration(段数) (EX の連鎖の時間軸と同じ)。返しが無い ('none') なら (None, 0)。"""
     kind = ret['kind']
+    if kind == 'after_small':
+        return (return_end(ret['after'], ret['start'], None) if ret['after']['kind'] != 'none'
+                else (ret['end'], None))
     if kind == 'busy':
         return ends_s, None
     if kind == 'none':
@@ -343,10 +437,12 @@ def fire_tracker(native: Any) -> Any:
     return FireBoardTracker(scorer)
 
 
-def pending_with_fire(engine: Any, side: int, steps: tuple[int, ...]) -> list[int]:
+def pending_with_fire(engine: Any, side: int, steps: tuple[int, ...],
+                      exclude_side: int | None = None) -> list[int]:
     """PostV47.projection と同じ射影を、側 side の連鎖の段の得点だけ撃った盤の計算 (steps) に替えて行い、両側の予告を返す。"""
     from src.phase_j._live_ex_frozen.src.prefire_pending_v47 import project
     from src.phase_j._live_ex_frozen.src.prefire_post_v47 import remaining_send
+    from src.phase_j._live_ex_frozen.src.dl1k_retr_fix import receiver_forecast
     snap, now = engine.state.sl_snap, engine.state.t
     first = snap['margin_origin_sec']
     first = engine.state.first_move_t() if first is None else first
@@ -356,9 +452,13 @@ def pending_with_fire(engine: Any, side: int, steps: tuple[int, ...]) -> list[in
         active = chain is not None and not chain['finished']
         if i == side and active:
             chain = dict(chain, best=dict(chain['best'], scores=list(steps)))
+        elif active and i != exclude_side:
+            fc = receiver_forecast(engine, i)
+            if fc is not None:
+                chain = dict(chain, best=dict(chain['best'], scores=list(fc.steps)))
         scores = chain['best']['scores'] if active else []
         times = [chain['started']+FORMULA_SCORE_DELAY_SEC+k*STEP_SEC for k in range(len(scores))]
-        amounts.append(remaining_send(chain, snap[f'generated_p{i+1}'], first))
+        amounts.append(0 if i == exclude_side else remaining_send(chain, snap[f'generated_p{i+1}'], first))
         triggers.append(chain['started'] if active else None)
         ends.append(max(now, times[-1]) if times else None)
     return list(project(engine.state.sl.core, amounts, now, triggers, ends)['pending'])
@@ -397,6 +497,10 @@ def seed_pairs(engine: Any, side: int, busy: bool, matcher: Any = None) -> tuple
     seed = game_seed(engine)
     if seed is None:
         return None, 'no_seed'
+    from .dl1k_retr_history import recover
+    recovered = recover(engine, side, busy, seed, DEPTH)
+    if recovered is not None:
+        return recovered, 'ok'
     st = engine.knowledge.tape.sides[side]
     if st.queue is None or len(st.own) < 4:
         return None, 'short_history'
@@ -416,135 +520,221 @@ def seed_pairs(engine: Any, side: int, busy: bool, matcher: Any = None) -> tuple
             first = p if busy else p-1
             if first < 0:
                 return None, 'pos_before_start'
+            from .dl1k_retr_tsumo import synchronize
+            first = synchronize(engine, side, busy, seed, first, DEPTH)
             return [tuple(map(int, x)) for x in table.predict_absolute(seed, first, DEPTH).tolist()], 'ok'
     return None, 'pos_nomatch'
 
 
-def compute_retr(engine: Any, value: dict) -> tuple[dict, list[str]]:
-    """engine の今の状態と、その時点の射影 value (engine.projection() の直後・死亡証明の前) から retR の 8 列と側ごとの理由。"""
-    extra, why = blank(), ['', '']
-    native = engine.native
-    if not hasattr(engine, 'retr_ama'):
-        engine.retr_ama, engine.retr_pre, engine.retr_seed = Ama(native), {}, {}
-    now = engine.state.t
-    game = engine.state.game_idx
-    rate = value.get('rate')
-    rate = int(rate) if rate and rate > 0 else DEFAULT_RATE
-    ends_old = [chain_end(engine, value, i, now) for i in SIDES]
-    ends, end_src = [extend_side_end(engine, value, i, now, ends_old[i]) for i in SIDES], ['ex', 'ex']
-    h_fc = h_forecast_enabled()
-    if h_fc:   # 依頼 F3: 両側の連鎖の終わりを共通の予測から (予測が無ければ今の chain_end)
-        for i in SIDES:
-            ends[i], end_src[i] = side_end(engine, value, i, now, getattr(engine, 'retr_fire', None))
-    resolving = [bool(engine._resolving(i)) for i in SIDES]
-    engine.retr_diag = diag = [None, None]   # 確かめ用 (列には入らない): 側ごとの I・h・攻め側の連鎖の始まりと段数
-    sec_on = second_enabled()
+class _RetrRun:
+    """1回の計算の局所変数。試合をまたぐ状態は従来どおりengineだけが持つ。"""
 
-    def put_second(s: int, ret: dict, R: float) -> None:
-        """撃った側のセカンドの 2 列 (旗 ON の時だけ)。R = 受け側 s の retR_r (返した後の差 = −R)。"""
-        ts = time.perf_counter()
-        sec, d2, w2 = second_of(engine, value, s, now, ends, resolving, ret, rate, getattr(engine, 'retr_fire', None))
-        extra[f'retR_second_{NAMES[s]}'] = sec
-        extra[f'retR_net2_{NAMES[s]}'] = -R-sec if math.isfinite(R) and math.isfinite(sec) else math.nan
-        ok = math.isfinite(sec) and d2.get('N') is not None
-        extra[f'retR_secn_{NAMES[s]}'] = float(d2['N']) if ok else math.nan
-        extra[f'retR_sect_{NAMES[s]}'] = max(0., float(d2['T'])) if ok and d2.get('T') is not None else math.nan
-        diag[s].update({f'sec_{k}': v for k, v in d2.items()}, sec_why=w2, sec_rate=rate,
-                       sec_ms=round((time.perf_counter()-ts)*1000., 2))
-    for s in SIDES:
-        o = 1-s
-        if not resolving[s]:   # 持ち越しの元は「受け側が連鎖中でない最後の計算の値」(NaN を含む)。成功したら下で上書き
-            engine.retr_pre[s] = (game, (math.nan,)*4)
-        I = int(value['pending'][s])
-        chain = engine.chains[o]
-        I_pred, fire_back, fc_id, fc_tot = I, None, None, [None, None]
-        tracker = getattr(engine, 'retr_fire', None)
-        if tracker is not None and hasattr(tracker, 'current'):   # 確かめ用: 両側の連鎖の予測の総得点 (B3 と同じ予測)
+    def __init__(self, engine: Any, value: dict) -> None:
+        from src.phase_j._live_ex_frozen.src import dl1k_retr_fix as fix
+        self.fix, self.engine, self.value = fix, engine, value
+        self.extra, self.why = blank(), ['', '']
+        if not hasattr(engine, 'retr_ama'):
+            engine.retr_ama, engine.retr_pre, engine.retr_seed = Ama(engine.native), {}, {}
+        self.now, self.game = engine.state.t, engine.state.game_idx
+        rate = value.get('rate')
+        self.rate = int(rate) if rate and rate > 0 else DEFAULT_RATE
+        self.ends_old = [chain_end(engine, value, i, self.now) for i in SIDES]
+        self.ends = [extend_side_end(engine, value, i, self.now, self.ends_old[i]) for i in SIDES]
+        self.end_src, self.h_fc = ['ex', 'ex'], h_forecast_enabled()
+        if self.h_fc:
             for i in SIDES:
-                f = tracker.current(i, now)
-                fc_tot[i] = None if f is None or not f.has_prediction else f.total
-        if resolving[o] and chain is not None and tracker is not None:   # scene_68: 攻め側の撃った盤が取れていれば、その計算の総火力で I
-            if hasattr(tracker, 'current'):   # 依頼 A: 攻め側の今の連鎖の予測を識別子で選ぶ (EX の chain['started'] と比べない)
+                self.ends[i], self.end_src[i] = side_end(engine, value, i, self.now, getattr(engine, 'retr_fire', None))
+        self.before_long = list(self.ends)
+        self.ends = [fix.updated_end(engine, value, i, self.ends[i]) for i in SIDES]
+        self.resolving = [bool(engine._resolving(i)) for i in SIDES]
+        engine.retr_diag = self.diag = [None, None]
+        self.sec_on, self.vis_on, self.landing_on = second_enabled(), visible_enabled(), landing_enabled()
+        if self.vis_on and not hasattr(engine, 'retr_visible_pre'):
+            engine.retr_visible_pre = {}
+
+    def second(self, s: int, ret: dict, remainder: float) -> None:
+        """撃った側のセカンド。計測値も従来どおり診断だけに保存する。"""
+        ts = time.perf_counter()
+        sec, d2, w2 = second_of(self.engine, self.value, s, self.now, self.ends, self.resolving,
+                               ret, self.rate, getattr(self.engine, 'retr_fire', None))
+        self.extra[f'retR_second_{NAMES[s]}'] = sec
+        self.extra[f'retR_net2_{NAMES[s]}'] = -remainder-sec if math.isfinite(remainder) and math.isfinite(sec) else math.nan
+        ok = math.isfinite(sec) and d2.get('N') is not None
+        self.extra[f'retR_secn_{NAMES[s]}'] = float(d2['N']) if ok else math.nan
+        self.extra[f'retR_sect_{NAMES[s]}'] = max(0., float(d2['T'])) if ok and d2.get('T') is not None else math.nan
+        self.diag[s].update({f'sec_{k}': v for k, v in d2.items()}, sec_why=w2, sec_rate=self.rate,
+                            sec_ms=round((time.perf_counter()-ts)*1000., 2))
+
+    def incoming(self, s: int) -> int:
+        """旧射影をそのまま計算する。OWN_CHAINの二重相殺回避は別経路で行う。"""
+        engine, o, now = self.engine, 1-s, self.now
+        incoming = int(self.value['pending'][s])
+        chain = engine.chains[o]
+        original, fire_back, fc_id, fc_tot = incoming, None, None, [None, None]
+        tracker = getattr(engine, 'retr_fire', None)
+        if tracker is not None and hasattr(tracker, 'current'):
+            for i in SIDES:
+                fc = tracker.current(i, now)
+                fc_tot[i] = None if fc is None or not fc.has_prediction else fc.total
+        if self.resolving[o] and chain is not None and tracker is not None:
+            if hasattr(tracker, 'current'):
                 fc = tracker.current(o, now)
                 if fc is not None and fc.has_prediction:
-                    I, fire_back, fc_id = int(pending_with_fire(engine, o, fc.steps)[s]), fc.source, fc.chain_id
+                    incoming, fire_back, fc_id = int(pending_with_fire(engine, o, fc.steps)[s]), fc.source, fc.chain_id
             else:
                 fb = tracker.for_chain(o, float(chain['started']), now)
                 if fb is not None:
-                    I, fire_back = int(pending_with_fire(engine, o, fb.steps)[s]), fb.back
-        diag[s] = dict(I=I, I_pred=I_pred, fire_back=fire_back, fc_id=fc_id, fc_total_o=fc_tot[o], fc_total_s=fc_tot[s],
-                       res_s=resolving[s], res_o=resolving[o], end_o=ends[o],
-                       t0_o=None if chain is None else float(chain['started']),
-                       n_obs_o=None if chain is None else max((ob['count'] for ob in chain['observed']), default=0),
-                       n_pred_o=None if chain is None else len(chain['best']['scores']))
-        if h_fc:   # 確かめ用: 今の作り方 (EX の chain_end) の h と、終わりの出どころ
-            fo = tracker.current(o, now) if tracker is not None and hasattr(tracker, 'current') else None
-            diag[s].update(end_src=end_src[o], end_src_s=end_src[s], end_o_old=ends_old[o], h_old=None,
-                           n_fc_o=len(fo.steps) if fo is not None and fo.has_prediction else None)
-            if resolving[o] and ends_old[o] is not None:
-                start_old = ends_old[s] if resolving[s] and ends_old[s] is not None else now
-                diag[s]['h_old'] = min(MAX_H, max(0, int((ends_old[o]+SEC_PER_HAND-start_old+1e-9)/SEC_PER_HAND)))
-        if resolving[o] and ends[o] is not None:
-            start = ends[s] if resolving[s] and ends[s] is not None else now
-            h = min(MAX_H, max(0, int((ends[o]+SEC_PER_HAND-start+1e-9)/SEC_PER_HAND)))
-            diag[s]['h'] = h
-        elif resolving[o]:
-            why[s] = 'attacker_no_prediction'
-            continue
-        elif I > 0:
-            h = 1
+                    incoming, fire_back = int(pending_with_fire(engine, o, fb.steps)[s]), fb.back
+        self.diag[s] = dict(I=incoming, I_pred=original, fire_back=fire_back, fc_id=fc_id,
+            fc_total_o=fc_tot[o], fc_total_s=fc_tot[s], res_s=self.resolving[s], res_o=self.resolving[o],
+            end_o=self.ends[o], t0_o=None if chain is None else float(chain['started']),
+            n_obs_o=None if chain is None else max((ob['count'] for ob in chain.get('observed', [])), default=0),
+            n_pred_o=None if chain is None else len(chain['best']['scores']))
+        if self.fix.enabled(self.fix.RECEIVER_FORECAST_ENV):
+            receiver = self.fix.receiver_forecast(engine, s)
+            self.diag[s]['receiver_forecast_steps'] = None if receiver is None else len(receiver.steps)
+        if self.fix.enabled('PUYO_RETR_FIRE_ORIGIN_HOLD'):
+            self.diag[s].update(origin_s=(engine.chains[s] or {}).get('retr_origin'),
+                                origin_o=(engine.chains[o] or {}).get('retr_origin'))
+        return incoming
+
+    def hands(self, s: int, incoming: int) -> int | None:
+        """残り手数と既存予測との差を計算する。未知の締切は旧経路では欠測。"""
+        o, engine = 1-s, self.engine
+        tracker = getattr(engine, 'retr_fire', None)
+        if self.h_fc:
+            fc = tracker.current(o, self.now) if tracker is not None and hasattr(tracker, 'current') else None
+            self.diag[s].update(end_src=self.end_src[o], end_src_s=self.end_src[s],
+                end_o_old=self.ends_old[o], h_old=None, n_fc_o=len(fc.steps) if fc is not None and fc.has_prediction else None)
+            if self.resolving[o] and self.ends_old[o] is not None:
+                start = self.ends_old[s] if self.resolving[s] and self.ends_old[s] is not None else self.now
+                self.diag[s]['h_old'] = min(MAX_H, max(0, int((self.ends_old[o]+SEC_PER_HAND-start+self.fix.HAND_EPSILON)/SEC_PER_HAND)))
+        if self.resolving[o] and self.ends[o] is not None:
+            start = self.ends[s] if self.resolving[s] and self.ends[s] is not None else self.now
+            h = min(MAX_H, max(0, int((self.ends[o]+SEC_PER_HAND-start+self.fix.HAND_EPSILON)/SEC_PER_HAND)))
+            self.diag[s]['h'] = h
+            return h
+        if self.resolving[o]:
+            self.why[s] = 'attacker_no_prediction'
+        elif incoming > 0:
+            return 1
         else:
-            why[s] = 'no_attack'
-            continue
-        if resolving[s]:
-            if not value['board_prediction_active'][s]:
-                pre = engine.retr_pre.get(s)
-                if pre is not None and pre[0] == game:
-                    for stem, v in zip(STEMS, pre[1]):
-                        extra[f'{stem}_{NAMES[s]}'] = v
-                    why[s] = 'carry'
-                    if sec_on:
-                        put_second(s, dict(kind='busy'), float(pre[1][1]))
-                else:
-                    why[s] = 'no_final_no_pre'
-                continue
-            board = np.asarray(value['boards'][s], dtype=np.int64).reshape(ROWS, COLS)
-        else:
-            raw = engine.state.sides[s].board
-            if raw is None:
-                why[s] = 'no_board'
-                continue
-            board = np.asarray(raw, dtype=np.int64).reshape(ROWS, COLS)
-        C, ret = None, None
+            self.why[s] = 'no_attack'
+        return None
+
+    def board(self, s: int) -> np.ndarray | None:
+        """旧経路の盤選択と持ち越し。新しいOWN_CHAINはこの経路を通さない。"""
+        engine = self.engine
+        if self.resolving[s]:
+            if self.value['board_prediction_active'][s]:
+                return np.asarray(self.value['boards'][s], dtype=np.int64).reshape(ROWS, COLS)
+            pre = engine.retr_pre.get(s)
+            if pre is not None and pre[0] == self.game:
+                for stem, val in zip(STEMS, pre[1]):
+                    self.extra[f'{stem}_{NAMES[s]}'] = val
+                self.why[s] = 'carry'
+                if self.vis_on:
+                    for stem, val in zip(VISIBLE_STEMS, engine.retr_visible_pre.get(s, (math.nan,)*len(VISIBLE_STEMS))):
+                        self.extra[f'{stem}_{NAMES[s]}'] = val
+                if self.sec_on:
+                    self.second(s, dict(kind='busy'), float(pre[1][1]))
+            else:
+                self.why[s] = 'no_final_no_pre'
+            return None
+        raw = engine.state.sides[s].board
+        if raw is None:
+            self.why[s] = 'no_board'
+            return None
+        return np.asarray(raw, dtype=np.int64).reshape(ROWS, COLS)
+
+    def capacity(self, s: int, board: np.ndarray, h: int, pending: int) -> tuple:
+        """旧探索の盤・種・幅・深さ・換算順序を維持する。"""
+        engine, capacity, ret, cummax = self.engine, None, None, None
         if h == 0:
-            C, why[s], ret = 0, 'h0', dict(kind='none')
-        elif not resolving[s]:
-            count, score = chain_score(native, board)
+            capacity, self.why[s], ret = 0, 'h0', dict(kind='none')
+        elif not self.resolving[s]:
+            count, score = chain_score(engine.native, board)
             if count > 0:
-                C, why[s], ret = score//rate, 'board_chain', dict(kind='board_chain', steps=count)
-        if C is None:
-            pairs, pwhy = seed_pairs(engine, s, resolving[s], getattr(engine, 'retr_seed_matcher', None))
+                capacity, self.why[s], ret = score//self.rate, 'board_chain', dict(kind='board_chain', steps=count)
+        if capacity is None:
+            pairs, pwhy = seed_pairs(engine, s, self.resolving[s], getattr(engine, 'retr_seed_matcher', None))
             if pairs is None:
-                why[s] = pwhy
+                self.why[s] = pwhy
             elif len(pairs) < DEPTH:
-                why[s] = 'short_seed_pairs'
+                self.why[s] = 'short_seed_pairs'
             else:
                 enc = encode(board, pairs)
                 if enc is None:
-                    why[s] = 'five_colors_or_unknown'
+                    self.why[s] = 'five_colors_or_unknown'
                 else:
-                    cummax = engine.retr_ama.profile(*enc)
-                    C, why[s] = int(cummax[min(h, DEPTH)-1])//rate, 'ama'
+                    cummax = (engine.retr_ama.profile(*enc, pending=pending, rate=self.rate)
+                              if self.landing_on else engine.retr_ama.profile(*enc))
+                    capacity, self.why[s] = int(cummax[min(h, DEPTH)-1])//self.rate, 'ama'
                     ret = dict(kind='ama', cummax=list(cummax), h=h) if cummax[min(h, DEPTH)-1] > 0 else dict(kind='none')
-        if C is None:
-            continue
-        R = I-C
-        lethal = float(R > 0 and heights(board)[DEATH_COL]+min(max(R, 0), 30)//6 >= DEATH_H)
-        vals = (float(C), float(R), float(h), lethal)
-        for stem, v in zip(STEMS, vals):
-            extra[f'{stem}_{NAMES[s]}'] = v
-        if sec_on:   # 受け側がもう撃っているなら、その連鎖の終わりが返しの終わり
-            put_second(s, dict(kind='busy') if resolving[s] else ret, float(R))
-        if not resolving[s]:
-            engine.retr_pre[s] = (game, vals)
-    return extra, why
+        return capacity, ret, cummax
+
+    def store(self, s: int, board: np.ndarray, incoming: int, h: int,
+              capacity: float, ret: dict, cummax: list | None) -> None:
+        """旧列の値・順序と次回持ち越しを保存する。"""
+        remainder = incoming-capacity
+        lethal = float(remainder > 0 and heights(board)[DEATH_COL]+min(max(remainder, 0), DROP_CAP)//COLS >= DEATH_H)
+        vals = (float(capacity), float(remainder), float(h), lethal)
+        for stem, val in zip(STEMS, vals):
+            self.extra[f'{stem}_{NAMES[s]}'] = val
+        if self.vis_on:
+            visible = visible_values(float(capacity), incoming, h, self.resolving[s], board, cummax, self.rate)
+            for stem, val in zip(VISIBLE_STEMS, visible):
+                self.extra[f'{stem}_{NAMES[s]}'] = val
+            if not self.resolving[s]:
+                self.engine.retr_visible_pre[s] = visible
+        if self.sec_on:
+            self.second(s, dict(kind='busy') if self.resolving[s] else ret, float(remainder))
+        if not self.resolving[s]:
+            self.engine.retr_pre[s] = (self.game, vals)
+
+    def side(self, s: int) -> None:
+        """受け側1つを計算する。旗OFFは旧分岐順、ONは既発火分を別会計にする。"""
+        engine, fix = self.engine, self.fix
+        pending = confirmed_pending(engine, s) if self.landing_on else 0
+        if not self.resolving[s]:
+            engine.retr_pre[s] = (self.game, (math.nan,)*4)
+            if self.vis_on:
+                engine.retr_visible_pre[s] = (math.nan,)*len(VISIBLE_STEMS)
+        incoming = self.incoming(s)
+        if self.landing_on:
+            self.diag[s]['pending'] = pending
+        if fix.enabled(fix.LONG_ATTACK_ENV):
+            self.diag[s].update(end_before_long=self.before_long[1-s], end_s=self.ends[s], long_attack_h=True)
+        if fix.enabled(fix.OWN_CHAIN_ENV) and self.resolving[s]:
+            self.why[s], remainder = fix.apply_own(engine, self.value, s, self.ends, self.extra, self.diag[s], self.rate)
+            if self.sec_on and self.why[s] != 'no_attack':
+                self.second(s, dict(kind='busy'), remainder)
+            return
+        h = self.hands(s, incoming)
+        if h is None:
+            return
+        board = self.board(s)
+        if board is None:
+            return
+        from .dl1k_retr_fall import apply as apply_fall
+        if apply_fall(self, s, board, incoming, h):
+            return
+        from .dl1k_retr_continue import apply
+        if apply(self, s, board, incoming, h):
+            return
+        capacity, ret, cummax = self.capacity(s, board, h, pending)
+        if capacity is not None:
+            self.store(s, board, incoming, h, capacity, ret, cummax)
+
+
+def compute_retr(engine: Any, value: dict) -> tuple[dict, list[str]]:
+    """射影の直後・死亡証明の前の状態から、返しの列と側ごとの理由を返す。"""
+    run = _RetrRun(engine, value)
+    from .dl1k_retr_tsumo import enabled
+    if enabled():
+        engine.retr_sync_diag = {}
+    for side in SIDES:
+        run.side(side)
+        if enabled() and run.diag[side] is not None:
+            run.diag[side]['tsumo_sync'] = engine.retr_sync_diag.get(side)
+    return run.extra, run.why

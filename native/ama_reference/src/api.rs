@@ -88,7 +88,10 @@ fn run_search(f: Field, visible: &[[u8; 2]], input: &Value, op: &str, threads: u
 fn return_profile(f: Field, queue: &[[u8; 2]], input: &Value) -> Value {
     let depth = number(input, "depth", queue.len()).min(queue.len());
     let config = Config { width: number(input, "width", 250), depth, trigger: i32::MAX };
-    let result = search::search(f, queue, config);
+    let landing = search::Landing { pending: number(input, "pending", 0),
+        drop_cap: number(input, "drop_cap", search::DEFAULT_DROP_CAP),
+        rate: number(input, "rate", search::DEFAULT_RATE).max(1) };
+    let result = search::search_landing(f, queue, config, landing);
     let mut best = 0i64;
     let mut cummax: Vec<i64> = result.layer_max.iter().map(|&m| { best = best.max(m); best }).collect();
     // 置ける手が無く探索が始まらない盤 (窒息寸前) は層が無い。長さを depth にそろえ、それ以上は撃てないとする。

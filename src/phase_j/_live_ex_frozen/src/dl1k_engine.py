@@ -64,6 +64,10 @@ class ExEngine(PostV415):
                 from src.phase_j._live_ex_frozen.src.dl1k_retr import fire_tracker
                 self.retr_fire = fire_tracker(self.native)
             self.retr_fire.observe(t, game, raw)
+            from .dl1k_retr_origin import observe
+            observe(self)
+            from .dl1k_retr_tsumo import observe as observe_next
+            observe_next(self, raw)
 
     def probe(self) -> Probe:
         """原器が評価する条件 (撃ち合い中かつ両側の盤がある) だけを要求点にする。"""

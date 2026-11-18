@@ -34,7 +34,9 @@ def add_xc(engine: ExEngine, result: dict) -> None:
 
 def retr_details(engine: ExEngine, value: dict, result: dict) -> None:
     """攻め側の射影状態は死亡証明の前に読み、盤配列は保存しない。"""
-    result['retr_diag'] = [None if d is None else {k: d.get(k) for k in RETR_DIAG_KEYS}
+    from ._live_ex_frozen.src.dl1k_retr_fix import diagnostic_keys
+    keys = RETR_DIAG_KEYS + diagnostic_keys()
+    result['retr_diag'] = [None if d is None else {k: d.get(k) for k in keys}
                            for d in getattr(engine, 'retr_diag', [None, None])]
     result['retr_attack'] = [dict(
         board_prediction_active=bool(value['board_prediction_active'][1-s]),

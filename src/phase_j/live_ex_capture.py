@@ -47,6 +47,10 @@ class CaptureEx:
         raw, tape = [], tape_next_enabled()
         for index, side in enumerate(deepcopy(sides)):
             add_fire_inputs(side, row, index)
+            if os.environ.get('PUYO_RETR_TSUMO_SYNC') == '1' or os.environ.get('PUYO_RETR_TSUMO_SYNC_HISTORY') == '1':
+                observed = row['sides'][index] if index < len(row.get('sides', ())) else side
+                side.update(retr_next_pair=deepcopy(observed.get('next_pair')),
+                            retr_dnext_pair=deepcopy(observed.get('dnext_pair')))
             if light_enabled() and index < len(row.get('sides', ())):
                 side.update({k: v for k, v in row['sides'][index].items() if k.startswith('light_')})
             board = ((side.get('confirmed_board') or {}).get('board') or {}).get('array')

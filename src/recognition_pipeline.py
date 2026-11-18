@@ -372,6 +372,7 @@ from src.score_zero import (
     OcrScoreZeroDetector, ScoreZeroDetector, score_zero_from_ocr_enabled,
 )
 from src.telop_detector import TelopDetector, TelopResult
+from src.chain_boundary_visual import incoming_ojama
 from src.next_slide_detector import (
     NextSlideDetector,
     SlideMotionResult,
@@ -2237,6 +2238,8 @@ class RecognitionPipeline:
         # Phase I R-7: NEXT ROI スライド motion 検出器 (1P/2P 別 instance)。
         # 毎 frame の (prev, curr) BGR 比較で「ツモが置かれた」signal を取得し
         # TsumoPhaseDetector の TSUMO_FALL → STABLE 遷移を補強。
+        self._chain_end_ojama_signal = os.environ.get("PUYO_CHAIN_END_OJAMA_SIGNAL", "0") == "1"
+        self._next_slide_effect_guard = os.environ.get("PUYO_NEXT_SLIDE_EFFECT_GUARD", "0") == "1"
         self._enable_slide_detector = bool(enable_next_slide_detector)
         self._slide_detector_1p: NextSlideDetector | None = (
             NextSlideDetector(side="1P")
@@ -5676,6 +5679,8 @@ class RecognitionPipeline:
                         slide_check_1p = bool(
                             self._slide_detector_1p.update(
                                 self._prev_frame, frame,
+                                **({"verify_motion": True} if self._next_slide_effect_guard
+                                   and self._active_chain_1p is not None else {}),
                             ).slide_motion,
                         )
                     except Exception:
@@ -5688,6 +5693,8 @@ class RecognitionPipeline:
                         slide_check_2p = bool(
                             self._slide_detector_2p.update(
                                 self._prev_frame, frame,
+                                **({"verify_motion": True} if self._next_slide_effect_guard
+                                   and self._active_chain_2p is not None else {}),
                             ).slide_motion,
                         )
                     except Exception:
@@ -5862,6 +5869,14 @@ class RecognitionPipeline:
                 self._stash_and_clear_active_chain("2P")
                 chain_ev_2p = None
 
+        # 上端への実物の出現は保持中の連鎖イベントより優先する。
+        ojama_end_1p = self._visual_ojama_chain_end("1P", frame, is_active)
+        ojama_end_2p = self._visual_ojama_chain_end("2P", frame, is_active)
+        if ojama_end_1p:
+            chain_ev_1p = None
+        if ojama_end_2p:
+            chain_ev_2p = None
+
         # 連鎖発火で constraint invalidate (= 連鎖中は puyo 消える + ojama 落下)
         # 注: score_d > 0 だけでは invalidate しない (通常 placement で score 増加するため).
         # chain_event があれば連鎖確定 → invalidate 両 side.
@@ -5886,6 +5901,7 @@ class RecognitionPipeline:
             next_pair=next_pair_1p,
             dnext_pair=dnext_pair_1p,
             slide_motion=slide_1p,
+            chain_end_ojama_signal=ojama_end_1p,
             frame_bgr=frame,  # cycle 71l β2' = HSV 距離による NEXT 色順序確定
             score_d_for_self=score_d_1p,  # cycle 71n 案 ε
             chain_max_hold_expired=self._chain_max_hold_expired_1p,  # 案P3
@@ -5907,6 +5923,7 @@ class RecognitionPipeline:
             next_pair=next_pair_2p,
             dnext_pair=dnext_pair_2p,
             slide_motion=slide_2p,
+            chain_end_ojama_signal=ojama_end_2p,
             frame_bgr=frame,  # cycle 71l β2'
             score_d_for_self=score_d_2p,  # cycle 71n 案 ε
             chain_max_hold_expired=self._chain_max_hold_expired_2p,  # 案P3
@@ -7182,6 +7199,16 @@ class RecognitionPipeline:
             if self._chain_estimate_last_board_2p is None:
                 self._chain_estimate_last_board_2p = ev.before_board.copy()
 
+    def _visual_ojama_chain_end(self, side: str, frame: np.ndarray, active: bool) -> bool:
+        """既定OFF。確認した落下開始で当該側の連鎖保持を解く。"""
+        if not self._chain_end_ojama_signal or not active:
+            return False
+        event = self._active_chain_1p if side == "1P" else self._active_chain_2p
+        if event is None or not incoming_ojama(self._prev_frame, frame, side):
+            return False
+        self._stash_and_clear_active_chain(side)
+        return True
+
     def _stash_and_clear_active_chain(self, side: str) -> None:
         """active_chain_* を None にする前に退避してからクリアする。
 
@@ -7768,6 +7795,7 @@ class RecognitionPipeline:
         opponent_chain_active: bool = False,  # エフェクト時間ゲート (2026-08-03)
         own_chain_active: bool = False,  # 案B 4条件AND拡張 (2026-08-04)
         own_chain_hold_until: float = 0.0,  # 案4-lite 拡張 (2026-08-13)
+        chain_end_ojama_signal: bool = False,
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
         # W25根治 第3弾・最終 (2026-08-18): CNN観測入力段の会計整合フィルタ
@@ -8003,6 +8031,7 @@ class RecognitionPipeline:
         # 既に算出済み (_own_pending_ojama_forecast、W25根治第3弾で
         # 関数冒頭に集約・二重計算を廃止)。ここではそのまま再利用する。
         signals = DetectorSignals(
+            chain_end_ojama_signal=chain_end_ojama_signal,
             time_sec=time_sec,
             cnn_board=cnn_board,
             is_match_active=is_active,

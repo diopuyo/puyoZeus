@@ -10,7 +10,7 @@ from .live_ex_hold_policy import HoldPolicy, SIDES
 from .live_ex_hold_diagnostics import record_rejection
 from ._live_ex_frozen.src.dl1k_columns import COLUMNS, LEARNING_COLUMNS, blank
 
-from ._live_ex_frozen.src.dl1k_retr import COLUMNS as RETR_COLUMNS, SECOND_COLUMNS
+from ._live_ex_frozen.src.dl1k_retr import COLUMNS as RETR_COLUMNS, SECOND_COLUMNS, VISIBLE_COLUMNS
 from ._live_ex_frozen.src.dl1k_xc import COLUMNS as XC_COLUMNS
 
 HOLD_SEC = .5
@@ -51,7 +51,7 @@ class LiveExHold:
               skip_invalid: bool = False) -> dict:
         """再結合と同じ行構造。キャッシュ再使用は学習同様に無効。"""
         if source is not None:
-            extra_columns = tuple(c for c in (*RETR_COLUMNS, *SECOND_COLUMNS, *XC_COLUMNS)
+            extra_columns = tuple(c for c in (*RETR_COLUMNS, *SECOND_COLUMNS, *XC_COLUMNS, *VISIBLE_COLUMNS)
                                   if c in source['extra'] or c in self.policy.extra_columns)
             self.policy.extra_columns = extra_columns
             self.columns, self.learning = COLUMNS + extra_columns, LEARNING_COLUMNS + extra_columns

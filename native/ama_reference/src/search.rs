@@ -4,6 +4,16 @@ use crate::{chain, eval, field::{Field, Placement}, order, table::Table};
 const BAGS: [[u8; 4]; 6] = [[4, 6, 7, 5], [4, 7, 6, 5], [4, 5, 6, 7],
     [6, 7, 4, 5], [6, 5, 4, 7], [7, 5, 4, 6]];
 const PRUNE_SCORE: i32 = 5000;
+const GARBAGE: u8 = 1;
+pub const DEFAULT_DROP_CAP: usize = 30;
+pub const DEFAULT_RATE: usize = 70;
+
+#[derive(Clone, Copy)]
+pub struct Landing { pub pending: usize, pub drop_cap: usize, pub rate: usize }
+
+impl Default for Landing {
+    fn default() -> Self { Self { pending: 0, drop_cap: DEFAULT_DROP_CAP, rate: DEFAULT_RATE } }
+}
 
 #[derive(Clone, Copy)]
 pub struct Config { pub width: usize, pub depth: usize, pub trigger: i32 }
@@ -22,7 +32,7 @@ pub struct Result { pub candidates: Vec<Candidate>, pub expanded: usize, pub lay
 struct Step { parent: Option<usize>, placement: Placement }
 
 #[derive(Clone)]
-struct Node { field: Field, action: i32, eval: i32, root: usize, path: usize }
+struct Node { field: Field, action: i32, eval: i32, root: usize, path: usize, landing: Landing }
 
 /// 満杯の層で「合計が最小の最初の位置」(同点は前の位置) を保つトーナメント木。
 /// 置き換えのたびに全部を見直す代わりに、置き換えた葉から根まで (8 段) だけ直す。
@@ -80,16 +90,32 @@ pub fn queue(visible: &[[u8; 2]], branch: usize, depth: usize) -> Vec<[u8; 2]> {
 /// 置いた後の盤 (placed) の連鎖を進めて子を作る。
 fn apply(parent: &Node, p: Placement, mut field: Field) -> Option<(Node, i32)> {
     let (chains, score) = chain::simulate_stats(&mut field);
+    let mut landing = parent.landing;
+    settle(&mut field, &mut landing, chains > 0, score);
     if field.dead() { return None; }
     let tear = parent.field.heights[p.x] != parent.field.heights[p.child()?];
     let mut child = parent.clone();
     child.field = field;
+    child.landing = landing;
     child.action += eval::action(tear, chains);
     Some((child, score))
 }
 
-fn roots(field: Field, pair: [u8; 2], layer: &mut Layer, result: &mut Result) {
-    let root = Node { field, action: 0, eval: 0, root: 0, path: 0 };
+fn settle(field: &mut Field, landing: &mut Landing, chained: bool, score: i32) {
+    if landing.pending == 0 { return; }
+    if chained {
+        landing.pending = landing.pending.saturating_sub(score.max(0) as usize / landing.rate.max(1));
+        return;
+    }
+    let drop = landing.pending.min(landing.drop_cap);
+    for x in 0..crate::field::WIDTH {
+        for _ in 0..drop / crate::field::WIDTH { field.drop_color(x, GARBAGE, true); }
+    }
+    landing.pending -= drop;
+}
+
+fn roots(field: Field, pair: [u8; 2], layer: &mut Layer, result: &mut Result, landing: Landing) {
+    let root = Node { field, action: 0, eval: 0, root: 0, path: 0, landing };
     let mut best = 0i64;
     field.each_child(pair, |p, next| {
         result.expanded += 1;
@@ -123,13 +149,13 @@ fn accept(mut child: Node, p: Placement, score: i32, children: &mut Layer, resul
     candidate.score = candidate.score.max(score as i64);
     if score >= PRUNE_SCORE { return; }
     let hash = child.field.hash();
-    let (bucket, slot, entry) = children.table.get(hash);
+    let (bucket, slot, entry) = children.table.get_pending(hash, child.landing.pending);
     child.eval = if let Some(e) = entry {
         if child.action < e.action as i32 { return; }
         e.eval
     } else { eval::evaluate(&child.field) };
     candidate.search_score = candidate.search_score.max(child.total());
-    children.table.set(bucket, slot, hash, child.action, child.eval);
+    children.table.set_pending(bucket, slot, hash, child.action, child.eval, child.landing.pending);
     let step = Step { parent: Some(child.path), placement: p };
     child.path = result.arena.len();
     result.arena.push(step);
@@ -153,11 +179,15 @@ fn think(pair: [u8; 2], parents: &mut Layer, children: &mut Layer, result: &mut 
 }
 
 pub fn search(field: Field, queue: &[[u8; 2]], config: Config) -> Result {
+    search_landing(field, queue, config, Landing::default())
+}
+
+pub fn search_landing(field: Field, queue: &[[u8; 2]], config: Config, landing: Landing) -> Result {
     let mut result = Result::default();
     let depth = config.depth.min(queue.len());
     if queue.len() < 2 || depth == 0 { return result; }
     let (mut a, mut b) = (Layer::new(config.width), Layer::new(config.width));
-    roots(field, queue[0], &mut a, &mut result);
+    roots(field, queue[0], &mut a, &mut result, landing);
     if result.candidates.is_empty() { return result; }
     for &pair in &queue[1..depth] {
         think(pair, &mut a, &mut b, &mut result);
@@ -194,6 +224,85 @@ pub fn branches(field: Field, visible: &[[u8; 2]], config: Config,
 mod tests {
     use super::*;
     #[test]
+    fn zero_pending_is_identical() {
+        let config = Config { width: 4, depth: 3, trigger: i32::MAX };
+        let q = [[4, 5], [6, 7], [4, 4]];
+        assert_eq!(search(Field::default(), &q, config), search_landing(Field::default(), &q,
+            config, Landing { pending: 0, drop_cap: 6, rate: 1 }));
+    }
+
+    #[test]
+    fn landing_shape_omits_remainder() {
+        let mut field = Field::default();
+        field.drop_color(0, 4, false);
+        let mut landing = Landing { pending: 17, ..Landing::default() };
+        settle(&mut field, &mut landing, false, 0);
+        assert_eq!(field.heights, [3, 2, 2, 2, 2, 2]);
+        assert_eq!(field.cell(0, 0), 4);
+        for x in 0..6 { assert_eq!(field.cell(x, field.heights[x]-1), GARBAGE); }
+        assert_eq!(landing.pending, 0);
+    }
+
+    #[test]
+    fn landing_cap_and_remaining() {
+        let mut field = Field::default();
+        let mut landing = Landing { pending: 65, ..Landing::default() };
+        settle(&mut field, &mut landing, false, 0);
+        assert_eq!(field.heights, [5; 6]);
+        assert_eq!(landing.pending, 35);
+        settle(&mut field, &mut landing, false, 0);
+        assert_eq!(field.heights, [10; 6]);
+        assert_eq!(landing.pending, 5);
+    }
+
+    #[test]
+    fn chain_cancels_without_landing() {
+        let mut field = Field::default();
+        let mut landing = Landing { pending: 40, rate: 10, ..Landing::default() };
+        settle(&mut field, &mut landing, true, 125);
+        assert_eq!(field.heights, [0; 6]);
+        assert_eq!(landing.pending, 28);
+        settle(&mut field, &mut landing, true, 1000);
+        assert_eq!(landing.pending, 0);
+    }
+
+    #[test]
+    fn applied_chain_does_not_drop() {
+        let mut field = Field::default();
+        for x in 0..3 { field.drop_color(x, 4, false); }
+        let parent = Node { field, action: 0, eval: 0, root: 0, path: 0,
+            landing: Landing { pending: 30, rate: 10, ..Landing::default() } };
+        let p = Placement { x: 3, r: 0 };
+        let (child, score) = apply(&parent, p, field.place(p, [4, 5]).unwrap()).unwrap();
+        assert!(score > 0);
+        assert_eq!(child.landing.pending, 30-score as usize/10);
+        assert_eq!(child.field.mask(GARBAGE), 0);
+    }
+
+    #[test]
+    fn landing_dead_nodes_are_discarded() {
+        let mut field = Field::default();
+        for _ in 0..7 { field.drop_color(2, GARBAGE, false); }
+        let config = Config { width: 4, depth: 2, trigger: i32::MAX };
+        let q = [[4, 5], [6, 7]];
+        assert!(!search(field, &q, config).candidates.is_empty());
+        assert!(search_landing(field, &q, config,
+            Landing { pending: 30, ..Landing::default() }).candidates.is_empty());
+    }
+
+    #[test]
+    fn table_distinguishes_remaining_pending() {
+        let mut table = Table::default();
+        let hash = Field::default().hash();
+        let (b, s, _) = table.get_pending(hash, 30);
+        table.set_pending(b, s, hash, 0, 1, 30);
+        assert!(table.get_pending(hash, 0).2.is_none());
+        let (b, s, _) = table.get_pending(hash, 60);
+        table.set_pending(b, s, hash, 0, 2, 60);
+        assert_eq!(table.get_pending(hash, 30).2.unwrap().eval, 1);
+        assert_eq!(table.get_pending(hash, 60).2.unwrap().eval, 2);
+    }
+    #[test]
     fn six_branches_and_visible_prefix() {
         let visible = [[5, 4], [6, 7], [4, 4]];
         for b in 0..6 {
@@ -212,7 +321,7 @@ mod tests {
             for _ in 0..3000 {
                 state ^= state << 13; state ^= state >> 7; state ^= state << 17;
                 let total = (state % 50) as i32; // 同点を多くする
-                layer.add(Node { field: Field::default(), action: total, eval: 0, root: 0, path: 0 });
+                layer.add(Node { field: Field::default(), action: total, eval: 0, root: 0, path: 0, landing: Landing::default() });
                 if naive.len() < width { naive.push(total); } else {
                     let mut first = 0;
                     for i in 1..naive.len() { if naive[i] < naive[first] { first = i; } }

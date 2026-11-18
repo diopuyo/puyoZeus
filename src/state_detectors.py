@@ -111,6 +111,8 @@ class ChainPhaseDetector:
     def detect(
         self, ctx: StateContext, signals: DetectorSignals,
     ) -> BoardState | None:
+        if signals.chain_end_ojama_signal:
+            return BoardState.OJAMA_FALL
         if signals.chain_event is not None:
             if not self._passes_erasable_gate(ctx, signals):
                 return None  # state 維持

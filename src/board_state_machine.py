@@ -438,6 +438,8 @@ class DetectorSignals:
     # RecognitionPipeline が enable_media_tick_counters=True のときだけ渡す。
     # None (default) なら状態機械は今のコードの経路をそのまま通る (要件 E5)。
     media_tick: "TickStamp | None" = None
+    # 画面上端へのおじゃま出現で連鎖を終了する。既定OFF。
+    chain_end_ojama_signal: bool = False
 
 
 class StateTransitionDetector(Protocol):

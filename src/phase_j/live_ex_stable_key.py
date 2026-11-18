@@ -14,6 +14,10 @@ class StableKeyExEngine(ExEngine):
         if not hasattr(self, 'retr_fire'):
             self.retr_fire = fire_tracker(self.native)
         self.retr_fire.observe(t, game, raw)
+        from ._live_ex_frozen.src.dl1k_retr_origin import observe
+        observe(self)
+        from ._live_ex_frozen.src.dl1k_retr_tsumo import observe as observe_next
+        observe_next(self, raw)
 
     def probe(self) -> Probe:
         original = super().probe()

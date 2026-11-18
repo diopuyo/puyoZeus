@@ -57,6 +57,8 @@ def input_keys(engine: Any, assets: dict, generations: list[dict]) -> dict[str, 
     """両側に依存する計算を物理側・解除世代とともに識別する。論理時刻も省かない。"""
     state = {name: getattr(engine, name) for name in INPUT_FIELDS}
     state['proof_state'] = proof_state(engine)
+    from .dl1k_retr_tsumo import add_input_key
+    add_input_key(engine, state)
     base = digest(dict(schema=SCHEMA, assets=assets, epoch=engine.epoch,
                        policy=engine.policy, inputs=state))
     return {side: digest((base, side, generations[i])) for i, side in enumerate(SIDES)}

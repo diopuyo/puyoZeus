@@ -23,6 +23,8 @@ Phase I R-1 + R-7 統合:
 from __future__ import annotations
 
 from collections import deque
+
+from src.chain_boundary_visual import verified_next_motion
 from dataclasses import dataclass, field
 from typing import Iterable
 
@@ -250,6 +252,7 @@ class NextSlideDetector:
         self,
         prev_frame: np.ndarray | None,
         curr_frame: np.ndarray | None,
+        verify_motion: bool = False,
     ) -> SlideMotionResult:
         """1 frame 分の (prev, curr) 比較を実行.
 
@@ -277,16 +280,17 @@ class NextSlideDetector:
         threshold = self._adaptive_threshold()
 
         # スライド検出: cooldown 中は発火しない
-        slide = (
-            diff_score >= threshold
-            and self._cooldown == 0
+        candidate = diff_score >= threshold and self._cooldown == 0
+        slide = candidate and (
+            not verify_motion or verified_next_motion(prev_frame, curr_frame, self._side)
         )
         if slide:
             self._cooldown = self._cooldown_frames
 
         # history は「静止中の median」を取りたいので、発火していない
         # frame の値だけを履歴に積む。
-        if not slide:
+        # 光の演出で棄却した大きい差分を静止時の基準へ混ぜない。
+        if not candidate:
             self._diff_history.append(diff_score)
 
         return SlideMotionResult(

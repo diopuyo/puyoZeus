@@ -3,7 +3,7 @@ const BUCKETS: usize = 8192;
 const WAYS: usize = 4;
 
 #[derive(Clone, Copy, Default)]
-pub struct Entry { hash: u16, age: u16, pub action: i16, pub eval: i32, occupied: bool }
+pub struct Entry { hash: u16, age: u16, pub action: i16, pub eval: i32, occupied: bool, pending: usize }
 
 pub struct Table { entries: Vec<[Entry; WAYS]>, age: u16 }
 
@@ -18,9 +18,13 @@ impl Table {
     }
 
     pub fn get(&self, hash: u64) -> (usize, usize, Option<Entry>) {
+        self.get_pending(hash, 0)
+    }
+
+    pub fn get_pending(&self, hash: u64, pending: usize) -> (usize, usize, Option<Entry>) {
         let index = ((hash as u128 * BUCKETS as u128) >> 64) as usize;
         let bucket = &self.entries[index];
-        if let Some(i) = bucket.iter().position(|e| e.occupied && e.hash == hash as u16) {
+        if let Some(i) = bucket.iter().position(|e| e.occupied && e.hash == hash as u16 && e.pending == pending) {
             return (index, i, Some(bucket[i]));
         }
         let mut replacement = 0;
@@ -35,11 +39,15 @@ impl Table {
     }
 
     pub fn set(&mut self, bucket: usize, slot: usize, hash: u64, action: i32, eval: i32) {
+        self.set_pending(bucket, slot, hash, action, eval, 0);
+    }
+
+    pub fn set_pending(&mut self, bucket: usize, slot: usize, hash: u64, action: i32, eval: i32, pending: usize) {
         let e = &mut self.entries[bucket][slot];
-        if !e.occupied || e.hash != hash as u16 || e.age != self.age || e.action as i32 + e.eval < action + eval {
+        if !e.occupied || e.hash != hash as u16 || e.pending != pending || e.age != self.age || e.action as i32 + e.eval < action + eval {
             *e = Entry { hash: hash as u16, age: self.age,
                 action: action.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
-                eval: eval.clamp(i16::MIN as i32, i16::MAX as i32), occupied: true };
+                eval: eval.clamp(i16::MIN as i32, i16::MAX as i32), occupied: true, pending };
         }
     }
 }

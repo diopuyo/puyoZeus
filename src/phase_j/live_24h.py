@@ -39,6 +39,7 @@ class Live24h:
         self.clock, self.worker = clock, None
         self.model = model
         self.ex_columns = LEARNING_COLUMNS
+        from ._live_ex_frozen.src.dl1k_retr import VISIBLE_COLUMNS, visible_enabled
         self.fill_frac_columns: tuple[str, ...] = ()
         self.epoch: Any = None
         self.game: int | None = None
@@ -57,6 +58,8 @@ class Live24h:
                 if self.fill_frac_columns:
                     columns.update(XC_COLUMNS)
                 self.ex_columns += tuple(c for c in (*RETR_COLUMNS, *SECOND_COLUMNS, *XC_COLUMNS) if c in columns)
+                if visible_enabled():
+                    self.ex_columns += VISIBLE_COLUMNS
                 settings = settings if settings is not None else ex_settings()
                 self.worker = worker_factory(settings)
             self.settings = dict(settings or {})

@@ -141,7 +141,7 @@
     {
       "source": "src/dl1k_regen_state.py",
       "source_sha256": "30b177f25967321662d9fd19fb38b8ef239f0acf262c6949350e9eb1635dd204",
-      "adapter_sha256": "30b177f25967321662d9fd19fb38b8ef239f0acf262c6949350e9eb1635dd204"
+      "adapter_sha256": "5a61a1c74e203c1b9c2c412256d0ebb63313436d0e2974f18a6e6a62494f5b1d"
     },
     {
       "source": "src/dl1k_theory.py",
@@ -571,7 +571,7 @@
     {
       "source": "src/dl1k_engine.py",
       "source_sha256": "9243bd2d714b07fd175c60dac6bcc1d147457224ae4d538f9a053f2bc6330742",
-      "adapter_sha256": "635c84f6635ca41bf7f395a844a5d0bf5fef63f2457cbc604f61d66c7f20eaf7",
+      "adapter_sha256": "0c8f83741c4b1f12dcde89f0bbe99bf3ac8eb5261de7a8f93c9d20985f38fc4b",
       "source_commit": "c9dcc74f"
     },
     {
@@ -583,13 +583,13 @@
     {
       "source": "src/dl1k_records.py",
       "source_sha256": "7ac8653fb4cc623ecc673a5cea26a594666fe5e29b159b3c4ad3c4caf173b125",
-      "adapter_sha256": "7ac8653fb4cc623ecc673a5cea26a594666fe5e29b159b3c4ad3c4caf173b125",
+      "adapter_sha256": "719f9a266b9613717863ebf55c148b9a27cc14adc2d29df94bdd87b8e935c430",
       "source_commit": "14d7e29d"
     },
     {
       "source": "src/dl1k_retr.py",
       "source_sha256": "1ddfd11b5b817e9fe018fd158f615dc341a5cd4f199b7a0c4cb6e7b12989383b",
-      "adapter_sha256": "fbcd39e8866cf0b37dc3fe7c9dca01aace4b91a8f21e91251f2ee74bbcc14d3f",
+      "adapter_sha256": "8dfa348466c776d9e1d24e72e1792ea65917dd5a1d056cc0b8128e685eb88135",
       "source_commit": "0a7a7f63",
       "transformation": "private imports; preserve optional live_ex_speed seed matcher and use it for second"
     },

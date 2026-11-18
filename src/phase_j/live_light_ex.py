@@ -26,7 +26,7 @@ def forecast_memo(engine: Any) -> dict:
 
 
 def clone_engine(engine: Any) -> Any:
-    """native関数と読取専用種表の配列以外は共有しない。"""
+    """native関数・種表を共有し、研究用の外部Amaだけは所有権を移さず参照する。"""
     pool = ThreadPoolExecutor(max_workers=1)
     memo = {id(engine.native): engine.native, id(engine.pool): pool, **forecast_memo(engine)}
     lookup = engine.knowledge.lookup
@@ -35,7 +35,9 @@ def clone_engine(engine: Any) -> Any:
             item = getattr(lookup, name)
             memo[id(item)] = item
     ama = getattr(engine, 'retr_ama', None)
-    if ama is not None and ama.proc is not None:
+    if ama is not None and getattr(ama, 'force_external', False):
+        memo[id(ama)] = ama
+    elif ama is not None and ama.proc is not None:
         pool.shutdown()
         raise RuntimeError('候補分離には配布構成のnative AMAが必要です')
     try:

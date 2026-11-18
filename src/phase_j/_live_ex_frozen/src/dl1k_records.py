@@ -90,6 +90,8 @@ def side_raw(side: dict, queue: tuple[int, int, int, int] | None) -> dict:
         raw['raw_cnn_board'], raw['formula'] = side.get('raw_cnn_board'), side.get('formula')
     if os.environ.get('PUYO_CHAIN_SPLIT_PLACE') == '1':   # 依頼 §4: 置き (tsumo_count の増え) で連鎖を分ける旗の時だけ渡す
         raw['tsumo_count'] = side.get('tsumo_count')
+    if os.environ.get('PUYO_RETR_TSUMO_SYNC') == '1' or os.environ.get('PUYO_RETR_TSUMO_SYNC_HISTORY') == '1':
+        raw.update(retr_next_pair=side.get('next_pair'), retr_dnext_pair=side.get('dnext_pair'))
     return raw
 
 

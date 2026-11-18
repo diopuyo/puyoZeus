@@ -13,6 +13,26 @@ from src.phase_j.release_config import distribution_user_config
 from src.production_config import RELEASE_LIVE_ENV_DEFAULTS, RELEASE_LIVE_MODEL_PATHS
 
 
+@pytest.mark.parametrize('name', [
+    'SMALL_CHAIN_CONTINUE', 'FIRE_ORIGIN_HOLD', 'TSUMO_SYNC', 'TSUMO_SYNC_HISTORY',
+    'OWN_CHAIN', 'LONG_ATTACK_H', 'RECEIVER_FORECAST',
+])
+def test_release_return_estimate_defaults(name: str) -> None:
+    """採用した7旗が配布入口から有効になる。"""
+    from src import production_config as config
+    assert getattr(config, f'DISTRIBUTION_RETR_{name}') is True
+    assert RELEASE_LIVE_ENV_DEFAULTS[f'PUYO_RETR_{name}'] == '1'
+
+
+@pytest.mark.parametrize('name', [
+    'NEXT_SLIDE_EFFECT_GUARD', 'CHAIN_END_OJAMA_SIGNAL', 'RETR_FALL_BOARD',
+    'RETR_LANDING', 'AMA_FORCE_EXTERNAL',
+])
+def test_release_untrained_flags_remain_disabled(name: str) -> None:
+    """今回の学習に入っていない旗を配布で有効にしない。"""
+    assert RELEASE_LIVE_ENV_DEFAULTS.get(f'PUYO_{name}', '0') == '0'
+
+
 @pytest.fixture
 def root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(os, 'environ', os.environ.copy())
