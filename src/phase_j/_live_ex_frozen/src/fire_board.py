@@ -713,6 +713,8 @@ class ChainForecast:
             self.fc.last_valid_t = t
         if self.recheck:
             self._recheck(t, raw_board, side)
+        from .dl1k_retr_recheck import observe as recheck_return
+        recheck_return(self, t, form, raw_board)
         self.hist.push(t, raw_board)
         from src.light_refind import update_physical_refind
         update_physical_refind(self, t, raw_board, side)

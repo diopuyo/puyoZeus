@@ -221,6 +221,9 @@ def apply_own(engine: Any, value: dict, side: int, ends: list,
         h = min(retr.MAX_H, max(0, int((ends[attacker]+retr.SEC_PER_HAND-ends[side]+HAND_EPSILON)/retr.SEC_PER_HAND)))
     elif not engine._resolving(attacker) and incoming > own:
         h = 1
+    from . import dl1k_retr_deadline as refire
+    if refire.enabled() and ends[side] is not None and incoming > own:
+        h = refire.hands(ends[side], ends[attacker] or now, retr.SEC_PER_HAND, retr.MAX_H)
     pending = confirmed_after_own(engine, value, side, diag, own) if retr.landing_enabled() else 0
     future, visible, why = after_chain(engine, side, board, h, rate, pending)
     remainder = write_own_values(extra, side, incoming, own, future, visible, h, board)

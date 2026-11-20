@@ -596,7 +596,7 @@
     {
       "source": "src/fire_board.py",
       "source_sha256": "f2856ae53b9bb489ce3627d798d4e0abdb4ad4e6042e1d23d7464197d64dd662",
-      "adapter_sha256": "a77ea7fb92fc97a0445b01cd2fa181aa31a3c7e83a392206d8caa7078ec35210",
+      "adapter_sha256": "1bc2b8a009bace03ae6ef5950db041f6ea0fea65e453372b1c316fbea7732a59",
       "source_commit": "14d7e29d"
     },
     {

@@ -94,6 +94,8 @@ def test_other_startup_failure_unchanged(distribution: tuple,
         monkeypatch: pytest.MonkeyPatch, reason: str | None) -> None:
     runtime, url = distribution
     monkeypatch.setattr(bridge, 'NATIVE_IMPORT_FAILURE', reason)
+    # 一般の起動失敗を調べるため、実機のSAC判定をこの試験へ混ぜない。
+    monkeypatch.setattr('src.phase_j.live_native.load_library', lambda: object())
 
     def broken_scan() -> dict:
         raise RuntimeError('ordinary startup failure')

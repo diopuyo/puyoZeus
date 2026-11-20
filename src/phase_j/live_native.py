@@ -48,6 +48,22 @@ def load_library() -> Any:
     return library
 
 
+def native_policy_error(enabled: bool | None = None) -> OSError | AttributeError | None:
+    """配布アプリの起動前に、有効なDLLのポリシー拒否だけを調べる。"""
+    from src.production_config import LIVE_EXACT_NATIVE_DEFAULT
+    from src.puyo_core_bridge import is_native_policy_blocked
+    if enabled is None:
+        enabled = os.environ.get('PUYO_LIVE_EXACT_NATIVE', str(int(LIVE_EXACT_NATIVE_DEFAULT))) == '1'
+    if not enabled:
+        return None
+    try:
+        load_library()
+    except (OSError, AttributeError) as error:
+        if is_native_policy_blocked(error):
+            return error
+    return None
+
+
 def packed(grid: np.ndarray) -> Any:
     """C ABIへ渡す盤面を固定長で複製する。"""
     if not valid_input(grid):

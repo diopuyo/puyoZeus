@@ -240,9 +240,9 @@ class DistributionRuntime:
             self.error = {}
             self.stopping = False
             try:
-                from src import puyo_core_bridge
-                if puyo_core_bridge.NATIVE_IMPORT_FAILURE == 'native_blocked':
-                    self.record_failure('native_blocked', str(puyo_core_bridge.NATIVE_IMPORT_ERROR))
+                native_failure = self._native_policy_failure()
+                if native_failure is not None:
+                    self.record_failure('native_blocked', native_failure)
                     return
                 if (self.settings['auto_input'] or self.autostart_waiting) and not self.scan_inputs().get('selected'):
                     return
@@ -274,6 +274,16 @@ class DistributionRuntime:
                 finally:
                     self.close_preview()
                     self.record_failure('startup_failure', failure)
+
+    def _native_policy_failure(self) -> str | None:
+        """子に渡す配布設定で、SACに拒否された計算部品を起動前に知らせる。"""
+        from src import puyo_core_bridge
+        if puyo_core_bridge.NATIVE_IMPORT_FAILURE == 'native_blocked':
+            return str(puyo_core_bridge.NATIVE_IMPORT_ERROR)
+        from .live_native import native_policy_error
+        config = distribution_user_config(self.settings, self.root, self.port)
+        error = native_policy_error(enabled=bool(config.get('live_exact_native', False)))
+        return f'puyo_live_exact.dll: {error}' if error is not None else None
 
     def _heartbeat_environment(self) -> tuple[Path | None, dict[str, str]]:
         from src import production_config

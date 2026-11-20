@@ -16,9 +16,10 @@ from src.production_config import RELEASE_LIVE_ENV_DEFAULTS, RELEASE_LIVE_MODEL_
 @pytest.mark.parametrize('name', [
     'SMALL_CHAIN_CONTINUE', 'FIRE_ORIGIN_HOLD', 'TSUMO_SYNC', 'TSUMO_SYNC_HISTORY',
     'OWN_CHAIN', 'LONG_ATTACK_H', 'RECEIVER_FORECAST',
+    'OWN_CHAIN_LEN', 'REFIRE_DEADLINE',
 ])
 def test_release_return_estimate_defaults(name: str) -> None:
-    """採用した7旗が配布入口から有効になる。"""
+    """採用した9旗が配布入口から有効になる。"""
     from src import production_config as config
     assert getattr(config, f'DISTRIBUTION_RETR_{name}') is True
     assert RELEASE_LIVE_ENV_DEFAULTS[f'PUYO_RETR_{name}'] == '1'

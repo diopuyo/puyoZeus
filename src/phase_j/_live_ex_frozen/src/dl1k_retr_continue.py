@@ -43,6 +43,9 @@ def timing(run: Any, side: int, count: int, score: int, hands: int) -> tuple[flo
     deadline = run.now + hands*retr.SEC_PER_HAND if deadline is None else deadline + retr.SEC_PER_HAND
     budget = deadline-end-retr.SEC_PER_HAND
     remaining = min(retr.MAX_H, max(0, math.floor((budget+EPSILON)/retr.SEC_PER_HAND)))
+    from . import dl1k_retr_deadline as refire
+    if refire.enabled() and run.ends[1-side] is not None:
+        remaining = refire.hands(end, run.ends[1-side], retr.SEC_PER_HAND, retr.MAX_H)
     return end, remaining
 
 

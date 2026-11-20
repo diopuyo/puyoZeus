@@ -404,6 +404,8 @@ def test_retries_only_observed_hd_or_obs_devices(tmp_path: Path, monkeypatch: py
 
 def test_manual_start_waits_without_deadline_then_stops(distribution: tuple, monkeypatch: pytest.MonkeyPatch) -> None:
     from src.phase_j import distribution_runtime as module
+    # 入力待ちの試験では計算部品が使用可能な状態を模す。
+    monkeypatch.setattr('src.phase_j.live_native.load_library', lambda: object())
     runtime, url = distribution
     searched = threading.Event()
     calls = []
